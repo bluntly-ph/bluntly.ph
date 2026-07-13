@@ -1,0 +1,6 @@
+# Bluntly.ph backend — development/test dependencies
+-r requirements.txt
+pytest>=8.3,<9.0
+pytest-asyncio>=0.24,<0.25
+anyio>=4.6
+ruff>=0.7

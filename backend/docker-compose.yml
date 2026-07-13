@@ -1,0 +1,85 @@
+# Local development stack for the Bluntly.ph backend.
+# Postgres 16 + Redis 7 + API + Celery worker + Celery beat.
+# Env is read from the repo-root ../.env (shared with the Next.js frontend).
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bluntly
+      POSTGRES_PASSWORD: bluntly
+      POSTGRES_DB: bluntly
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bluntly"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    env_file:
+      - ../.env
+    environment:
+      # Override host-facing URLs with in-network service names.
+      DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # on-failure covers the transient DNS/DB-not-ready race at first boot; the
+    # wait_for_db retry loop makes that self-heal instead of exiting.
+    restart: on-failure
+    # Wait for the DB, run migrations, then start the API.
+    command: >
+      sh -c "python -m scripts.wait_for_db &&
+             alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+
+  worker:
+    build: .
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info
+
+  beat:
+    build: .
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: on-failure
+    command: celery -A app.workers.celery_app.celery_app beat --loglevel=info
+
+volumes:
+  pgdata:
