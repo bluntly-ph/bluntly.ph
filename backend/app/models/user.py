@@ -101,10 +101,16 @@ class User(Base, Timestamps):
 
     # Seller-dimension aggregates (JSONB) when this user is a seller.
     seller_aggregates: Mapped[dict | None] = mapped_column(JSONB)
+    # Time-decayed Wilson trust over seller_reviews.would_recommend (M2 slice 4).
+    seller_trust_score: Mapped[Decimal | None] = mapped_column(Numeric(6, 5))
 
     # Earnings.
     wallet_balance: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), default=0, nullable=False, server_default="0"
+    )
+    # Token economy (M2 slice 7): mirrors the append-only token_transactions ledger.
+    token_balance: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
     )
     # payout_account is sensitive personal data (RA 10173) — PayPal email.
     payout_account: Mapped[str | None] = mapped_column(String(320))

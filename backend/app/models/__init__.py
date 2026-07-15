@@ -13,13 +13,14 @@ from app.models.qa import Answer, Question  # noqa: F401
 from app.models.review import ReferralLink, Review, ReviewVersion  # noqa: F401
 from app.models.seller_review import SellerReview  # noqa: F401
 from app.models.session import Session  # noqa: F401
+from app.models.token import TokenTransaction  # noqa: F401
 from app.models.user import Badge, User, UserBadge  # noqa: F401
-from app.models.vote import EarnEligibleVote  # noqa: F401
+from app.models.vote import EarnEligibleVote, ReviewVote  # noqa: F401
 
 __all__ = [
     "User", "Badge", "UserBadge", "MembershipTierConfig",
     "Product", "ProductPlatform", "PriceHistory",
     "Review", "ReviewVersion", "ReferralLink", "Question", "Answer", "SellerReview",
     "Session", "Commission", "HonestyFundDistribution",
-    "ModerationLog", "EarnEligibleVote",
+    "ModerationLog", "EarnEligibleVote", "ReviewVote", "TokenTransaction",
 ]

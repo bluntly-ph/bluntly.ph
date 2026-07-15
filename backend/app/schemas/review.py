@@ -8,7 +8,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from app.models.enums import EarnEligibleStatus, Verdict, VerificationStatus
+from app.models.enums import EarnEligibleStatus, Verdict, VerificationStatus, VoteDirection
+
+
+class VoteIn(BaseModel):
+    """Community helpfulness vote (M2 slice 2)."""
+
+    vote: VoteDirection
 
 
 class ReviewCreate(BaseModel):
@@ -65,6 +71,10 @@ class ReviewOut(BaseModel):
     receipt_url: str | None = None
     price_paid: Decimal | None = None
     verification_status: VerificationStatus
+    # Community visibility voting (M2 slice 2).
+    helpful_votes: int = 0
+    unhelpful_votes: int = 0
+    wilson_score: Decimal = Decimal("0")
     current_version: int
     # Publication gate (M2 slice 1): NULL until a moderator publishes.
     published_at: datetime | None = None

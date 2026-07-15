@@ -56,6 +56,10 @@ class Product(Base, UUIDPrimaryKey, Timestamps):
         Numeric(3, 2), default=0, nullable=False, server_default="0"
     )
     review_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Time-decayed Wilson trust over published reviews' star_rating >= 4 (M2 slice 4).
+    trust_score: Mapped[Decimal] = mapped_column(
+        Numeric(6, 5), default=0, nullable=False, server_default="0"
+    )
     aggregated_pros: Mapped[dict | None] = mapped_column(JSONB)
     aggregated_cons: Mapped[dict | None] = mapped_column(JSONB)
 

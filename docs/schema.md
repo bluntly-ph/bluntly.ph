@@ -60,6 +60,25 @@ New enum type `referral_link_status`(active/revoked). `platform` gains **`amazon
 gate — NULL = hidden). `reviews.affiliate_link` is the active-link mirror; the raw
 value is never exposed in API responses (only the `/r/{id}` redirect is).
 
+## M2 slices 2–8 additions (19 → 21 tables; migrations 0005–0009)
+
+| # | Table | Purpose | Key columns |
+|---|---|---|---|
+| 20 | `review_votes` | Equal-weight community visibility votes (slice 2) | `review_id`(FK CASCADE), `voter_id`(FK CASCADE), `vote`(vote_direction), `uq(review_id,voter_id)` — one vote per user per review, changing = upsert. RLS on (public SELECT). |
+| 21 | `token_transactions` | Append-only token ledger (slice 7) | `user_id`(FK CASCADE), `amount`(±, CHECK ≠0), `balance_after`, `kind`(token_kind), polymorphic `ref_type`/`ref_id`, `note`, `created_by`. Index `(user_id, created_at DESC)`. Partial unique `uq_token_once(user_id,kind,ref_id) WHERE ref_id IS NOT NULL AND kind LIKE 'earn_%'` (a review/commission awards once). RLS on with **no permissive policy** (like `sessions`). |
+
+New enum type `token_kind`(earn_review_published/earn_commission/admin_grant/
+admin_deduct/adjustment). New columns: **`products.trust_score`** Numeric(6,5)
+(time-decayed Wilson over published reviews with stars ≥ 4, slice 4);
+**`users.seller_trust_score`** Numeric(6,5) NULL + per-dimension aggregates in the
+existing `users.seller_aggregates` JSONB (slice 4); **`users.token_balance`** int
+(ledger mirror, slice 7); **`commissions.reviewer_tier`** + 
+**`commissions.reviewer_share_bps`** (immutable tier snapshot at reconciliation,
+slice 6). New constraint `uq_seller_review_once(seller_id, reviewer_id)` on
+`seller_reviews` (slice 4). Extension **`pg_trgm`** + GIN index
+`ix_reviews_discussion_trgm` on `reviews.discussion` (duplicate-content signal,
+slice 5).
+
 ## Row-Level Security
 All 15 tables have RLS enabled (31 policies). Owner-write tables key on
 `auth.uid()`; public-read on content/reference tables; admin-only tables

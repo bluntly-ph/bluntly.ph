@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, SmallInteger, String, Text
+from sqlalchemy import Boolean, ForeignKey, SmallInteger, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,10 @@ from app.db.base import Base, Timestamps, UUIDPrimaryKey
 
 class SellerReview(Base, UUIDPrimaryKey, Timestamps):
     __tablename__ = "seller_reviews"
+    __table_args__ = (
+        # One seller review per (seller, reviewer) — M2 slice 4.
+        UniqueConstraint("seller_id", "reviewer_id", name="uq_seller_review_once"),
+    )
 
     seller_review_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
 

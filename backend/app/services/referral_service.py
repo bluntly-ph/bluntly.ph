@@ -33,6 +33,7 @@ from app.models.review import ReferralLink, Review
 from app.models.session import Session as ClickSession
 from app.services.pii import retention_deadlines
 from app.services.review_service import recompute_product_aggregates
+from app.services.trust_service import recompute_user_trust
 
 MAX_URL_LEN = 2048
 
@@ -43,6 +44,15 @@ def _now() -> datetime:
 
 def _conflict(detail: str, code: str) -> AppError:
     return AppError(detail, code=code, status_code=409, title="Conflicting state")
+
+
+def _award_publish_tokens(db: Session, review: Review) -> None:
+    """Slice-7 hook: tokens on first publish. Re-publish after unpublish is a
+    no-op via the uq_token_once idempotency index."""
+    from app.services.token_service import award_review_published
+
+    if review.author_id is not None:
+        award_review_published(db, review.author_id, review.id)
 
 
 # --- Audit ---
@@ -123,9 +133,12 @@ def attach_link_and_publish(db: Session, review: Review, moderator_id: uuid.UUID
     review.earn_eligible_status = EarnEligibleStatus.monetized
     if review.published_at is None:
         review.published_at = _now()
+        _award_publish_tokens(db, review)
     _audit(db, moderator_id, ModerationAction.affiliate_link_attach, review.id,
            context={"platform": platform.value, "url": url})
     recompute_product_aggregates(db, review.product_id)
+    if review.author_id is not None:
+        recompute_user_trust(db, review.author_id)  # publish moves trust (slice 3)
     db.commit()
     db.refresh(review)
     return review
@@ -138,9 +151,12 @@ def publish_without_link(db: Session, review: Review, moderator_id: uuid.UUID) -
     review.earn_eligible_status = (EarnEligibleStatus.honesty_fund if review.star_rating <= 2
                                    else EarnEligibleStatus.approved)
     review.published_at = _now()
+    _award_publish_tokens(db, review)
     _audit(db, moderator_id, ModerationAction.publish, review.id,
            context={"routed_to": review.earn_eligible_status.value})
     recompute_product_aggregates(db, review.product_id)
+    if review.author_id is not None:
+        recompute_user_trust(db, review.author_id)  # publish moves trust (slice 3)
     db.commit()
     db.refresh(review)
     return review
@@ -152,6 +168,8 @@ def reject(db: Session, review: Review, moderator_id: uuid.UUID, reason: str) ->
                         "already_published")
     review.earn_eligible_status = EarnEligibleStatus.rejected
     _audit(db, moderator_id, ModerationAction.reject, review.id, notes=reason)
+    if review.author_id is not None:
+        recompute_user_trust(db, review.author_id)
     db.commit()
     db.refresh(review)
     return review
@@ -181,6 +199,8 @@ def unpublish(db: Session, review: Review, moderator_id: uuid.UUID,
     review.published_at = None
     _audit(db, moderator_id, ModerationAction.unpublish, review.id, notes=reason)
     recompute_product_aggregates(db, review.product_id)
+    if review.author_id is not None:
+        recompute_user_trust(db, review.author_id)
     db.commit()
     db.refresh(review)
     return review

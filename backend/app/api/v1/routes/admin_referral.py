@@ -22,21 +22,23 @@ from app.schemas.referral import (
     QueueItem,
     QueuePlatform,
     QueueProduct,
+    QueueSignals,
     ReasonRequest,
     ReferralLinkOut,
     ReviewQueueResponse,
 )
 from app.schemas.review import ReviewOut
-from app.services import referral_service, review_service
+from app.services import fraud_service, referral_service, review_service
 
 router = APIRouter(prefix="/admin", tags=["admin: referral"],
                    dependencies=[Depends(require_role("moderator"))])
 
 
-def _queue_item(review: Review, product: Product,
+def _queue_item(db: Session, review: Review, product: Product,
                 platforms: list[ProductPlatform], author: User | None,
                 *, edited: bool) -> QueueItem:
-    """Build a queue card from already-loaded rows (no per-item queries)."""
+    """Build a queue card. Fraud signals (slice 5) are computed here — queue
+    payload only, advisory only, never on public endpoints."""
     return QueueItem(
         review=ReviewOut.model_validate(review),
         product=QueueProduct(
@@ -50,6 +52,7 @@ def _queue_item(review: Review, product: Product,
                             reputation_score=author.reputation_score) if author else None),
         suggested_platform=referral_service.suggested_platform_from(product, platforms),
         edited_since_monetized=edited,
+        signals=QueueSignals(**fraud_service.compute_signals(db, review, author)),
     )
 
 
@@ -77,7 +80,7 @@ def review_queue(db: Session = Depends(get_db), limit: int = 50, offset: int = 0
     def build(review: Review, *, edited: bool) -> QueueItem:
         product = products[review.product_id]
         author = authors.get(review.author_id) if review.author_id else None
-        return _queue_item(review, product, product.platforms, author, edited=edited)
+        return _queue_item(db, review, product, product.platforms, author, edited=edited)
 
     return ReviewQueueResponse(
         pending=[build(r, edited=False) for r in pending],

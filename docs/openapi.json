@@ -327,6 +327,16 @@
               "default": 50,
               "title": "Limit"
             }
+          },
+          {
+            "name": "include_low_trust",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Low Trust"
+            }
           }
         ],
         "responses": {
@@ -362,7 +372,7 @@
         "tags": [
           "products"
         ],
-        "summary": "Get a product",
+        "summary": "Get a product (always retrievable; low_trust computed)",
         "operationId": "get_product_api_v1_products__product_id__get",
         "parameters": [
           {
@@ -487,6 +497,20 @@
               "type": "integer",
               "default": 50,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "newest",
+                "wilson"
+              ],
+              "type": "string",
+              "default": "newest",
+              "title": "Sort"
             }
           }
         ],
@@ -699,6 +723,110 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReviewVersionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{review_id}/vote": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Cast or change a helpfulness vote on a published review",
+        "operationId": "vote_review_api_v1_reviews__review_id__vote_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Remove your helpfulness vote from a review",
+        "operationId": "unvote_review_api_v1_reviews__review_id__vote_delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
                 }
               }
             }
@@ -1152,6 +1280,98 @@
         }
       }
     },
+    "/api/v1/admin/commissions/import": {
+      "post": {
+        "tags": [
+          "admin: earnings"
+        ],
+        "summary": "Import a monthly commission CSV (all-or-nothing, idempotent)",
+        "operationId": "import_commissions_api_v1_admin_commissions_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_commissions_api_v1_admin_commissions_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/honesty-fund/run": {
+      "post": {
+        "tags": [
+          "admin: earnings"
+        ],
+        "summary": "Run the Honesty Fund distribution for a cycle (idempotent)",
+        "operationId": "run_honesty_fund_api_v1_admin_honesty_fund_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HonestyFundRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HonestyFundRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/membership-tiers": {
       "get": {
         "tags": [
@@ -1375,10 +1595,439 @@
           }
         ]
       }
+    },
+    "/api/v1/users/{user_id}/trust": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Public trust profile (stage, reputation, badges)",
+        "operationId": "get_trust_api_v1_users__user_id__trust_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserTrustOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/role": {
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Promote/demote seller (moderator only)",
+        "operationId": "set_role_api_v1_users__user_id__role_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}/reviews": {
+      "post": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Review a seller (one per reviewer; publishes immediately)",
+        "operationId": "create_seller_review_api_v1_sellers__seller_id__reviews_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerReviewCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "List a seller's reviews (newest first)",
+        "operationId": "list_seller_reviews_api_v1_sellers__seller_id__reviews_get",
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SellerReviewOut"
+                  },
+                  "title": "Response List Seller Reviews Api V1 Sellers  Seller Id  Reviews Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}": {
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Public seller profile with trust rating + dimension averages",
+        "operationId": "seller_profile_api_v1_sellers__seller_id__get",
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens/balance": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Your token balance",
+        "operationId": "get_balance_api_v1_tokens_balance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenBalanceOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tokens/transactions": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Your token transaction history (append-only ledger)",
+        "operationId": "get_transactions_api_v1_tokens_transactions_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TokenTransactionOut"
+                  },
+                  "title": "Response Get Transactions Api V1 Tokens Transactions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/tokens": {
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Admin token grant/deduct (moderator; audited via ledger)",
+        "operationId": "admin_grant_api_v1_admin_users__user_id__tokens_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminTokenGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenTransactionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AdminTokenGrant": {
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "title": "Amount",
+            "description": "Signed; positive grants, negative deducts. Non-zero."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount",
+          "note"
+        ],
+        "title": "AdminTokenGrant"
+      },
       "AssignTierRequest": {
         "properties": {
           "membership_tier": {
@@ -1409,6 +2058,44 @@
           "platform"
         ],
         "title": "AttachLinkRequest"
+      },
+      "BadgeOut": {
+        "properties": {
+          "badge_id": {
+            "type": "string",
+            "title": "Badge Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "awarded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Awarded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "badge_id",
+          "name",
+          "awarded_at"
+        ],
+        "title": "BadgeOut"
+      },
+      "Body_import_commissions_api_v1_admin_commissions_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_commissions_api_v1_admin_commissions_import_post"
       },
       "Body_login_api_v1_auth_login_post": {
         "properties": {
@@ -1599,6 +2286,84 @@
           "timestamp"
         ],
         "title": "HealthResponse"
+      },
+      "HonestyFundRunRequest": {
+        "properties": {
+          "cycle_month": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Month"
+          }
+        },
+        "type": "object",
+        "title": "HonestyFundRunRequest"
+      },
+      "HonestyFundRunResult": {
+        "properties": {
+          "cycle_month": {
+            "type": "string",
+            "format": "date",
+            "title": "Cycle Month"
+          },
+          "pool": {
+            "type": "string",
+            "title": "Pool"
+          },
+          "recipients": {
+            "type": "integer",
+            "title": "Recipients"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cycle_month",
+          "pool",
+          "recipients",
+          "status"
+        ],
+        "title": "HonestyFundRunResult"
+      },
+      "ImportResult": {
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "title": "Imported"
+          },
+          "skipped_duplicates": {
+            "type": "integer",
+            "title": "Skipped Duplicates"
+          },
+          "unmatched": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Unmatched"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imported",
+          "skipped_duplicates",
+          "unmatched",
+          "total_rows"
+        ],
+        "title": "ImportResult"
       },
       "Language": {
         "type": "string",
@@ -1798,6 +2563,17 @@
             "type": "integer",
             "title": "Review Count"
           },
+          "trust_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Trust Score",
+            "default": "0"
+          },
+          "low_trust": {
+            "type": "boolean",
+            "title": "Low Trust",
+            "default": false
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -1891,6 +2667,9 @@
             "type": "boolean",
             "title": "Edited Since Monetized",
             "default": false
+          },
+          "signals": {
+            "$ref": "#/components/schemas/QueueSignals"
           }
         },
         "type": "object",
@@ -1959,6 +2738,49 @@
           "id"
         ],
         "title": "QueueProduct"
+      },
+      "QueueSignals": {
+        "properties": {
+          "velocity": {
+            "type": "boolean",
+            "title": "Velocity",
+            "default": false
+          },
+          "collusion": {
+            "type": "boolean",
+            "title": "Collusion",
+            "default": false
+          },
+          "duplicate_content": {
+            "type": "boolean",
+            "title": "Duplicate Content",
+            "default": false
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of"
+          },
+          "author_account_age_days": {
+            "type": "integer",
+            "title": "Author Account Age Days",
+            "default": 0
+          },
+          "author_review_count": {
+            "type": "integer",
+            "title": "Author Review Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "QueueSignals",
+        "description": "Advisory fraud signals (M2 slice 5) \u2014 moderator queue only, never public,\nnever auto-blocking."
       },
       "ReasonRequest": {
         "properties": {
@@ -2379,6 +3201,22 @@
           "verification_status": {
             "$ref": "#/components/schemas/VerificationStatus"
           },
+          "helpful_votes": {
+            "type": "integer",
+            "title": "Helpful Votes",
+            "default": 0
+          },
+          "unhelpful_votes": {
+            "type": "integer",
+            "title": "Unhelpful Votes",
+            "default": 0
+          },
+          "wilson_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Wilson Score",
+            "default": "0"
+          },
           "current_version": {
             "type": "integer",
             "title": "Current Version"
@@ -2677,6 +3515,291 @@
         ],
         "title": "ReviewVersionOut"
       },
+      "RoleUpdate": {
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/MemberRole"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "RoleUpdate",
+        "description": "Moderator promote/demote between user and seller (M2 slice 4).\n\n`moderator` is intentionally not grantable via the API."
+      },
+      "SellerProfileOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "seller_trust_score": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Trust Score"
+          },
+          "low_trust": {
+            "type": "boolean",
+            "title": "Low Trust",
+            "default": false
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
+          },
+          "accuracy_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy Pct"
+          },
+          "completeness_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness Pct"
+          },
+          "customer_service_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Service Avg"
+          },
+          "packaging_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packaging Avg"
+          },
+          "recommend_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommend Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "SellerProfileOut",
+        "description": "Public seller profile with live per-dimension aggregates (M2 slice 4)."
+      },
+      "SellerReviewCreate": {
+        "properties": {
+          "accuracy": {
+            "type": "boolean",
+            "title": "Accuracy"
+          },
+          "order_completeness": {
+            "type": "boolean",
+            "title": "Order Completeness"
+          },
+          "customer_service": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Customer Service"
+          },
+          "packaging_quality": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Packaging Quality"
+          },
+          "overall_rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Overall Rating"
+          },
+          "would_recommend": {
+            "type": "boolean",
+            "title": "Would Recommend"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "proof_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accuracy",
+          "order_completeness",
+          "customer_service",
+          "packaging_quality",
+          "overall_rating",
+          "would_recommend"
+        ],
+        "title": "SellerReviewCreate"
+      },
+      "SellerReviewOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seller_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Review Id"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "reviewer_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "accuracy": {
+            "type": "boolean",
+            "title": "Accuracy"
+          },
+          "order_completeness": {
+            "type": "boolean",
+            "title": "Order Completeness"
+          },
+          "customer_service": {
+            "type": "integer",
+            "title": "Customer Service"
+          },
+          "packaging_quality": {
+            "type": "integer",
+            "title": "Packaging Quality"
+          },
+          "overall_rating": {
+            "type": "integer",
+            "title": "Overall Rating"
+          },
+          "would_recommend": {
+            "type": "boolean",
+            "title": "Would Recommend"
+          },
+          "proof_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Url"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seller_id",
+          "accuracy",
+          "order_completeness",
+          "customer_service",
+          "packaging_quality",
+          "overall_rating",
+          "would_recommend",
+          "created_at"
+        ],
+        "title": "SellerReviewOut"
+      },
       "TierOut": {
         "properties": {
           "id": {
@@ -2814,6 +3937,37 @@
         "type": "object",
         "title": "TierUpdate"
       },
+      "TokenBalanceOut": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "token_balance": {
+            "type": "integer",
+            "title": "Token Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "token_balance"
+        ],
+        "title": "TokenBalanceOut"
+      },
+      "TokenKind": {
+        "type": "string",
+        "enum": [
+          "earn_review_published",
+          "earn_commission",
+          "admin_grant",
+          "admin_deduct",
+          "adjustment"
+        ],
+        "title": "TokenKind",
+        "description": "Token ledger entry kinds (M2 slice 7). Spending rules are M3."
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -2840,6 +3994,74 @@
           "user"
         ],
         "title": "TokenResponse"
+      },
+      "TokenTransactionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "balance_after": {
+            "type": "integer",
+            "title": "Balance After"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TokenKind"
+          },
+          "ref_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Type"
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "amount",
+          "balance_after",
+          "kind",
+          "created_at"
+        ],
+        "title": "TokenTransactionOut"
       },
       "UserOut": {
         "properties": {
@@ -2923,6 +4145,55 @@
         ],
         "title": "UserOut"
       },
+      "UserTrustOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "trust_stage": {
+            "type": "integer",
+            "title": "Trust Stage"
+          },
+          "trust_level_name": {
+            "type": "string",
+            "title": "Trust Level Name"
+          },
+          "reputation_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reputation Score"
+          },
+          "verified_review_count": {
+            "type": "integer",
+            "title": "Verified Review Count"
+          },
+          "helpfulness_ratio": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Helpfulness Ratio"
+          },
+          "badges": {
+            "items": {
+              "$ref": "#/components/schemas/BadgeOut"
+            },
+            "type": "array",
+            "title": "Badges"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "trust_stage",
+          "trust_level_name",
+          "reputation_score",
+          "verified_review_count",
+          "helpfulness_ratio"
+        ],
+        "title": "UserTrustOut",
+        "description": "Public trust profile (M2 slice 3). Stages move only via recompute."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -2972,6 +4243,27 @@
           "unverified"
         ],
         "title": "VerificationStatus"
+      },
+      "VoteDirection": {
+        "type": "string",
+        "enum": [
+          "up",
+          "down"
+        ],
+        "title": "VoteDirection"
+      },
+      "VoteIn": {
+        "properties": {
+          "vote": {
+            "$ref": "#/components/schemas/VoteDirection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vote"
+        ],
+        "title": "VoteIn",
+        "description": "Community helpfulness vote (M2 slice 2)."
       }
     },
     "securitySchemes": {

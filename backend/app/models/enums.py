@@ -139,6 +139,16 @@ class VoteDirection(str, enum.Enum):
     down = "down"
 
 
+class TokenKind(str, enum.Enum):
+    """Token ledger entry kinds (M2 slice 7). Spending rules are M3."""
+
+    earn_review_published = "earn_review_published"
+    earn_commission = "earn_commission"
+    admin_grant = "admin_grant"
+    admin_deduct = "admin_deduct"
+    adjustment = "adjustment"
+
+
 # Human-readable trust stage names (FR-7). Index == trust_stage (0..5).
 TRUST_STAGE_NAMES = [
     "Newcomer",

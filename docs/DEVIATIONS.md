@@ -111,3 +111,66 @@ Every place the build diverged from the source spec / build prompt, in one place
     unverified review would contradict FR-3.
 34. **M1 tests updated** for the gate (reviews no longer public on submit; version
     history of an unpublished review requires author/moderator auth).
+
+## M2 slices 2–8 — reputation, trust, fraud, earnings, tokens (2026-07-14)
+35. **Community voting is equal-weight and separate from gate voting.** New
+    `review_votes` table (one vote per user per review; upsert to change). Feeds
+    `reviews.wilson_score` (time-decayed, 45d half-life per ADR-004),
+    `users.helpfulness_ratio`, and trust recompute. Votes are only accepted on
+    **published** reviews; self-votes are 409.
+36. **Trust stages move ONLY via recompute** (`trust_service.recompute_user_trust`,
+    triggered by publish/unpublish/reject, vote writes, and a nightly sweep).
+    There is deliberately no manual stage-set endpoint. Stage badges are awarded
+    on the way up and never removed on a drop.
+37. **Seller reviews publish immediately** (no publication gate) — no monetization
+    is attached to them, so the slice-1 gate rationale does not apply. One seller
+    review per (seller, reviewer), enforced in service + DB (`uq_seller_review_once`).
+38. **Product/seller trust ratings** are time-decayed Wilson scores
+    (`products.trust_score` over stars ≥ 4 of published reviews;
+    `users.seller_trust_score` over `would_recommend`). Visibility thresholds are
+    env config and **default OFF** (cold start): a product only drops from the
+    default listing when it has ≥ `PRODUCT_TRUST_MIN_REVIEWS` reviews AND scores
+    below `PRODUCT_TRUST_VISIBILITY_THRESHOLD`; it stays fetchable by id with
+    `low_trust: true`. Seller profiles are flagged, never hidden.
+39. **Fraud signals are advisory-only** (capstone FR-8): velocity, collusion
+    (ADR-004 constants: ≥5 up-voters, >0.6 reciprocated), pg_trgm
+    duplicate-content (>0.85 similarity, same product or author) — computed on
+    read for the moderator queue payload only; never on public endpoints; **no
+    auto-block path exists**. Deferred: photo pHash reverse-image (M3, needs
+    Storage ingestion) and submission-IP capture (privacy assessment first).
+40. **Tier-based revenue split** (`split_commission_tiered`): Honesty Fund is a
+    FIXED 30%; the reviewer share comes from `membership_tiers.revenue_share_bps`
+    (standard 3000 / founding 3500 / special 4000, fallback 3000); the platform
+    absorbs rounding so shares always re-sum to the gross. Tier bps > 7000 is
+    rejected at import time (platform share would go negative). The snapshot
+    (`commissions.reviewer_tier`/`reviewer_share_bps`) is immutable audit data.
+41. **Commission CSV import is all-or-nothing per file** ("no silent partial
+    success", resolved strictly): any invalid row → 422 with `errors:[{line,issue}]`
+    and nothing imported. Valid-but-unmatched rows (no session by
+    click_ref/order_ref, or no attributable review author) are skipped and
+    reported as `unmatched`. Idempotency key = `(filename:sha256[:12], line_no)`.
+    Import runs inline; the `reconcile_commission_csv` Celery task remains a
+    documented inline-only seam until file storage exists (M3).
+42. **Token economy is data-model + earn-only in M2.** Append-only
+    `token_transactions` ledger (no update/delete endpoints ever), `balance_after`
+    chain, RLS with no permissive policy. Earning hooks: first publish
+    (+`TOKENS_ON_REVIEW_PUBLISHED`, default 10) and each reconciled commission
+    (+`TOKENS_ON_COMMISSION`, default 25), both idempotent via `uq_token_once`.
+    Spending rules and request-board rewards are M3 — intentionally not invented.
+43. **Honesty Fund distribution rounds payouts DOWN to the centavo**; the dust
+    remainder stays with the pool. A cycle that already has distribution rows
+    ABORTS (no re-distribution). Reviews with Honesty Score 0 (no gate-weighted
+    up-votes) get no share. Admin trigger `POST /admin/honesty-fund/run` runs the
+    same service synchronously so moderators don't need Celery access.
+44. **PII retention sweep is bulk SQL** using Postgres' built-in `sha256` over the
+    same `{salt}:{ip}` string as `services/pii.hash_ip` (interchangeable hashes).
+    New required-in-production setting `PII_HASH_SALT` (checked by
+    `production_issues()`).
+45. **Honesty Fund tests must claim an unused `cycle_month`.** The fund is
+    idempotent per cycle (a second run for the same cycle aborts by design), so
+    a test that drew a random cycle collided with an earlier run's cycle on any
+    long-lived database (~4% per suite run against Supabase, rising with every
+    run) and failed on the app behaving *correctly*. `_free_cycle()` now asks the
+    DB for a slot with no distributions or commissions. Test-only change; the
+    idempotency guarantee itself is unchanged and covered by
+    `test_honesty_fund_distribution_proportional_and_idempotent`.

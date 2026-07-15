@@ -1,9 +1,9 @@
-# Bluntly.ph Backend — As-Built Architecture (M0 + M1 + M2 slice 1)
+# Bluntly.ph Backend — As-Built Architecture (M0 + M1 + M2 complete)
 
 > The definitive "how it actually works" reference, written from **verified**
-> behavior (51/51 API checks + 62 unit/integration tests, green on local **and**
-> Supabase, 2026-07-13). Supersedes intentions in `02-bluntly-ph-architecture.md`
-> where they differ. Planning is done on Fable 5; implementation/testing on Opus 4.8.
+> behavior (79/79 API smoke checks + 89 unit/integration tests, green on local
+> **and** Supabase, 2026-07-14). Supersedes intentions in
+> `02-bluntly-ph-architecture.md` where they differ.
 
 ---
 
@@ -22,7 +22,7 @@ touchpoint is admin-mediated — **no scraping, no marketplace API calls**.
 | ORM / migrations | SQLAlchemy 2.0 + Alembic (5 migrations) |
 | Database | PostgreSQL 16 local (docker-compose) / **Supabase** PostgreSQL 17 (session pooler, IPv4) |
 | Cache / broker | Redis 7 |
-| Background jobs | Celery worker + beat (Honesty Fund monthly, PII retention daily — stubs pending M2) |
+| Background jobs | Celery worker + beat (Honesty Fund monthly 02:00 · PII retention daily 03:00 · Wilson/trust-rating recompute daily 04:00 · trust-progression sweep daily 04:30, Asia/Manila) — real bodies as of M2 |
 | Auth | FastAPI-native **JWT/OAuth2**, **Argon2id** password hashing (ADR-010/011) |
 | AI critique | Provider-abstracted (stub default / Claude / OpenAI; ADR-013) |
 | Error contract | **RFC 9457** `application/problem+json`, everywhere |
@@ -79,15 +79,19 @@ reaches it via the **session-pooler** connection string (IPv4; the direct
   a user to moderator takes effect immediately, without re-login (verified).
 - Auth endpoints are Redis rate-limited (fail-open; default 10/min/IP).
 
-## 6. Data model (19 tables, `public` schema, all RLS-enabled)
+## 6. Data model (21 tables, `public` schema, all RLS-enabled)
 
-Core: `users` (profile + `role`/`membership_tier`/`reputation`/`wallet`), `badges`,
-`user_badges`, `products`, `product_platforms` (`is_monetizable`), `price_history`,
-`reviews`, `review_versions`, **`referral_links`**, `questions`, `answers`,
-`seller_reviews`, `sessions` (affiliate clicks + PII lifecycle), `commissions`,
-`honesty_fund_distributions`, `moderation_logs` (also the audit log),
-`earn_eligible_votes`, `membership_tiers`, + `alembic_version` (RLS on). Full
-column reference: `docs/schema.md`.
+Core: `users` (profile + `role`/`membership_tier`/`reputation`/`wallet`/
+`token_balance`/`seller_trust_score`), `badges`, `user_badges`, `products`
+(+ `trust_score`), `product_platforms` (`is_monetizable`), `price_history`,
+`reviews`, `review_versions`, **`referral_links`**, **`review_votes`** (equal-weight
+community votes, M2 s2), `questions`, `answers`, `seller_reviews`
+(one per seller+reviewer), `sessions` (affiliate clicks + PII lifecycle),
+`commissions` (+ tier snapshot columns), `honesty_fund_distributions`,
+`moderation_logs` (also the audit log), `earn_eligible_votes`,
+**`token_transactions`** (append-only ledger, M2 s7), `membership_tiers`,
++ `alembic_version` (RLS on). Extension `pg_trgm` powers the duplicate-content
+signal. Full column reference: `docs/schema.md`.
 
 RLS is defense-in-depth: the backend connects as the DB owner and enforces RBAC in
 the API layer, so RLS constrains any *direct* Supabase (PostgREST) access. Every
@@ -143,6 +147,48 @@ The **raw affiliate URL is never exposed** in any API body — `ReviewOut` carri
 only `referral_redirect_url = /r/{id}` (present once published+monetized). So every
 outbound click is attributed.
 
+## 8b. Reputation, trust & earnings systems (M2 slices 2–8)
+
+- **Community voting** (`review_votes`): equal-weight up/down on published reviews,
+  one vote per user (upsert to change), no self-votes, rate-limited
+  (`VOTE_RATE_LIMIT_MAX`/60s). Every vote write recomputes — in ONE transaction —
+  the review's counters + time-decayed Wilson score (45d half-life, ADR-004), the
+  author's helpfulness ratio, and the author's trust. `GET /reviews?sort=wilson`
+  ranks listings; a nightly 04:00 task re-decays all scored reviews.
+- **Trust progression** (`trust_service`): `reputation_score` (ADR-003 blend) and
+  `trust_stage` (0–5) recomputed on publish/unpublish/reject, vote writes, and a
+  nightly 04:30 sweep over 90-day-active users. Stage badges awarded on the way up,
+  never removed. Stages move **only** via recompute — no manual stage endpoint.
+  Public surface: `GET /users/{id}/trust`.
+- **Product & seller trust ratings**: `products.trust_score` = decayed Wilson over
+  published reviews' stars ≥ 4 (updated with product aggregates on
+  publish/unpublish/edit); `users.seller_trust_score` = decayed Wilson over
+  seller-review `would_recommend` + per-dimension aggregates in JSONB. Visibility
+  thresholds are env-config, default OFF; a filtered product stays fetchable by id
+  with `low_trust: true`; seller profiles are flagged, never hidden.
+- **Fraud signals** (`fraud_service`, ADVISORY ONLY — FR-8): velocity (>10
+  up-votes/h), collusion (≥5 up-voters, >0.6 reciprocated by the author),
+  pg_trgm duplicate content (>0.85, same product/author). Computed on read for the
+  moderator queue card only; never public; **no auto-block path exists**.
+- **Commission reconciliation** (`commission_service`): moderator uploads the
+  monthly CSV → all-or-nothing validation (422 with per-line issues) → match
+  sessions by `click_ref`/`order_ref` (unmatched rows reported, skipped) →
+  `split_commission_tiered` (Honesty Fund fixed 30%; reviewer share from
+  `membership_tiers.revenue_share_bps`, snapshotted per commission; platform
+  absorbs rounding) → wallet credit + session→converted, one transaction.
+  Idempotent by `(filename:sha256, line)`.
+- **Token economy** (`token_service`): append-only `token_transactions` ledger with
+  `balance_after` chain and row-locked mirror `users.token_balance`. Earning hooks:
+  first publish (+10) and each reconciled commission (+25), idempotent via a
+  partial unique index. Admin grant/deduct with mandatory note. Spending is M3.
+- **Honesty Fund** (`honesty_fund_service`, monthly beat + admin trigger): pool =
+  Σ cycle honesty shares; eligible = published ≤2★ reviews; score = gate-weighted
+  helpful votes × price bracket; payouts floor-rounded, dust stays; idempotent per
+  cycle (re-runs abort).
+- **PII retention** (`retention_service`, daily beat): bulk SQL — IP → salted
+  SHA-256 at 30d (same hash as `services/pii.hash_ip`, salt `PII_HASH_SALT`
+  required in prod), IP-hash + UA purge at 90d.
+
 ## 9. Concurrency model & connection budget
 
 - Sync endpoints run in the AnyIO threadpool → per-process in-flight cap =
@@ -173,13 +219,15 @@ outbound click is attributed.
 
 | Check | Result |
 |---|---|
-| Unit + integration tests (`pytest`) | 62 passed |
+| Unit + integration tests (`pytest`) | 91 passed (local, Supabase, AND a from-scratch DB); fund tests re-run 3× per env to confirm no cycle-collision flake |
+| Negative controls (invariant deliberately broken → the check must fail) | 15/15 controls behaved; found 2 coverage gaps, now closed |
 | Lint (`ruff`) | clean |
-| Migrations (up / down / up, clean slate) | reversible, 5 migrations |
-| API smoke — **local** (`scripts/api_smoke.py`, 51 checks) | 51/51 |
-| API smoke — **Supabase** (:8001, same 51 checks) | 51/51 |
+| Migrations (base → head → base → head on an empty DB) | 10 apply, 10 reverse cleanly |
+| API smoke — **local** (`scripts/api_smoke.py`, 79 checks) | 79/79 |
+| API smoke — **Supabase** (:8001, same 79 checks) | 79/79 |
 | Concurrency burst (80 req) — local & Supabase | 0 server errors |
-| Supabase RLS advisor | clean (no public table without RLS) |
+| Deep verification (`scripts/supabase_verify.py`, 51 checks: schema truth + whole-DB financial integrity invariants + end-to-end flow asserted row-by-row with direct SQL) | **51/51 on local, Supabase, and a from-scratch DB** |
+| RLS | every new table RLS-enabled (`review_votes` public-select; `token_transactions` no permissive policy) |
 
 Reusable tool: `python -m scripts.api_smoke --base-url <url> [--concurrency]`
 (promotes a moderator directly via the DB, so it works against local or Supabase).
@@ -187,10 +235,12 @@ Reusable tool: `python -m scripts.api_smoke --base-url <url> [--concurrency]`
 ## 12. Milestone status & what's next
 
 - **Done:** M0 foundations · M1 core (auth, tiers, reviews+versions, AI critique) ·
-  **M2 slice 1** (publication-gated referral link flow) · production hardening ·
+  **M2 complete** (publication-gated referral flow · community voting + Wilson
+  ranking · trust progression + badges · seller/product trust ratings +
+  thresholds · advisory fraud signals · commission CSV + tiered split · token
+  economy · Honesty Fund + PII retention job bodies) · production hardening ·
   performance P0 (pool tuning, N+1 fix, 2 workers, threadpool knob).
-- **Next M2 slices:** Wilson trust ratings, fake/shill + collusion detection, trust
-  thresholds, upvote/downvote, tier-based revenue split, token economy + CSV
-  reconciliation.
+- **Next:** M3 slices 9–14 per `superpowers/specs/2026-07-13-m3-master-plan.md`
+  (request board, payouts, contracts, frontend integration, load test, deploy).
 - **M3 flag:** the milestone's Scrapy pipeline contradicts the anti-scraping mandate
   — needs an explicit decision before build (`docs/MILESTONES.md`).

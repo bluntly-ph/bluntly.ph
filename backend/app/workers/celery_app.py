@@ -38,4 +38,14 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.run_pii_retention",
         "schedule": crontab(hour=3, minute=0),
     },
+    # Wilson decay drifts with time — nightly re-rank of reviews + trust ratings (M2).
+    "wilson-recompute-nightly": {
+        "task": "app.workers.tasks.recompute_wilson_scores",
+        "schedule": crontab(hour=4, minute=0),
+    },
+    # Trust progression sweep over recently-active users (M2 slice 3).
+    "trust-recompute-nightly": {
+        "task": "app.workers.tasks.recompute_all_trust",
+        "schedule": crontab(hour=4, minute=30),
+    },
 }

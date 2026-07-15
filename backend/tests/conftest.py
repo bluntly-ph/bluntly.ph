@@ -10,9 +10,10 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.main import app
 
-# The suite makes many auth calls from one client IP; lift the auth rate limit so
-# tests aren't self-throttled. (A dedicated limiter test can set it back locally.)
+# The suite makes many auth/vote calls from one client IP; lift the rate limits so
+# tests aren't self-throttled. (A dedicated limiter test can set them back locally.)
 settings.auth_rate_limit_max = 1_000_000
+settings.vote_rate_limit_max = 1_000_000
 
 
 @pytest.fixture(scope="session")
@@ -37,6 +38,21 @@ requires_db = pytest.mark.skipif(
     os.getenv("SKIP_DB_TESTS") == "1" or not db_available(),
     reason="Postgres not available",
 )
+
+
+def find_pending_queue_item(client, mod_headers: dict, review_id: str):
+    """Locate a review's card in the moderator queue's `pending` list.
+
+    The pending queue is oldest-first and long-lived dev DBs accumulate pending
+    reviews, so a fresh review may sit several pages in. Pages until found.
+    """
+    for offset in range(0, 2000, 100):
+        page = client.get(f"/api/v1/admin/review-queue?limit=100&offset={offset}",
+                          headers=mod_headers).json()
+        item = next((i for i in page["pending"] if i["review"]["id"] == review_id), None)
+        if item is not None or not page["pending"]:
+            return item
+    return None
 
 
 def register_and_token(client, role: str = "user") -> tuple[str, str, str]:

@@ -28,4 +28,7 @@ class ProductOut(BaseModel):
     status: ProductStatus
     avg_rating: Decimal
     review_count: int
+    # Trust rating + computed visibility flag (M2 slice 4).
+    trust_score: Decimal = Decimal("0")
+    low_trust: bool = False
     created_at: datetime

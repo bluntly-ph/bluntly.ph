@@ -27,3 +27,28 @@ def split_commission(gross: Decimal) -> dict[str, Decimal]:
         "reviewer_share": reviewer,
         "honesty_fund_share": honesty,
     }
+
+
+# Above this the platform share would go negative (30% Honesty Fund is fixed).
+MAX_REVIEWER_SHARE_BPS = 7000
+
+
+def split_commission_tiered(gross: Decimal, reviewer_share_bps: int) -> dict[str, Decimal]:
+    """Tier-based split (M2 slice 6). Honesty Fund is a FIXED 30% (capstone
+    invariant); the reviewer takes `reviewer_share_bps`/10000 (standard 3000,
+    founding 3500, special 4000); the platform absorbs the rounding remainder so
+    the three ALWAYS sum to `gross` to the centavo.
+    """
+    if not 0 <= reviewer_share_bps <= MAX_REVIEWER_SHARE_BPS:
+        raise ValueError(f"reviewer_share_bps must be 0..{MAX_REVIEWER_SHARE_BPS}")
+    gross = Decimal(gross).quantize(_CENT, rounding=ROUND_HALF_UP)
+    reviewer = (gross * Decimal(reviewer_share_bps) / Decimal(10000)).quantize(
+        _CENT, rounding=ROUND_HALF_UP)
+    honesty = (gross * HONESTY_FUND_SHARE).quantize(_CENT, rounding=ROUND_HALF_UP)
+    platform = gross - reviewer - honesty
+    return {
+        "gross_amount": gross,
+        "platform_share": platform,
+        "reviewer_share": reviewer,
+        "honesty_fund_share": honesty,
+    }

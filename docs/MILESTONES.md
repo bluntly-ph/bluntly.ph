@@ -21,7 +21,7 @@ no-key stub (`/ai/critique`, `/reviews/{id}/critique`; ADR-013). Schema grew 15 
 tables. Verified end-to-end (register → review → version → critique) with 54 passing
 tests. See `superpowers/specs/` and `DEVIATIONS.md` §M1.
 
-## Milestone 2 — Reputation & Trust Systems
+## Milestone 2 — Reputation & Trust Systems ✅ DONE (2026-07-14)
 **Wilson Score Interval** for seller and product trust ratings, **fake/shill review
 detection**, **collusion detection** for coordinated fake-review networks, **trust
 threshold configuration** (minimum score for seller/product visibility),
@@ -31,15 +31,23 @@ attribution for Shopee/Lazada/Amazon**, **tier-based revenue split calculation**
 
 > **Slice 1 ✅ DONE (2026-07-13):** the moderator-manual **referral/affiliate link
 > flow** (publication gate → manual link attach → click attribution) — spec
-> `superpowers/specs/2026-07-13-referral-link-flow-design.md`, built and verified
-> on local + Supabase.
+> `superpowers/specs/2026-07-13-referral-link-flow-design.md`.
 >
-> **Slices 2–8 fully planned (2026-07-13, final Fable pass):**
-> `superpowers/specs/2026-07-13-m2-remainder-master-plan.md` pins every remaining
-> M2 item to implementation depth — voting+Wilson (2), trust wiring (3),
-> seller/product trust + thresholds (4), fraud signals (5), CSV + tiered split (6),
-> token economy (7), Celery job bodies (8) — one **Opus 4.8** session per slice, in
-> order. **No further planning sessions are needed for M2.**
+> **Slices 2–8 ✅ DONE (2026-07-14, one session per plan
+> `superpowers/specs/2026-07-13-m2-remainder-master-plan.md`):** community
+> voting + time-decayed Wilson ranking (`review_votes`, `?sort=wilson`, nightly
+> re-decay) · trust progression wiring (reputation/stage recompute + stage badges,
+> `GET /users/{id}/trust`) · seller reviews + product/seller trust ratings +
+> config-driven visibility thresholds (default off) · advisory fraud signals on
+> the moderator queue (velocity, collusion, pg_trgm duplicate content — never
+> auto-block) · commission CSV reconciliation with the tier-based revenue split
+> (30% Honesty Fund fixed; reviewer bps by tier, snapshotted) · token economy
+> (append-only `token_transactions` ledger + publish/commission earning hooks) ·
+> real Celery bodies for PII retention and Honesty Fund distribution (+ admin
+> trigger endpoint). Migrations 0005–0009 applied to **local and Supabase**;
+> verified: pytest 89/89 and `api_smoke` 79/79 (incl. concurrency burst, 0 server
+> errors) on **both** environments. Acceptance plan: `M2_TEST_PLAN.md`;
+> deviations §35–44 in `DEVIATIONS.md`.
 
 ## Milestone 3 — Full System Delivery
 **Request board** with AI validation and **dynamic reward calculation**, **earnings
@@ -47,6 +55,15 @@ processing and payment scheduling by membership tier**, **contract duration trac
 and renewal/buyout logic**, **web scraping pipeline for affiliate performance data
 (Scrapy + proxy rotation)**, **end-to-end frontend integration**, **load testing**,
 and full system **deployed and production-ready**.
+
+> **Fully planned (2026-07-13, final Fable pass):**
+> `superpowers/specs/2026-07-13-m3-master-plan.md` — slices 9–14, one **Opus 4.8**
+> session each. Owner decisions recorded: contracts = monetized-review revenue-share
+> contracts · payouts = PayPal Payouts API (sandbox first, manual fallback) ·
+> frontend = backend readiness + integration guide + TS client · **marketplace
+> scraping is ruled out** — slice 12 is a decision gate between first-party report
+> automation and manual-CSV-only. 🔒 Blockers to supply when reached: PayPal sandbox
+> creds (slice 11), slice-12 path choice, production host + secrets (slice 14).
 
 ---
 

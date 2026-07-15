@@ -61,12 +61,25 @@ class QueueAuthor(BaseModel):
     reputation_score: Decimal
 
 
+class QueueSignals(BaseModel):
+    """Advisory fraud signals (M2 slice 5) — moderator queue only, never public,
+    never auto-blocking."""
+
+    velocity: bool = False
+    collusion: bool = False
+    duplicate_content: bool = False
+    duplicate_of: str | None = None
+    author_account_age_days: int = 0
+    author_review_count: int = 0
+
+
 class QueueItem(BaseModel):
     review: ReviewOut
     product: QueueProduct
     author: QueueAuthor | None = None
     suggested_platform: Platform | None = None
     edited_since_monetized: bool = False
+    signals: QueueSignals = Field(default_factory=QueueSignals)
 
 
 class ReviewQueueResponse(BaseModel):

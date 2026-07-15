@@ -38,7 +38,14 @@ def recompute_product_aggregates(db: Session, product_id: uuid.UUID) -> None:
     """Service-layer aggregate update (ADR: no DB triggers).
 
     Counts only **published**, non-removed reviews (publication gate, M2 slice 1).
+    Also refreshes the product's Wilson trust rating (M2 slice 4) since both move
+    on the same events: publish / unpublish / star edit.
+
+    Sessions run with autoflush=False, so flush first — callers invoke this right
+    after mutating review state in-memory, and the aggregate SELECTs below must
+    see those pending writes.
     """
+    db.flush()
     stats = db.execute(
         select(func.count(Review.id), func.coalesce(func.avg(Review.star_rating), 0))
         .where(Review.product_id == product_id, Review.is_removed.is_(False),
@@ -48,6 +55,8 @@ def recompute_product_aggregates(db: Session, product_id: uuid.UUID) -> None:
     if product is not None:
         product.review_count = int(stats[0])
         product.avg_rating = round(float(stats[1]), 2)
+    from app.services.trust_rating_service import recompute_product_trust
+    recompute_product_trust(db, product_id)
 
 
 def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> Review:

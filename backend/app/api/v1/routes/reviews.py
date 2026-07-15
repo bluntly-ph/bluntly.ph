@@ -8,20 +8,23 @@ see everything (`?include_unpublished=true`).
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.errors import ForbiddenError, NotFoundError
+from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.enums import MemberRole
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
 from app.schemas.ai import CritiqueResponse
-from app.schemas.review import ReviewCreate, ReviewOut, ReviewUpdate, ReviewVersionOut
-from app.services import review_service
+from app.schemas.review import ReviewCreate, ReviewOut, ReviewUpdate, ReviewVersionOut, VoteIn
+from app.services import review_service, vote_service
 from app.services.ai_critique import get_provider
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -53,7 +56,8 @@ def create_review(payload: ReviewCreate, db: Session = Depends(get_db),
 def list_reviews(db: Session = Depends(get_db),
                  user: User | None = Depends(get_optional_user),
                  product_id: uuid.UUID | None = None,
-                 include_unpublished: bool = False, limit: int = 50) -> list[ReviewOut]:
+                 include_unpublished: bool = False, limit: int = 50,
+                 sort: Literal["newest", "wilson"] = "newest") -> list[ReviewOut]:
     stmt = select(Review).where(Review.is_removed.is_(False))
     if product_id is not None:
         stmt = stmt.where(Review.product_id == product_id)
@@ -63,7 +67,11 @@ def list_reviews(db: Session = Depends(get_db),
         stmt = stmt.where(or_(Review.published_at.isnot(None), Review.author_id == user.id))
     else:
         stmt = stmt.where(Review.published_at.isnot(None))
-    rows = db.scalars(stmt.order_by(Review.created_at.desc()).limit(limit))
+    if sort == "wilson":
+        stmt = stmt.order_by(Review.wilson_score.desc(), Review.created_at.desc())
+    else:
+        stmt = stmt.order_by(Review.created_at.desc())
+    rows = db.scalars(stmt.limit(limit))
     return [ReviewOut.model_validate(r) for r in rows]
 
 
@@ -107,6 +115,26 @@ def get_version(review_id: uuid.UUID, version_number: int, db: Session = Depends
     if version is None:
         raise NotFoundError("Review version not found.", code="version_not_found")
     return ReviewVersionOut.model_validate(version)
+
+
+@router.post("/{review_id}/vote", response_model=ReviewOut,
+             summary="Cast or change a helpfulness vote on a published review")
+def vote_review(review_id: uuid.UUID, payload: VoteIn, request: Request,
+                db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)) -> ReviewOut:
+    enforce_rate_limit(request, "vote", max_requests=settings.vote_rate_limit_max)
+    review = review_service.get_review_or_404(db, review_id)
+    review = vote_service.cast_vote(db, review, user, payload.vote)
+    return ReviewOut.model_validate(review)
+
+
+@router.delete("/{review_id}/vote", response_model=ReviewOut,
+               summary="Remove your helpfulness vote from a review")
+def unvote_review(review_id: uuid.UUID, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)) -> ReviewOut:
+    review = review_service.get_review_or_404(db, review_id)
+    review = vote_service.remove_vote(db, review, user.id)
+    return ReviewOut.model_validate(review)
 
 
 @router.post("/{review_id}/critique", response_model=CritiqueResponse,

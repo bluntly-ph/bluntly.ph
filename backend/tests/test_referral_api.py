@@ -41,9 +41,9 @@ def test_full_referral_flow(client):
     # Anonymous GET of the unpublished review → 404.
     assert client.get(f"/api/v1/reviews/{rid}").status_code == 404
 
-    # In the moderator queue.
-    queue = client.get("/api/v1/admin/review-queue", headers=mh).json()
-    assert rid in [item["review"]["id"] for item in queue["pending"]]
+    # In the moderator queue (paged — dev DBs accumulate pending reviews).
+    from tests.conftest import find_pending_queue_item
+    assert find_pending_queue_item(client, mh, rid) is not None
     # Non-moderator is forbidden.
     assert client.get("/api/v1/admin/review-queue", headers=ah).status_code == 403
 

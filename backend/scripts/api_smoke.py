@@ -58,6 +58,16 @@ def _click_count(review_id: str) -> int:
         db.close()
 
 
+def _click_ref(review_id: str) -> str | None:
+    from sqlalchemy import select
+    db = SessionLocal()
+    try:
+        return db.scalar(select(ClickSession.click_ref).where(
+            ClickSession.review_id == uuid.UUID(review_id)).limit(1))
+    finally:
+        db.close()
+
+
 def _client(base_url: str) -> httpx.Client:
     # Random X-Forwarded-For per run so rate-limit buckets don't accumulate.
     xff = f"203.0.{random.randint(1, 254)}.{random.randint(1, 254)}"
@@ -163,8 +173,19 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
     check("ai/critique no auth -> 401", c.post("/api/v1/ai/critique", json={"text": "x"}).status_code == 401)
 
     print("\n== Referral flow ==")
-    q = c.get("/api/v1/admin/review-queue", headers=mh).json()
-    qitem = next((i for i in q["pending"] if i["review"]["id"] == rid), None)
+
+    def find_pending(review_id: str):
+        # The pending queue is oldest-first; on a long-lived dev DB the fresh
+        # review may sit several pages in. Page until found (bounded).
+        for offset in range(0, 1000, 100):
+            page = c.get(f"/api/v1/admin/review-queue?limit=100&offset={offset}",
+                         headers=mh).json()
+            item = next((i for i in page["pending"] if i["review"]["id"] == review_id), None)
+            if item is not None or not page["pending"]:
+                return item
+        return None
+
+    qitem = find_pending(rid)
     check("queue lists review + suggested_platform + source_url",
           qitem is not None and qitem["suggested_platform"] == "shopee"
           and qitem["product"]["source_url"] is not None)
@@ -231,6 +252,110 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
     check("admin attach as non-mod -> 403",
           c.post(f"/api/v1/admin/reviews/{rid}/referral-link", headers=ah,
                  json={"url": SHOPEE, "platform": "shopee"}).status_code == 403)
+
+    print("\n== M2: voting + Wilson ranking ==")
+    author_id = me.json()["id"]
+    voter = _register(c, f"sv_{ts}@ex.com")
+    vh = {"Authorization": f"Bearer {voter}"}
+    check("self-vote -> 409 cannot_vote_own_review",
+          c.post(f"/api/v1/reviews/{low}/vote", headers=ah,
+                 json={"vote": "up"}).json().get("code") == "cannot_vote_own_review")
+    v = c.post(f"/api/v1/reviews/{low}/vote", headers=vh, json={"vote": "up"})
+    check("vote up -> counters + wilson > 0",
+          v.status_code == 200 and v.json()["helpful_votes"] == 1
+          and float(v.json()["wilson_score"]) > 0)
+    v2 = c.post(f"/api/v1/reviews/{low}/vote", headers=vh, json={"vote": "down"})
+    check("vote change -> upsert (1 down, 0 up)",
+          v2.json()["helpful_votes"] == 0 and v2.json()["unhelpful_votes"] == 1)
+    vd = c.delete(f"/api/v1/reviews/{low}/vote", headers=vh)
+    check("vote delete -> counters reset", vd.json()["unhelpful_votes"] == 0)
+    check("anon vote -> 401", c.post(f"/api/v1/reviews/{low}/vote", json={"vote": "up"}).status_code == 401)
+    check("?sort=wilson 200", c.get("/api/v1/reviews?sort=wilson").status_code == 200)
+
+    print("\n== M2: trust progression ==")
+    tr = c.get(f"/api/v1/users/{author_id}/trust")
+    check("trust endpoint shape + stage >= 2 (published verified review)",
+          tr.status_code == 200 and tr.json()["trust_stage"] >= 2
+          and "badges" in tr.json() and "reputation_score" in tr.json())
+
+    print("\n== M2: seller reviews + role management ==")
+    seller_email = f"ss_{ts}@ex.com"
+    st = _register(c, seller_email)
+    seller_id = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {st}"}).json()["id"]
+    check("role change as non-mod -> 403",
+          c.patch(f"/api/v1/users/{seller_id}/role", headers=ah, json={"role": "seller"}).status_code == 403)
+    check("grant moderator via API -> 422",
+          c.patch(f"/api/v1/users/{seller_id}/role", headers=mh, json={"role": "moderator"}).status_code == 422)
+    check("promote to seller -> 200",
+          c.patch(f"/api/v1/users/{seller_id}/role", headers=mh, json={"role": "seller"}).json()["role"] == "seller")
+    sr_body = {"accuracy": True, "order_completeness": True, "customer_service": 5,
+               "packaging_quality": 4, "overall_rating": 5, "would_recommend": True}
+    sr = c.post(f"/api/v1/sellers/{seller_id}/reviews", headers=vh, json=sr_body)
+    check("seller review 201 (publishes immediately)", sr.status_code == 201)
+    check("duplicate seller review -> 409",
+          c.post(f"/api/v1/sellers/{seller_id}/reviews", headers=vh, json=sr_body).status_code == 409)
+    prof = c.get(f"/api/v1/sellers/{seller_id}")
+    check("seller profile aggregates + trust score",
+          prof.status_code == 200 and prof.json()["review_count"] == 1
+          and prof.json()["recommend_pct"] == 100.0
+          and prof.json()["seller_trust_score"] is not None)
+    check("seller review list 200", len(c.get(f"/api/v1/sellers/{seller_id}/reviews").json()) == 1)
+    check("product listing has trust_score + low_trust fields",
+          {"trust_score", "low_trust"} <= set(c.get("/api/v1/products").json()[0].keys()))
+
+    print("\n== M2: fraud signals (queue only) ==")
+    q2 = c.get("/api/v1/admin/review-queue", headers=mh).json()
+    pool = q2["pending"] + q2["edited_since_monetized"]
+    check("queue items carry signals",
+          bool(pool) and all("signals" in i and "collusion" in i["signals"] for i in pool))
+    check("public review has no signals",
+          "signals" not in c.get(f"/api/v1/reviews/{low}").json())
+
+    print("\n== M2: tokens ==")
+    bal = c.get("/api/v1/tokens/balance", headers=ah)
+    check("publish awarded tokens (balance > 0)",
+          bal.status_code == 200 and bal.json()["token_balance"] > 0)
+    check("transactions ledger 200",
+          c.get("/api/v1/tokens/transactions", headers=ah).status_code == 200)
+    tg = c.post(f"/api/v1/admin/users/{seller_id}/tokens", headers=mh,
+                json={"amount": 7, "note": "smoke grant"})
+    check("admin token grant 200 + balance_after", tg.status_code == 200 and tg.json()["balance_after"] >= 7)
+    check("token deduct below zero -> 409 insufficient_tokens",
+          c.post(f"/api/v1/admin/users/{seller_id}/tokens", headers=mh,
+                 json={"amount": -10_000, "note": "too much"}).json().get("code") == "insufficient_tokens")
+    check("token grant as non-mod -> 403",
+          c.post(f"/api/v1/admin/users/{seller_id}/tokens", headers=ah,
+                 json={"amount": 5, "note": "x"}).status_code == 403)
+
+    print("\n== M2: commission CSV import ==")
+    ref = _click_ref(rid)
+    csv_text = ("click_ref,order_ref,gross_amount,currency,order_status,platform\n"
+                f"{ref},ORD-{ts},100.00,PHP,completed,shopee\n")
+    imp = c.post("/api/v1/admin/commissions/import", headers=mh,
+                 files={"file": (f"smoke_{ts}.csv", csv_text.encode(), "text/csv")})
+    check("import 200 + 1 imported", imp.status_code == 200 and imp.json()["imported"] == 1, imp.text[:160])
+    imp2 = c.post("/api/v1/admin/commissions/import", headers=mh,
+                  files={"file": (f"smoke_{ts}.csv", csv_text.encode(), "text/csv")})
+    check("re-import -> all skipped (idempotent)",
+          imp2.json()["imported"] == 0 and imp2.json()["skipped_duplicates"] == 1)
+    bad_csv = ("click_ref,order_ref,gross_amount,currency,order_status,platform\n"
+               f"{ref},,abc,PHP,done,shopee\n")
+    check("malformed row -> 422 nothing imported",
+          c.post("/api/v1/admin/commissions/import", headers=mh,
+                 files={"file": ("bad.csv", bad_csv.encode(), "text/csv")}).status_code == 422)
+    check("import as non-mod -> 403",
+          c.post("/api/v1/admin/commissions/import", headers=ah,
+                 files={"file": ("x.csv", csv_text.encode(), "text/csv")}).status_code == 403)
+
+    print("\n== M2: honesty fund admin trigger ==")
+    hf = c.post("/api/v1/admin/honesty-fund/run", headers=mh,
+                json={"cycle_month": f"19{random.randint(10, 49)}-01"})
+    check("honesty-fund run 200 (empty historic cycle -> no-op)",
+          hf.status_code == 200 and hf.json()["status"] in
+          ("empty_pool", "already_distributed", "no_eligible_reviews", "distributed"), hf.text[:160])
+    check("honesty-fund run as non-mod -> 403",
+          c.post("/api/v1/admin/honesty-fund/run", headers=ah, json={}).status_code == 403)
+
     c.close()
     return at, mt
 

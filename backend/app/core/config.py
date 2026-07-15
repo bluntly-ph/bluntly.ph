@@ -103,6 +103,24 @@ class Settings(BaseSettings):
     affiliate_allowed_domains: str = ""   # optional JSON override of the defaults
     earn_eligible_auto_queue: bool = True  # new reviews auto-enter the moderator queue
 
+    # --- Community voting (M2 slice 2) — reuses the 60s fixed-window limiter ---
+    vote_rate_limit_max: int = 30
+
+    # --- Trust visibility thresholds (M2 slice 4; defaults OFF for cold start) ---
+    product_trust_visibility_threshold: float = 0.0
+    product_trust_min_reviews: int = 5
+    seller_trust_visibility_threshold: float = 0.0
+
+    # --- Fraud signals (M2 slice 5; advisory-only, never auto-block) ---
+    duplicate_similarity_threshold: float = 0.85
+
+    # --- Token economy (M2 slice 7) ---
+    tokens_on_review_published: int = 10
+    tokens_on_commission: int = 25
+
+    # --- PII retention (M2 slice 8) — REQUIRED non-empty in production ---
+    pii_hash_salt: str = "dev-pii-salt"
+
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"
 
@@ -164,6 +182,8 @@ class Settings(BaseSettings):
                           "or a managed DATABASE_URL in production.")
         if "*" in self.cors_origins:
             issues.append("CORS_ORIGINS must not contain '*' in production.")
+        if self.pii_hash_salt in ("", "dev-pii-salt"):
+            issues.append("PII_HASH_SALT must be a strong random value in production.")
         return issues
 
 

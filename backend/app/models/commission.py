@@ -21,6 +21,7 @@ from sqlalchemy import (
     Date,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -29,7 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
-from app.models.enums import CommissionTarget
+from app.models.enums import CommissionTarget, MembershipTier
 
 
 class Commission(Base, UUIDPrimaryKey, Timestamps):
@@ -60,6 +61,11 @@ class Commission(Base, UUIDPrimaryKey, Timestamps):
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
+
+    # Tier snapshot at reconciliation time (M2 slice 6) — immutable audit.
+    reviewer_tier: Mapped[MembershipTier | None] = mapped_column(
+        Enum(MembershipTier, name="membership_tier"))
+    reviewer_share_bps: Mapped[int | None] = mapped_column(Integer)
 
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     platform_share: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)

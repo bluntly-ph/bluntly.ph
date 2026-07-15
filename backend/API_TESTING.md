@@ -233,6 +233,65 @@ review → `409 review_not_verified`; a bad URL (http, wrong domain, wrong platf
 → `422 affiliate_url_invalid` (with the failed `rule`). Editing a monetized review
 surfaces it under `edited_since_monetized` in the queue for re-check.
 
+## 8c. M2 — voting, trust, sellers, fraud signals, commissions, tokens, Honesty Fund
+
+```bash
+# --- Community voting (published reviews only; no self-votes) ---
+curl -s -X POST http://localhost:8000/api/v1/reviews/$RID/vote -H "$AUTH" \
+  -H 'Content-Type: application/json' -d '{"vote":"up"}'     # or "down"; re-POST = change
+curl -s -X DELETE http://localhost:8000/api/v1/reviews/$RID/vote -H "$AUTH"
+curl -s "http://localhost:8000/api/v1/reviews?sort=wilson"   # Wilson-ranked listing
+
+# --- Trust profile (public) ---
+curl -s http://localhost:8000/api/v1/users/$USER_ID/trust
+# -> {trust_stage, trust_level_name, reputation_score, verified_review_count,
+#     helpfulness_ratio, badges:[{badge_id,name,awarded_at}]}
+
+# --- Seller role + seller reviews ---
+curl -s -X PATCH http://localhost:8000/api/v1/users/$USER_ID/role -H "$MH" \
+  -H 'Content-Type: application/json' -d '{"role":"seller"}'   # moderator only; "moderator" -> 422
+curl -s -X POST http://localhost:8000/api/v1/sellers/$SELLER_ID/reviews -H "$AUTH" \
+  -H 'Content-Type: application/json' -d '{"accuracy":true,"order_completeness":true,
+    "customer_service":5,"packaging_quality":4,"overall_rating":5,"would_recommend":true}'
+curl -s http://localhost:8000/api/v1/sellers/$SELLER_ID          # profile + dimension averages
+curl -s http://localhost:8000/api/v1/sellers/$SELLER_ID/reviews  # newest first
+
+# --- Product trust & visibility thresholds ---
+curl -s http://localhost:8000/api/v1/products                        # low-trust products excluded (if thresholds on)
+curl -s "http://localhost:8000/api/v1/products?include_low_trust=true"
+curl -s http://localhost:8000/api/v1/products/$PID                   # always retrievable; carries low_trust flag
+
+# --- Fraud signals: moderator queue cards carry `signals` (advisory only) ---
+curl -s http://localhost:8000/api/v1/admin/review-queue -H "$MH"
+# item.signals = {velocity, collusion, duplicate_content, duplicate_of,
+#                 author_account_age_days, author_review_count}
+
+# --- Commission CSV import (moderator; all-or-nothing; idempotent) ---
+cat > /tmp/commissions.csv << 'CSV'
+click_ref,order_ref,gross_amount,currency,order_status,platform
+ref_abc123,ORD-1,100.00,PHP,completed,shopee
+CSV
+curl -s -X POST http://localhost:8000/api/v1/admin/commissions/import -H "$MH" \
+  -F "file=@/tmp/commissions.csv"
+# -> {imported, skipped_duplicates, unmatched, total_rows}; any invalid row -> 422 errors:[{line,issue}]
+
+# --- Tokens (append-only ledger; spending is M3) ---
+curl -s http://localhost:8000/api/v1/tokens/balance -H "$AUTH"
+curl -s "http://localhost:8000/api/v1/tokens/transactions?limit=50" -H "$AUTH"
+curl -s -X POST http://localhost:8000/api/v1/admin/users/$USER_ID/tokens -H "$MH" \
+  -H 'Content-Type: application/json' -d '{"amount":25,"note":"manual bonus"}'   # negative deducts
+
+# --- Honesty Fund cycle (moderator; idempotent per cycle) ---
+curl -s -X POST http://localhost:8000/api/v1/admin/honesty-fund/run -H "$MH" \
+  -H 'Content-Type: application/json' -d '{"cycle_month":"2026-06"}'
+# -> {cycle_month, pool, recipients, status: distributed|empty_pool|already_distributed|no_eligible_reviews}
+```
+
+Guards worth knowing: vote on own review → `409 cannot_vote_own_review`; vote on an
+unpublished review → `404`; votes are rate-limited (`VOTE_RATE_LIMIT_MAX`/60s);
+duplicate seller review → `409 seller_review_exists`; token deduct below zero →
+`409 insufficient_tokens`; tier bps > 7000 at import → `422 tier_bps_invalid`.
+
 ## 9. Error contract & rate limiting
 
 - Every error is `application/problem+json`:
@@ -250,9 +309,43 @@ The same endpoints work against Supabase — point the app at it and restart:
 
 ```bash
 # In .env: USE_SUPABASE=true and SUPABASE_CONNECTION_STRING_SESSION_POOLER=...
-python -m scripts.db_check      # verify reachability (expects 17 public tables)
+python -m scripts.db_check      # verify reachability + public table count
 uvicorn app.main:app --reload   # or run the container with those env vars
 ```
+
+**Deep verification** (`scripts/supabase_verify.py`) goes further than reachability.
+51 checks in three layers:
+
+1. **Schema truth** — all 21 tables, M2 columns, partial-unique/trigram indexes,
+   RLS state + policies, enum values, seeded tiers/badges.
+2. **Whole-database integrity invariants** — hold for *every* row, not just this
+   run's, so they catch drift a per-flow assertion can't see: every
+   `users.token_balance` equals the sum of its ledger amounts; every
+   `wallet_balance` equals its commission shares + fund payouts; no
+   `(user, earn kind, ref)` awarded twice; no orphaned votes/tokens; no negative
+   balances; every commission's three shares re-sum to `gross_amount`.
+3. **Flow truth** — drives a full API flow in-process and asserts every side
+   effect with direct SQL: review→publish→link→click→vote→trust→badge→CSV
+   import→wallet/tokens→honesty fund→PII sweep. Cleans up after itself
+   (`--keep` to leave the rows).
+
+```bash
+USE_SUPABASE=true python -m scripts.supabase_verify
+# === RESULT: 51/51 passed ===
+```
+
+Green on **local and Supabase** as of 2026-07-15, and on a from-scratch database.
+
+> **Historical note (resolved 2026-07-15).** Layer 2 once reported 9 test users
+> with wallet drift (PHP 54.00) and 12 arithmetically impossible `com_test_*`
+> commissions. Both were **test-tooling artifacts, never app defects**: an older
+> `supabase_verify` cleanup deleted a fund cycle's distribution rows without
+> reversing the wallet credits `distribute()` had made to other pre-existing test
+> reviews, and the old `_seed_pool` fixture inserted `gross=100` with `30+30+30`
+> shares. All three are fixed — the cleanup now reverses credits before deleting,
+> `_seed_pool` uses `split_commission()`, and both databases were reconciled to
+> their source-of-truth rows. Kept here because the invariants in layer 2 exist
+> precisely to catch this class of drift, and they did.
 
 See `../docs/PRODUCTION.md` for the full production runbook.
 
