@@ -96,7 +96,11 @@ class Settings(BaseSettings):
     # The direct string (db.<ref>.supabase.co) is IPv6-only; the session-pooler
     # string is IPv4 and preferred when set (works from IPv4 networks).
     supabase_connection_string: str = ""
+    # Session mode (:5432) — used by ALEMBIC only. Caps at ~4 concurrent clients.
     supabase_connection_string_session_pooler: str = ""
+    # Transaction mode (:6543) — used by the APP. Optional: derived from the
+    # session-pooler string by switching the port when left blank.
+    supabase_connection_string_transaction_pooler: str = ""
 
     # --- Security / rate limiting ---
     auth_rate_limit_max: int = 10
@@ -172,7 +176,11 @@ class Settings(BaseSettings):
 
     @property
     def effective_database_url(self) -> str:
-        """The DB URL the app/migrations actually use.
+        """The DB URL **migrations** use (Alembic).
+
+        Session mode, deliberately: our migrations run `ALTER TYPE ... ADD VALUE`
+        inside `autocommit_block()`, which needs a real session — the transaction
+        pooler cannot provide one.
 
         When targeting Supabase, prefer the IPv4 session-pooler string (reachable
         from IPv4 networks) over the IPv6-only direct string.
@@ -185,21 +193,60 @@ class Settings(BaseSettings):
         return self.database_url
 
     @property
-    def db_connect_args(self) -> dict:
-        """psycopg connect kwargs derived from the effective URL.
+    def runtime_database_url(self) -> str:
+        """The DB URL the **application** uses — Supabase TRANSACTION pooler.
+
+        Measured on this project (2026-07-16): the session pooler accepts only
+        **4** concurrent clients before
+        `FATAL: (EMAXCONNSESSION) max clients reached in session mode`, while the
+        transaction pooler accepted 30+. A 2-worker + Celery deployment needs far
+        more than 4, so serving from the session pooler makes the API 500 under
+        any real concurrency. Transaction mode multiplexes many clients onto few
+        server connections — it is what an app tier is supposed to use.
+
+        Derived from the session-pooler string by switching 5432 -> 6543 (same
+        host; that is how Supabase exposes it) unless an explicit transaction
+        string is configured. Prepared statements are disabled for it in
+        `db_connect_args` — required for pgbouncer transaction mode.
+        """
+        if not self.use_supabase:
+            return self.database_url
+        if self.supabase_connection_string_transaction_pooler:
+            return _to_sqlalchemy_pg_url(
+                self.supabase_connection_string_transaction_pooler)
+        session_cs = self.supabase_connection_string_session_pooler
+        if session_cs:
+            url = make_url(_to_sqlalchemy_pg_url(session_cs))
+            if "pooler" in (url.host or "").lower():
+                return url.set(port=6543).render_as_string(hide_password=False)
+            return url.render_as_string(hide_password=False)
+        return self.effective_database_url
+
+    def _connect_args_for(self, database_url: str) -> dict:
+        """psycopg connect kwargs for a given URL.
 
         - SSL required for Supabase hosts.
-        - Prepared statements disabled for the transaction pooler (pgbouncer),
-          detected by host containing 'pooler' or port 6543.
+        - Prepared statements disabled for the poolers (pgbouncer), detected by
+          host containing 'pooler' or port 6543.
         """
-        url = make_url(self.effective_database_url)
+        url = make_url(database_url)
         host = (url.host or "").lower()
         args: dict = {}
-        if "supabase.co" in host or "supabase.com" in host:
+        if "supabase" in host:
             args["sslmode"] = self.db_sslmode
         if "pooler" in host or url.port == 6543:
             args["prepare_threshold"] = None
         return args
+
+    @property
+    def db_connect_args(self) -> dict:
+        """Connect kwargs for MIGRATIONS (session pooler)."""
+        return self._connect_args_for(self.effective_database_url)
+
+    @property
+    def runtime_connect_args(self) -> dict:
+        """Connect kwargs for the APPLICATION (transaction pooler)."""
+        return self._connect_args_for(self.runtime_database_url)
 
     def production_issues(self) -> list[str]:
         """Hard requirements before serving production traffic."""
@@ -223,6 +270,16 @@ class Settings(BaseSettings):
         if self.payout_provider == "paypal_live" and "sandbox" in self.paypal_base_url:
             issues.append("PAYOUT_PROVIDER=paypal_live but PAYPAL_BASE_URL still "
                           "points at the sandbox.")
+        # Serving from the session pooler is a hard fail in production: it caps
+        # at ~4 concurrent clients, so the API 500s under any real load.
+        if self.use_supabase:
+            runtime = make_url(self.runtime_database_url)
+            if "pooler" in (runtime.host or "").lower() and runtime.port != 6543:
+                issues.append(
+                    "The app is pointed at the Supabase SESSION pooler "
+                    f"(:{runtime.port}), which allows only ~4 concurrent clients "
+                    "and will 500 under load. Use the TRANSACTION pooler (:6543) "
+                    "— set SUPABASE_CONNECTION_STRING_TRANSACTION_POOLER.")
         pool_capacity = self.db_pool_size + self.db_max_overflow
         if self.threadpool_tokens > pool_capacity:
             issues.append(

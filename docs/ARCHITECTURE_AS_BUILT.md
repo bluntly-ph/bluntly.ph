@@ -53,9 +53,19 @@ touchpoint is admin-mediated — **no scraping, no marketplace API calls**.
              └───────────────┘  Celery worker + beat
 ```
 
-Supabase is a **separate managed service** (its own cloud, ap-southeast). The app
-reaches it via the **session-pooler** connection string (IPv4; the direct
-`db.<ref>.supabase.co` host is IPv6-only and unreachable from IPv4 networks).
+Supabase is a **separate managed service** (its own cloud, ap-southeast). Two
+connection paths, deliberately:
+
+* **App → TRANSACTION pooler (:6543).** Measured 2026-07-16: the session pooler
+  accepts only **4** concurrent clients (`EMAXCONNSESSION`) — a 2-worker + Celery
+  deployment 500s under load on it. Transaction mode multiplexes many clients
+  onto few server connections and accepted 30+. `production_issues()` refuses to
+  boot if the app is pointed anywhere else.
+* **Alembic → SESSION pooler (:5432).** Migrations run `ALTER TYPE ... ADD VALUE`
+  in `autocommit_block()`, which needs a real session.
+
+Both are IPv4; the direct `db.<ref>.supabase.co` host is IPv6-only and
+unreachable from IPv4 networks.
 
 ## 4. Request lifecycle
 
@@ -204,8 +214,10 @@ outbound click is attributed.
   fail-fast timeout, 300s recycle (pooler-safe).
 - **Total DB connections ≈ `workers × (pool_size + overflow) + Celery`.** Defaults:
   `2 × 20 + ~4 ≈ 44` — raised in M3 s14 after the load test showed 5+5 starved
-  under 100 users. Scale workers and pool together; keep the product under the
-  pooler max, and keep `THREADPOOL_TOKENS <= pool_size + max_overflow`.
+  under 100 users. This is only viable because the app talks to the **transaction
+  pooler**, which multiplexes; the session pooler would reject it at 4 clients.
+  Scale workers and pool together, and keep
+  `THREADPOOL_TOKENS <= pool_size + max_overflow` (enforced at startup).
 - The moderator queue is **batch-loaded** (products via one `IN` +
   `selectinload(platforms)`, authors via one `IN`) — no N+1.
 - **Verified:** an 80-request burst (30 list + 30 health + 10 queue + 10 submits at

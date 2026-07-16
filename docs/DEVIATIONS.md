@@ -231,3 +231,30 @@ Every place the build diverged from the source spec / build prompt, in one place
     pinned target and no longer starves other endpoints, but batching those
     signals is real design work — recorded in `docs/LOADTEST_RESULTS.md` for the
     owner conversation the M3 plan reserves for it.
+57. **The app serves from the Supabase TRANSACTION pooler (:6543); only Alembic
+    uses the session pooler (:5432).** Found by post-push prod testing, not by
+    reading docs: an `api_smoke --concurrency` burst against Supabase returned
+    **7 × HTTP 500**, all `psycopg.OperationalError: FATAL: (EMAXCONNSESSION)
+    max clients reached in session mode`. Measured directly on the live project:
+    the **session pooler accepts only 4 concurrent clients**; the **transaction
+    pooler accepted 30+**. A 2-worker + Celery deployment needs far more than 4,
+    so serving from session mode 500s the API under any real load — 7 of 10
+    review submits failed.
+    - `config.runtime_database_url` (new) → transaction mode, derived from the
+      session string by switching 5432→6543, or set explicitly via
+      `SUPABASE_CONNECTION_STRING_TRANSACTION_POOLER`. `db/session.py` uses it.
+    - `config.effective_database_url` stays session mode **for migrations**:
+      `ALTER TYPE ... ADD VALUE` runs in `autocommit_block()`, which transaction
+      mode cannot provide.
+    - `production_issues()` now refuses a production boot whose runtime URL is a
+      pooler on a non-6543 port, so this cannot silently regress.
+    - Verified: the same burst that produced 7 × 500 now returns **79/79,
+      `{200:70, 201:10}`, zero EMAXCONNSESSION**.
+58. **The M3 load-test pool increase was a regression against Supabase.**
+    Raising `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` from 5+5 to 10+10 fixed local
+    starvation at 100 users but pushed straight past the session pooler's
+    4-client cap. It was the pooler CHOICE that was wrong, not the pool size —
+    with transaction mode, 10+10 is fine and both environments pass. Noted
+    because the original ARCHITECTURE_AS_BUILT sizing note ("sized to fit the
+    Supabase session pooler") was accepting a 4-client ceiling that no
+    multi-worker deployment could ever satisfy.

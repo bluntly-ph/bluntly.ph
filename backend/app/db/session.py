@@ -9,15 +9,19 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
+# The APP serves from `runtime_database_url` (Supabase TRANSACTION pooler), not
+# the session pooler Alembic uses. Measured 2026-07-16: the session pooler caps
+# at 4 concurrent clients (EMAXCONNSESSION) — nowhere near enough for 2 workers
+# plus Celery, and it 500s the API under load. See config.runtime_database_url.
 engine = create_engine(
-    settings.effective_database_url,
+    settings.runtime_database_url,
     pool_pre_ping=True,
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,
     pool_timeout=settings.db_pool_timeout,
     pool_recycle=settings.db_pool_recycle,
     future=True,
-    connect_args=settings.db_connect_args,
+    connect_args=settings.runtime_connect_args,
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False,
