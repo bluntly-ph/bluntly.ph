@@ -54,9 +54,21 @@ The revision file only exists in the M3 commits. Consequences while M3 is unpush
 | `alembic upgrade head` / `alembic current` with M2 code | ❌ fails — **skip it; it is not needed, the schema is already ahead** |
 | `docker compose up` with M2 code | ❌ **crash-loops** — its boot runs `alembic upgrade head` |
 
-**So: do not run Alembic, and do not use docker-compose, while testing M2 in this
-window.** Drive the API with `uvicorn` per §0b. Nothing in Groups A–H below needs
-Alembic.
+**So: do not run Alembic, and do not use docker-compose, against the existing
+databases while testing M2 in this window.** Drive the API with `uvicorn` per
+§0b — nothing in Groups A–H below needs Alembic.
+
+**M2 itself is not broken.** Verified against a *fresh* database: it migrates to
+`0009_tokens` and its full suite passes **91/91**. So if you want docker-compose
+back for local testing, point it at an empty database and everything works
+normally:
+
+```bash
+cd backend
+docker compose down -v      # drops the pgdata volume -> a fresh, unstamped DB
+docker compose up -d --build   # alembic reaches 0009; the API boots; nothing to skip
+```
+Only do that locally — it **erases the local database**. Never against Supabase.
 
 ### When does this go away?
 
