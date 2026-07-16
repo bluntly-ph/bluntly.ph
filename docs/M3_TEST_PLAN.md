@@ -12,20 +12,6 @@ the dev team. Fill in **Result** (PASS / FAIL) and Notes.
 - **Payouts are testable without PayPal** — set `PAYOUT_PROVIDER=manual` and use
   the mark-paid endpoint. No credentials needed anywhere in this plan.
 
-## 0a. Housekeeping when M3 lands
-
-M3 was built and verified against both databases **before** it was pushed, so
-while `origin/main` was still M2 the databases sat at `0014_schema_parity` and M2
-code could not run Alembic against them. Pushing M3 closes that window
-automatically (the code then contains `0010`–`0014`).
-
-**On merge, do these two things:**
-
-| # | Step | Expect | Result | Notes |
-|---|---|---|---|---|
-| 0a1 | Delete the "⚠️ TEMPORARY" section at the top of `M2_TEST_PLAN.md` | it no longer applies — Alembic and docker-compose work again on M2's own terms | | |
-| 0a2 | `cd backend && alembic current` (local **and** `USE_SUPABASE=true`) | `0014_schema_parity (head)` — no "Can't locate revision" | | |
-
 ## 0. Setup
 
 As `M1_TEST_PLAN.md` §0: get `$TOKEN` (user), `$TOKEN2` (second user), and
