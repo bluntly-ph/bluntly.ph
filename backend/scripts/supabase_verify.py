@@ -41,7 +41,7 @@ from app.main import app  # noqa: E402
 _RESULTS: list[tuple[bool, str, str]] = []
 PW = "password123"
 
-HEAD_REVISION = "0013_referral_sub_id"
+HEAD_REVISION = "0014_schema_parity"
 
 # Every path that moves users.wallet_balance. Keep this in step with the code —
 # an invariant that ignores a money path is worse than no invariant.

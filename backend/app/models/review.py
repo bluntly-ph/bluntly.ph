@@ -133,7 +133,8 @@ class ReferralLink(Base, UUIDPrimaryKey, Timestamps):
     __tablename__ = "referral_links"
 
     review_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("reviews.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("reviews.id", ondelete="CASCADE"),
+        nullable=False, index=True
     )
     platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
