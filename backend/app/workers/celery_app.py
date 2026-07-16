@@ -48,4 +48,24 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.recompute_all_trust",
         "schedule": crontab(hour=4, minute=30),
     },
+    # Request board: expire stale open requests + refund escrow (M3 slice 9).
+    "expire-requests-daily": {
+        "task": "app.workers.tasks.expire_requests",
+        "schedule": crontab(hour=5, minute=30),
+    },
+    # Contracts: renew or expire at term end (M3 slice 10).
+    "sweep-contracts-daily": {
+        "task": "app.workers.tasks.sweep_contracts",
+        "schedule": crontab(hour=5, minute=0),
+    },
+    # Payouts: monthly scheduling by tier priority — 5th, 02:30 (M3 slice 11).
+    "schedule-payouts-monthly": {
+        "task": "app.workers.tasks.schedule_payouts",
+        "schedule": crontab(day_of_month="5", hour=2, minute=30),
+    },
+    # Payouts: settle in-flight provider batches daily.
+    "refresh-payout-batches-daily": {
+        "task": "app.workers.tasks.refresh_payout_batches",
+        "schedule": crontab(hour=6, minute=0),
+    },
 }

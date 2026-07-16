@@ -13,6 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -136,6 +137,19 @@ class ReferralLink(Base, UUIDPrimaryKey, Timestamps):
     )
     platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform"), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    # Our affiliate sub-ID (M3 slice 12). The moderator sets this in their
+    # affiliate dashboard when generating the link, and the marketplace echoes it
+    # back in the monthly report (Shopee `Sub_id1..5`, Lazada `Aff Sub ID` /
+    # `Sub ID 1..6`). It is the ONLY field that survives the round trip, so it is
+    # what reconciliation matches on — without it a report row cannot be
+    # attributed to a reviewer at all. See docs/AFFILIATE_REPORT_FORMATS.md.
+    # Not globally unique: a review's links share its sub-ID across revoke ->
+    # re-attach. A partial unique index (migration) keeps it unique among ACTIVE
+    # links only.
+    sub_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    # True when the pasted URL visibly contains the sub-ID (best-effort check).
+    sub_id_in_url: Mapped[bool] = mapped_column(Boolean, default=False,
+                                                server_default="false")
     status: Mapped[ReferralLinkStatus] = mapped_column(
         Enum(ReferralLinkStatus, name="referral_link_status"),
         default=ReferralLinkStatus.active, nullable=False,

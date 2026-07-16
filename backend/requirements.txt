@@ -16,3 +16,7 @@ supabase>=2.9,<3.0
 argon2-cffi>=23.1
 anthropic>=0.40
 email-validator>=2.2
+# Contract term arithmetic (M3 slice 10): relativedelta clamps month-end dates
+# correctly (Jan 31 + 1 month -> Feb 28/29). Present transitively via celery, but
+# contracts depend on it directly — declare it so a celery change can't drop it.
+python-dateutil>=2.9

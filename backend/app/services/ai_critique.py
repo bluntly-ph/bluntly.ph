@@ -17,13 +17,26 @@ from __future__ import annotations
 import json
 import re
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
-from app.schemas.ai import CritiqueResponse
+from app.schemas.ai import CritiqueResponse, RequestValidation
 
 log = get_logger("ai.critique")
+
+_VALIDATE_SYSTEM = (
+    "You screen 'please review this product' requests for a verified product-"
+    "review platform. Reject requests that are spam, advertising, incoherent, "
+    "abusive, or too vague for a reviewer to act on. Respond with ONLY a JSON "
+    "object of the form: {\"valid\": <bool>, \"reasons\": [<string>...]}. "
+    "Give a reason for every rejection. No prose outside the JSON."
+)
+
+# Stub heuristic thresholds (deterministic — pinned by the M3 slice-9 plan).
+MIN_DETAILS_CHARS = 30
+_URL_RE = re.compile(r"https?://([^\s/]+)", re.I)
 
 _SYSTEM = (
     "You are an editorial critic for a verified product-review platform. "
@@ -61,10 +74,47 @@ def _parse_json(raw: str) -> dict:
         raise
 
 
+def _validate_user_prompt(title: str, details: str, source_url: str | None) -> str:
+    src = f"\nSource URL (do not fetch): {source_url}" if source_url else ""
+    return f"Request title: {title}\n\nDetails:\n{details}{src}"
+
+
+def _coerce_validation(data: dict, provider: str, model: str) -> RequestValidation:
+    reasons = [str(r) for r in (data.get("reasons") or [])][:10]
+    valid = bool(data.get("valid"))
+    if not valid and not reasons:
+        reasons = ["Rejected by AI screening."]
+    return RequestValidation(valid=valid, reasons=reasons, provider=provider, model=model)
+
+
+def heuristic_validate(title: str, details: str,
+                       source_url: str | None) -> tuple[bool, list[str]]:
+    """Deterministic screening shared by the stub provider and used as the pinned
+    contract in tests: too-short details, title==details, or a foreign URL
+    smuggled into the body (a common spam shape)."""
+    reasons: list[str] = []
+    if len(details.strip()) < MIN_DETAILS_CHARS:
+        reasons.append(
+            f"Details must be at least {MIN_DETAILS_CHARS} characters so a "
+            "reviewer knows what to evaluate.")
+    if title.strip().lower() == details.strip().lower():
+        reasons.append("Details merely repeat the title.")
+    allowed_host = (urlsplit(source_url).hostname or "").lower() if source_url else ""
+    for host in (h.lower() for h in _URL_RE.findall(details)):
+        if host != allowed_host:
+            reasons.append(f"Details contain an unrelated link ({host}); "
+                           "put the product link in source_url instead.")
+            break
+    return (not reasons), reasons
+
+
 class AICritiqueProvider(Protocol):
     name: str
 
     def critique(self, title: str | None, text: str) -> CritiqueResponse: ...
+
+    def validate_request(self, title: str, details: str,
+                         source_url: str | None) -> RequestValidation: ...
 
 
 class StubProvider:
@@ -91,6 +141,12 @@ class StubProvider:
             provider=self.name, model="heuristic-v1", quality_score=score,
             summary=f"Heuristic assessment of a {wc}-word draft.",
             strengths=strengths, weaknesses=weaknesses, suggestions=suggestions)
+
+    def validate_request(self, title: str, details: str,
+                         source_url: str | None) -> RequestValidation:
+        valid, reasons = heuristic_validate(title, details, source_url)
+        return RequestValidation(valid=valid, reasons=reasons,
+                                 provider=self.name, model="heuristic-v1")
 
 
 class ClaudeProvider:
@@ -124,6 +180,33 @@ class ClaudeProvider:
             raise AppError("AI provider returned unparseable output.",
                            code="ai_bad_output", status_code=502) from exc
 
+    def validate_request(self, title: str, details: str,
+                         source_url: str | None) -> RequestValidation:
+        if not settings.anthropic_api_key:
+            raise AppError("AI validation is not configured (ANTHROPIC_API_KEY missing).",
+                           code="ai_not_configured", status_code=503)
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=settings.anthropic_api_key)
+        try:
+            resp = client.messages.create(
+                model=settings.ai_model, max_tokens=settings.ai_max_tokens,
+                system=_VALIDATE_SYSTEM,
+                messages=[{"role": "user",
+                           "content": _validate_user_prompt(title, details, source_url)}],
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.info("claude request validation failed",
+                     extra={"extra_fields": {"error": str(exc)}})
+            raise AppError("AI provider request failed.", code="ai_request_failed",
+                           status_code=502) from exc
+        raw = next((b.text for b in resp.content if getattr(b, "type", None) == "text"), "")
+        try:
+            return _coerce_validation(_parse_json(raw), self.name, settings.ai_model)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise AppError("AI provider returned unparseable output.",
+                           code="ai_bad_output", status_code=502) from exc
+
 
 class OpenAIProvider:
     name = "openai"
@@ -151,6 +234,32 @@ class OpenAIProvider:
                            status_code=502) from exc
         try:
             return _coerce(_parse_json(raw), self.name, settings.ai_model)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise AppError("AI provider returned unparseable output.",
+                           code="ai_bad_output", status_code=502) from exc
+
+    def validate_request(self, title: str, details: str,
+                         source_url: str | None) -> RequestValidation:
+        if not settings.openai_api_key:
+            raise AppError("AI validation is not configured (OPENAI_API_KEY missing).",
+                           code="ai_not_configured", status_code=503)
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        try:
+            resp = client.chat.completions.create(
+                model=settings.ai_model,
+                messages=[{"role": "system", "content": _VALIDATE_SYSTEM},
+                          {"role": "user",
+                           "content": _validate_user_prompt(title, details, source_url)}],
+                response_format={"type": "json_object"},
+            )
+            raw = resp.choices[0].message.content or "{}"
+        except Exception as exc:  # noqa: BLE001
+            raise AppError("AI provider request failed.", code="ai_request_failed",
+                           status_code=502) from exc
+        try:
+            return _coerce_validation(_parse_json(raw), self.name, settings.ai_model)
         except (json.JSONDecodeError, ValueError) as exc:
             raise AppError("AI provider returned unparseable output.",
                            code="ai_bad_output", status_code=502) from exc

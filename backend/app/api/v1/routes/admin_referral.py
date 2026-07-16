@@ -53,6 +53,7 @@ def _queue_item(db: Session, review: Review, product: Product,
         suggested_platform=referral_service.suggested_platform_from(product, platforms),
         edited_since_monetized=edited,
         signals=QueueSignals(**fraud_service.compute_signals(db, review, author)),
+        suggested_sub_id=referral_service.sub_id_for_review(review.id),
     )
 
 
@@ -95,7 +96,8 @@ def attach_link(review_id: uuid.UUID, payload: AttachLinkRequest,
                 mod: User = Depends(require_role("moderator"))) -> ReviewOut:
     review = review_service.get_review_or_404(db, review_id)
     review = referral_service.attach_link_and_publish(db, review, mod.id,
-                                                      payload.url, payload.platform)
+                                                      payload.url, payload.platform,
+                                                      sub_id=payload.sub_id)
     return ReviewOut.model_validate(review)
 
 

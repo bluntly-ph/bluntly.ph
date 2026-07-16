@@ -140,13 +140,54 @@ class VoteDirection(str, enum.Enum):
 
 
 class TokenKind(str, enum.Enum):
-    """Token ledger entry kinds (M2 slice 7). Spending rules are M3."""
+    """Token ledger entry kinds (M2 slice 7; request-board kinds added M3 slice 9)."""
 
     earn_review_published = "earn_review_published"
     earn_commission = "earn_commission"
     admin_grant = "admin_grant"
     admin_deduct = "admin_deduct"
     adjustment = "adjustment"
+    # M3 slice 9 — request board escrow/reward flow.
+    spend_request_escrow = "spend_request_escrow"
+    earn_request_reward = "earn_request_reward"
+    refund_request_escrow = "refund_request_escrow"
+    platform_topup = "platform_topup"
+
+
+class PayoutStatus(str, enum.Enum):
+    """Payout lifecycle (M3 slice 11). The wallet is debited at `scheduled` and
+    refunded on `failed`/`cancelled` — so scheduled/processing/paid are all
+    'money has left the wallet' states."""
+
+    scheduled = "scheduled"
+    processing = "processing"
+    paid = "paid"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+class PayoutMethod(str, enum.Enum):
+    paypal_sandbox = "paypal_sandbox"
+    paypal_live = "paypal_live"
+    manual = "manual"
+
+
+class ContractStatus(str, enum.Enum):
+    """Monetized-review revenue-share contract lifecycle (M3 slice 10)."""
+
+    active = "active"
+    expired = "expired"
+    bought_out = "bought_out"
+
+
+class RequestStatus(str, enum.Enum):
+    """Review-request lifecycle (M3 slice 9)."""
+
+    open = "open"
+    fulfilled = "fulfilled"
+    cancelled = "cancelled"
+    expired = "expired"
+    removed = "removed"
 
 
 # Human-readable trust stage names (FR-7). Index == trust_stage (0..5).

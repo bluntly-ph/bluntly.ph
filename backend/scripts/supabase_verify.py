@@ -20,7 +20,6 @@ Exit code 0 only if every check passes.
 from __future__ import annotations
 
 import argparse
-import random
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -42,12 +41,46 @@ from app.main import app  # noqa: E402
 _RESULTS: list[tuple[bool, str, str]] = []
 PW = "password123"
 
+HEAD_REVISION = "0013_referral_sub_id"
+
+# Every path that moves users.wallet_balance. Keep this in step with the code —
+# an invariant that ignores a money path is worse than no invariant.
+#   IN : commissions.reviewer_share        (M2 slice 6 — CSV reconciliation)
+#   IN : honesty_fund_distributions.payout (M2 slice 8 — monthly fund)
+#   IN : review_contracts buyout           (M3 slice 10 — accepted buyout)
+#   OUT: payouts reserved at schedule time (M3 slice 11 — scheduled/processing/
+#        paid; `failed` and `cancelled` refund, so they must NOT be subtracted)
+WALLET_SOURCES_SQL = """
+    coalesce((SELECT sum(c.reviewer_share) FROM commissions c
+              WHERE c.reviewer_id = u.id), 0)
+  + coalesce((SELECT sum(h.payout_amount) FROM honesty_fund_distributions h
+              WHERE h.reviewer_id = u.id), 0)
+  + coalesce((SELECT sum(k.buyout_offer_amount) FROM review_contracts k
+              WHERE k.reviewer_id = u.id AND k.status = 'bought_out'::contract_status
+                AND k.buyout_accepted_at IS NOT NULL), 0)
+  - coalesce((SELECT sum(p.amount) FROM payouts p
+              WHERE p.user_id = u.id
+                AND p.status IN ('scheduled'::payout_status,
+                                 'processing'::payout_status,
+                                 'paid'::payout_status)), 0)
+"""
+
 EXPECTED_TABLES = {
     "users", "badges", "user_badges", "products", "product_platforms",
     "price_history", "reviews", "review_versions", "referral_links", "questions",
     "answers", "seller_reviews", "sessions", "commissions",
     "honesty_fund_distributions", "moderation_logs", "earn_eligible_votes",
     "membership_tiers", "review_votes", "token_transactions", "alembic_version",
+    # M3 slices 9 / 10 / 11
+    "review_requests", "request_upvotes", "review_contracts", "payouts",
+}
+
+EXPECTED_TOKEN_KINDS = {
+    "earn_review_published", "earn_commission", "admin_grant", "admin_deduct",
+    "adjustment",
+    # M3 slice 9 — request board escrow/reward flow
+    "spend_request_escrow", "earn_request_reward", "refund_request_escrow",
+    "platform_topup",
 }
 
 M2_COLUMNS = [
@@ -66,6 +99,11 @@ M2_INDEXES = [
     ("reviews", "ix_reviews_discussion_trgm"),
     ("review_votes", "uq_review_vote_once"),
     ("referral_links", "uq_referral_active"),
+    # M3
+    ("request_upvotes", "uq_request_upvote_once"),
+    ("review_contracts", "uq_contract_active"),
+    ("payouts", "uq_payout_user_batch"),
+    ("referral_links", "uq_referral_sub_id_active"),
 ]
 
 
@@ -83,7 +121,7 @@ def q(db, sql: str, **params):
 def verify_schema(db) -> None:
     print("\n== SCHEMA: migrations & tables ==")
     rev = q(db, "SELECT version_num FROM alembic_version").scalar()
-    check("alembic_version == 0009_tokens (head)", rev == "0009_tokens", str(rev))
+    check(f"alembic_version == {HEAD_REVISION} (head)", rev == HEAD_REVISION, str(rev))
 
     tables = {r[0] for r in q(db, "SELECT tablename FROM pg_tables WHERE schemaname='public'")}
     missing = EXPECTED_TABLES - tables
@@ -117,9 +155,13 @@ def verify_schema(db) -> None:
     print("\n== SCHEMA: enums ==")
     kinds = {r[0] for r in q(db, """SELECT e.enumlabel FROM pg_enum e
                 JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname='token_kind'""")}
-    check("token_kind enum has all 5 values",
-          kinds == {"earn_review_published", "earn_commission", "admin_grant",
-                    "admin_deduct", "adjustment"}, str(sorted(kinds)))
+    check(f"token_kind enum has all {len(EXPECTED_TOKEN_KINDS)} values",
+          kinds == EXPECTED_TOKEN_KINDS, str(sorted(kinds)))
+    statuses = {r[0] for r in q(db, """SELECT e.enumlabel FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname='request_status'""")}
+    check("request_status enum has all 5 values",
+          statuses == {"open", "fulfilled", "cancelled", "expired", "removed"},
+          str(sorted(statuses)))
     platforms = {r[0] for r in q(db, """SELECT e.enumlabel FROM pg_enum e
                 JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname='platform'""")}
     check("platform enum includes amazon", "amazon" in platforms)
@@ -147,13 +189,21 @@ def verify_schema(db) -> None:
     check("every users.token_balance == SUM(its ledger amounts)", bad_ledger == 0,
           f"{bad_ledger} users drifted")
 
-    bad_wallet = q(db, """SELECT count(*) FROM users u WHERE u.wallet_balance <>
-            coalesce((SELECT sum(c.reviewer_share) FROM commissions c
-                      WHERE c.reviewer_id = u.id), 0)
-          + coalesce((SELECT sum(h.payout_amount) FROM honesty_fund_distributions h
-                      WHERE h.reviewer_id = u.id), 0)""").scalar()
-    check("every users.wallet_balance == SUM(commission shares + fund payouts)",
-          bad_wallet == 0, f"{bad_wallet} users drifted")
+    bad_wallet = q(db, f"SELECT count(*) FROM users u WHERE u.wallet_balance <> "
+                       f"({WALLET_SOURCES_SQL})").scalar()
+    check("every users.wallet_balance == inflows(commissions+fund+buyouts) "
+          "- reserved payouts", bad_wallet == 0, f"{bad_wallet} users drifted")
+
+    # A payout must never exceed what the user ever earned, and a paid payout
+    # must carry its provider reference (manual or PayPal) for the audit trail.
+    orphan_payout = q(db, """SELECT count(*) FROM payouts p
+            LEFT JOIN users u ON u.id = p.user_id WHERE u.id IS NULL""").scalar()
+    check("no orphaned payouts", orphan_payout == 0, f"{orphan_payout} payouts")
+    unref_paid = q(db, """SELECT count(*) FROM payouts
+            WHERE status = 'paid'::payout_status
+              AND (provider_ref IS NULL OR paid_at IS NULL)""").scalar()
+    check("every paid payout records provider_ref + paid_at",
+          unref_paid == 0, f"{unref_paid} payouts")
 
     dupes = q(db, """SELECT count(*) FROM (
             SELECT 1 FROM token_transactions
@@ -180,6 +230,24 @@ def verify_schema(db) -> None:
                   <> gross_amount""").scalar()
     check("every commission's 3 shares re-sum to gross_amount exactly",
           bad_split == 0, f"{bad_split} commissions")
+
+    # M3 slice 9: a request's escrow must resolve exactly once — a closed request
+    # is either refunded (cancelled/expired/removed) or paid out (fulfilled),
+    # never both and never neither. Open requests must have neither yet.
+    bad_escrow = q(db, """
+        SELECT count(*) FROM (
+          SELECT r.id, r.status,
+            (SELECT count(*) FROM token_transactions t WHERE t.ref_id = r.id
+               AND t.kind = 'refund_request_escrow'::token_kind) AS refunds,
+            (SELECT count(*) FROM token_transactions t WHERE t.ref_id = r.id
+               AND t.kind = 'earn_request_reward'::token_kind) AS payouts
+          FROM review_requests r
+        ) x
+        WHERE (status IN ('cancelled','expired','removed') AND NOT (refunds = 1 AND payouts = 0))
+           OR (status = 'fulfilled' AND NOT (payouts = 1 AND refunds = 0))
+           OR (status = 'open' AND (refunds > 0 OR payouts > 0))""").scalar()
+    check("every request escrow resolves exactly once (refunded XOR paid out)",
+          bad_escrow == 0, f"{bad_escrow} requests")
 
     print("\n== SCHEMA: seed data ==")
     tiers = {r[0]: r[1] for r in q(db, "SELECT code, revenue_share_bps FROM membership_tiers")}
@@ -323,7 +391,13 @@ def verify_flow(db, client: TestClient, keep: bool) -> None:
         "created_at": datetime.now(UTC) - timedelta(days=60)})
     db.commit()
     client.post(f"/api/v1/reviews/{hf_rid}/vote", headers=vh, json={"vote": "up"})
-    cycle = date(random.randint(1900, 1948), random.randint(1, 12), 1)
+    # Claim a cycle with no distributions/commissions yet. The fund is idempotent
+    # per cycle, so a random draw eventually collides with an earlier run and the
+    # check fails on the app behaving correctly.
+    used = {r[0] for r in q(db, "SELECT DISTINCT cycle_month FROM honesty_fund_distributions")}
+    used |= {r[0] for r in q(db, "SELECT DISTINCT cycle_month FROM commissions")}
+    cycle = next(date(y, m, 1) for y in range(1900, 2100) for m in range(1, 13)
+                 if date(y, m, 1) not in used)
     cleanup_cycles.append(cycle)
     q(db, """INSERT INTO commissions (id, commission_id, target_type, review_id,
              gross_amount, platform_share, reviewer_share, honesty_fund_share,

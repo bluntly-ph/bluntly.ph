@@ -30,7 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
-from app.models.enums import CommissionTarget, MembershipTier
+from app.models.enums import CommissionTarget, ContractStatus, MembershipTier
 
 
 class Commission(Base, UUIDPrimaryKey, Timestamps):
@@ -66,6 +66,10 @@ class Commission(Base, UUIDPrimaryKey, Timestamps):
     reviewer_tier: Mapped[MembershipTier | None] = mapped_column(
         Enum(MembershipTier, name="membership_tier"))
     reviewer_share_bps: Mapped[int | None] = mapped_column(Integer)
+    # Contract state at reconciliation (M3 slice 10): explains why the reviewer's
+    # share was what it was, forever (0 bps once the contract isn't active).
+    contract_status: Mapped[ContractStatus | None] = mapped_column(
+        Enum(ContractStatus, name="contract_status"))
 
     gross_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     platform_share: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)

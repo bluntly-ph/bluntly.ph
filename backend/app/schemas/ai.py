@@ -20,3 +20,12 @@ class CritiqueResponse(BaseModel):
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
+
+
+class RequestValidation(BaseModel):
+    """AI screening verdict for a review request (M3 slice 9)."""
+
+    valid: bool
+    reasons: list[str] = Field(default_factory=list)
+    provider: str
+    model: str

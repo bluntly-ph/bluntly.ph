@@ -1,6 +1,6 @@
-# Bluntly.ph backend — development/test dependencies
+# Dev/test-only dependencies (not installed in the runtime image).
 -r requirements.txt
-pytest>=8.3,<9.0
-pytest-asyncio>=0.24,<0.25
-anyio>=4.6
+pytest>=8.3
 ruff>=0.7
+# Load testing (M3 slice 14) — see loadtest/locustfile.py and docs/LOADTEST_RESULTS.md
+locust>=2.31

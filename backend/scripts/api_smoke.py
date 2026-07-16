@@ -175,13 +175,30 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
     print("\n== Referral flow ==")
 
     def find_pending(review_id: str):
-        # The pending queue is oldest-first; on a long-lived dev DB the fresh
-        # review may sit several pages in. Page until found (bounded).
-        for offset in range(0, 1000, 100):
-            page = c.get(f"/api/v1/admin/review-queue?limit=100&offset={offset}",
+        # The queue is oldest-first, and a long-lived DB holds thousands of
+        # never-published pending reviews, so a fresh one sits on the LAST page.
+        # Scanning from the front is O(n) pages and every page computes fraud
+        # signals per card. Ask the DB for this review's position instead.
+        from sqlalchemy import func, select
+
+        from app.models.enums import EarnEligibleStatus
+        from app.models.review import Review
+        db = SessionLocal()
+        try:
+            target = db.get(Review, uuid.UUID(review_id))
+            if target is None:
+                return None
+            position = db.scalar(select(func.count(Review.id)).where(
+                Review.earn_eligible_status == EarnEligibleStatus.pending,
+                Review.published_at.is_(None), Review.is_removed.is_(False),
+                Review.created_at < target.created_at)) or 0
+        finally:
+            db.close()
+        for offset in (max(0, position - 2), max(0, position - 25)):
+            page = c.get(f"/api/v1/admin/review-queue?limit=50&offset={offset}",
                          headers=mh).json()
             item = next((i for i in page["pending"] if i["review"]["id"] == review_id), None)
-            if item is not None or not page["pending"]:
+            if item is not None:
                 return item
         return None
 

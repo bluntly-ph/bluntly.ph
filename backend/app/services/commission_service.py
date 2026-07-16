@@ -33,9 +33,11 @@ from app.models.enums import (
 )
 from app.models.membership import MembershipTierConfig
 from app.models.moderation import ModerationLog
-from app.models.review import Review
+from app.models.review import ReferralLink, Review
 from app.models.session import Session as ClickSession
 from app.models.user import User
+from app.services import report_formats
+from app.services.contract_service import reviewer_bps_for_review
 from app.services.earnings import MAX_REVIEWER_SHARE_BPS, split_commission_tiered
 
 EXPECTED_HEADER = ["click_ref", "order_ref", "gross_amount", "currency",
@@ -127,9 +129,24 @@ def _tier_bps(db: OrmSession) -> dict[MembershipTier, int]:
     return bps
 
 
+def _rows_from_bytes(file_bytes: bytes) -> tuple[list, str, list[dict]]:
+    """Normalise any supported report into importable rows.
+
+    Real Shopee/Lazada exports are detected and adapted (M3 slice 12); anything
+    else falls back to the legacy generic contract from the M2 plan, so existing
+    tooling and hand-built CSVs keep working.
+    """
+    report = report_formats.parse(file_bytes)
+    if report.format != "unknown":
+        if report.errors:
+            raise _invalid(report.errors)
+        return report.rows, report.format, report.skipped
+    return parse_and_validate(file_bytes), "generic_v1", []
+
+
 def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
                        filename: str, file_bytes: bytes) -> dict:
-    rows = parse_and_validate(file_bytes)
+    rows, fmt, skipped_rows = _rows_from_bytes(file_bytes)
     tier_bps = _tier_bps(db)
     csv_source = f"{filename}:{hashlib.sha256(file_bytes).hexdigest()[:12]}"
 
@@ -138,15 +155,26 @@ def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
     unmatched: list[int] = []
 
     for row in rows:
+        review = None
         session = None
-        if row.click_ref:
+        # 1. Affiliate sub-ID -> referral link -> review. This is the ONLY key the
+        #    real marketplace reports echo back, so it is tried first.
+        sub_id = getattr(row, "sub_id", None)
+        if sub_id:
+            link = db.scalar(select(ReferralLink).where(ReferralLink.sub_id == sub_id))
+            if link is not None:
+                review = db.get(Review, link.review_id)
+        # 2. Legacy generic contract: click_ref -> session.
+        if review is None and getattr(row, "click_ref", None):
             session = db.scalar(select(ClickSession).where(
                 ClickSession.click_ref == row.click_ref))
-        if session is None and row.order_ref:
+        # 3. Either format: a previously-recorded order_ref -> session.
+        if review is None and session is None and row.order_ref:
             session = db.scalar(select(ClickSession).where(
                 ClickSession.order_ref == row.order_ref))
-        review = db.get(Review, session.review_id) if session and session.review_id else None
-        if session is None or review is None or review.author_id is None:
+        if review is None and session is not None and session.review_id:
+            review = db.get(Review, session.review_id)
+        if review is None or review.author_id is None:
             unmatched.append(row.line)  # valid but unattributable — skipped
             continue
 
@@ -158,30 +186,43 @@ def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
             continue
 
         reviewer = db.get(User, review.author_id)
-        bps = tier_bps.get(reviewer.membership_tier, DEFAULT_REVIEWER_BPS)
+        tier = tier_bps.get(reviewer.membership_tier, DEFAULT_REVIEWER_BPS)
+        # M3 slice 10: the review's contract gates the reviewer's share. No active
+        # contract (expired / bought out / never monetized) -> 0 bps, and that
+        # share goes to the platform. The Honesty Fund's 30% is untouched.
+        bps, contract_status = reviewer_bps_for_review(db, review.id, tier)
         split = split_commission_tiered(row.gross_amount, bps)
-        clicked = session.clicked_at or session.created_at
+        # Cycle date, best source first: the report's own order date, else the
+        # click that led to it, else the review's publication. A sub-ID match has
+        # no click session at all, so the report must be able to answer this.
+        occurred = getattr(row, "occurred_on", None)
+        if occurred is None:
+            stamp = (session.clicked_at or session.created_at) if session is not None \
+                else (review.published_at or review.created_at)
+            occurred = stamp.date()
         commission = Commission(
             commission_id=f"com_{uuid.uuid4().hex[:12]}",
             target_type=CommissionTarget.review,
             review_id=review.id,
-            session_id=session.id,
+            session_id=session.id if session is not None else None,
             reviewer_id=reviewer.id,
             reviewer_tier=reviewer.membership_tier,
             reviewer_share_bps=bps,
+            contract_status=contract_status,
             currency=row.currency,
             csv_source=csv_source,
             row_reference=str(row.line),
             order_status=row.order_status or None,
-            cycle_month=date(clicked.year, clicked.month, 1),
+            cycle_month=date(occurred.year, occurred.month, 1),
             **split,
         )
         db.add(commission)
-        session.conversion_status = ConversionStatus.converted
-        if row.order_ref and not session.order_ref:
-            session.order_ref = row.order_ref
-        if row.order_status:
-            session.order_status = row.order_status
+        if session is not None:
+            session.conversion_status = ConversionStatus.converted
+            if row.order_ref and not session.order_ref:
+                session.order_ref = row.order_ref
+            if row.order_status:
+                session.order_status = row.order_status
         reviewer.wallet_balance = reviewer.wallet_balance + split["reviewer_share"]
         db.flush()
         _award_commission_tokens(db, commission)
@@ -190,13 +231,18 @@ def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
     db.add(ModerationLog(
         log_id=f"mlog_{uuid.uuid4().hex[:10]}",
         moderator_id=moderator_id, action=ModerationAction.csv_import,
-        context={"filename": filename, "csv_source": csv_source,
+        context={"filename": filename, "csv_source": csv_source, "format": fmt,
                  "total_rows": len(rows), "imported": imported,
-                 "skipped_duplicates": skipped_duplicates, "unmatched": unmatched},
+                 "skipped_duplicates": skipped_duplicates, "unmatched": unmatched,
+                 "skipped_unpayable": len(skipped_rows)},
     ))
     db.commit()
     return {"imported": imported, "skipped_duplicates": skipped_duplicates,
-            "unmatched": unmatched, "total_rows": len(rows)}
+            "unmatched": unmatched, "total_rows": len(rows), "format": fmt,
+            # Rows the platform itself says are not payable (pending, cancelled,
+            # rejected, returned, invalid, or zero commission). Reported so a
+            # moderator can see WHY a big report imported few rows.
+            "skipped_unpayable": skipped_rows}
 
 
 def _award_commission_tokens(db: OrmSession, commission: Commission) -> None:

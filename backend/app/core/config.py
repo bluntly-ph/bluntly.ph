@@ -7,6 +7,7 @@ nothing is hardcoded (see PRD §8 / Architecture §7 security notes).
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -62,11 +63,26 @@ class Settings(BaseSettings):
     db_sslmode: str = "require"  # applied to Supabase connections
 
     # --- Performance (engine pool + threadpool; see docs/PRODUCTION.md) ---
-    db_pool_size: int = 5
-    db_max_overflow: int = 5
+    # Connection budget = workers x (pool_size + max_overflow) + Celery.
+    # Defaults: 2 x 20 + ~4 = 44. Keep this under the ceiling of whatever sits in
+    # front of Postgres (the Supabase session pooler) — raise workers and pool
+    # together, never one alone.
+    db_pool_size: int = 10
+    db_max_overflow: int = 10
     db_pool_timeout: int = 10       # fail fast instead of 30s pile-ups
     db_pool_recycle: int = 300      # safe for the Supabase session pooler
-    threadpool_tokens: int = 40     # AnyIO threadpool ceiling for sync endpoints
+    # AnyIO threadpool ceiling = in-flight sync requests per process. Every sync
+    # endpoint holds its DB session for the whole request (get_db), so admitting
+    # more concurrent requests than the pool can serve adds no throughput — the
+    # surplus just waits on the pool and 500s after db_pool_timeout.
+    #
+    # The M3 slice-14 load test proved this is not theoretical: at the old 40
+    # tokens against a 10-connection pool, 100 users produced 40x "QueuePool
+    # limit of size 5 overflow 5 reached" and 500s on *unrelated* endpoints —
+    # one slow endpoint (the moderator queue, ~915ms of query time per page)
+    # starved everything else. Keep tokens <= pool_size + max_overflow;
+    # production_issues() enforces it.
+    threadpool_tokens: int = 20
 
     # --- Redis ---
     redis_url: str = "redis://localhost:6379/0"
@@ -120,6 +136,22 @@ class Settings(BaseSettings):
 
     # --- PII retention (M2 slice 8) — REQUIRED non-empty in production ---
     pii_hash_salt: str = "dev-pii-salt"
+
+    # --- Request board (M3 slice 9) ---
+    request_min_bounty: int = 10          # tokens; escrowed at creation
+    request_topup_per_upvote: int = 2     # platform-minted, per up-vote
+    request_topup_cap: int = 50           # ceiling on the top-up
+    request_ttl_days: int = 30            # open -> expired (escrow refunded)
+
+    # --- Review contracts (M3 slice 10) ---
+    contract_term_months: int = 6         # auto-renews unless the reviewer opts out
+
+    # --- Payouts (M3 slice 11) ---
+    payout_min_php: Decimal = Decimal("300.00")   # minimum wallet balance to schedule
+    payout_provider: str = "paypal_sandbox"       # paypal_sandbox | paypal_live | manual
+    paypal_client_id: str = ""
+    paypal_secret: str = ""
+    paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"
@@ -184,6 +216,20 @@ class Settings(BaseSettings):
             issues.append("CORS_ORIGINS must not contain '*' in production.")
         if self.pii_hash_salt in ("", "dev-pii-salt"):
             issues.append("PII_HASH_SALT must be a strong random value in production.")
+        if self.payout_provider == "paypal_live" and not (
+                self.paypal_client_id and self.paypal_secret):
+            issues.append("PAYOUT_PROVIDER=paypal_live requires PAYPAL_CLIENT_ID "
+                          "and PAYPAL_SECRET.")
+        if self.payout_provider == "paypal_live" and "sandbox" in self.paypal_base_url:
+            issues.append("PAYOUT_PROVIDER=paypal_live but PAYPAL_BASE_URL still "
+                          "points at the sandbox.")
+        pool_capacity = self.db_pool_size + self.db_max_overflow
+        if self.threadpool_tokens > pool_capacity:
+            issues.append(
+                f"THREADPOOL_TOKENS ({self.threadpool_tokens}) exceeds the DB pool "
+                f"capacity ({pool_capacity} = DB_POOL_SIZE + DB_MAX_OVERFLOW). Sync "
+                "endpoints hold a connection for their whole life, so the surplus "
+                "would queue on the pool and 500 after DB_POOL_TIMEOUT under load.")
         return issues
 
 

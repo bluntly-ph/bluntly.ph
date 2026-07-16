@@ -40,6 +40,68 @@ def recompute_wilson_scores() -> dict:
     return result
 
 
+@celery_app.task(name="app.workers.tasks.schedule_payouts")
+def schedule_payouts() -> dict:
+    """Monthly: reserve wallet balances into payouts, tier-priority first, and
+    hand the batch to the provider (M3 slice 11). With no credentials the batch
+    stays `scheduled` for the manual rail — never a crash."""
+    from app.services.payout_service import schedule_payouts as _schedule
+    from app.services.payout_service import submit_batch
+
+    with _session() as db:
+        result = _schedule(db)
+        if result["scheduled"]:
+            result["submission"] = submit_batch(db, result["batch_id"])
+    log.info("payout scheduling done", extra={"extra_fields": result})
+    return {"status": "ok", "task": "schedule_payouts", **result}
+
+
+@celery_app.task(name="app.workers.tasks.refresh_payout_batches")
+def refresh_payout_batches() -> dict:
+    """Daily: poll in-flight batches and settle them (paid / failed+refunded)."""
+    from sqlalchemy import select
+
+    from app.models.enums import PayoutStatus
+    from app.models.payout import Payout
+    from app.services.payout_service import refresh_batch
+
+    results = []
+    with _session() as db:
+        batches = db.scalars(select(Payout.batch_id).where(
+            Payout.status == PayoutStatus.processing).distinct()).all()
+        for batch in batches:
+            if batch:
+                results.append(refresh_batch(db, batch))
+    result = {"status": "ok", "task": "refresh_payout_batches",
+              "batches": len(results), "results": results}
+    log.info("payout batch refresh done", extra={"extra_fields": {"batches": len(results)}})
+    return result
+
+
+@celery_app.task(name="app.workers.tasks.sweep_contracts")
+def sweep_contracts() -> dict:
+    """Daily: active contracts past term auto-renew, or expire (M3 slice 10)."""
+    from app.services.contract_service import sweep_contracts as _sweep
+
+    with _session() as db:
+        counts = _sweep(db)
+    result = {"status": "ok", "task": "sweep_contracts", **counts}
+    log.info("contract sweep done", extra={"extra_fields": result})
+    return result
+
+
+@celery_app.task(name="app.workers.tasks.expire_requests")
+def expire_requests() -> dict:
+    """Daily: open requests past expires_at -> expired, escrow refunded (M3 s9)."""
+    from app.services.request_service import expire_open_requests
+
+    with _session() as db:
+        expired = expire_open_requests(db)
+    result = {"status": "ok", "task": "expire_requests", "expired": expired}
+    log.info("request expiry sweep done", extra={"extra_fields": result})
+    return result
+
+
 @celery_app.task(name="app.workers.tasks.recompute_all_trust")
 def recompute_all_trust() -> dict:
     """Nightly trust progression sweep over recently-active users (M2 slice 3)."""

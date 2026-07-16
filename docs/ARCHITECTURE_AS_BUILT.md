@@ -1,8 +1,8 @@
-# Bluntly.ph Backend — As-Built Architecture (M0 + M1 + M2 complete)
+# Bluntly.ph Backend — As-Built Architecture (M0 + M1 + M2 complete, M3 built-not-deployed)
 
 > The definitive "how it actually works" reference, written from **verified**
-> behavior (79/79 API smoke checks + 89 unit/integration tests, green on local
-> **and** Supabase, 2026-07-14). Supersedes intentions in
+> behavior (78/78 API smoke checks + 141 unit/integration tests + 59/59 deep
+> verification, green on local **and** Supabase, 2026-07-16). Supersedes intentions in
 > `02-bluntly-ph-architecture.md` where they differ.
 
 ---
@@ -19,7 +19,7 @@ touchpoint is admin-mediated — **no scraping, no marketplace API calls**.
 | Layer | Choice |
 |---|---|
 | API | FastAPI (sync endpoints), Uvicorn (2 workers, no `--reload` in ship path) |
-| ORM / migrations | SQLAlchemy 2.0 + Alembic (5 migrations) |
+| ORM / migrations | SQLAlchemy 2.0 + Alembic (14 migrations, head `0013_referral_sub_id`) |
 | Database | PostgreSQL 16 local (docker-compose) / **Supabase** PostgreSQL 17 (session pooler, IPv4) |
 | Cache / broker | Redis 7 |
 | Background jobs | Celery worker + beat (Honesty Fund monthly 02:00 · PII retention daily 03:00 · Wilson/trust-rating recompute daily 04:00 · trust-progression sweep daily 04:30, Asia/Manila) — real bodies as of M2 |
@@ -39,17 +39,17 @@ touchpoint is admin-mediated — **no scraping, no marketplace API calls**.
                     │  Uvicorn (2 workers/container)│
                     │  FastAPI app                  │
                     │   • sync endpoints → AnyIO    │
-                    │     threadpool (40 tokens)    │
+                    │     threadpool (20 tokens)    │
                     │   • JWT auth, RBAC, RFC 9457  │
                     └───┬───────────┬───────────┬───┘
               SQLAlchemy│   Redis   │           │ https
-              pool(5+5) │  (limiter,│           │ (only if AI_PROVIDER=claude/openai)
+            pool(10+10) │  (limiter,│           │ (only if AI_PROVIDER=claude/openai)
                         ▼   broker) ▼           ▼
              ┌───────────────┐ ┌────────┐  ┌──────────────┐
              │ PostgreSQL    │ │ Redis 7│  │ Anthropic /  │
              │ local OR      │ └───┬────┘  │ OpenAI API   │
              │ Supabase      │     │broker └──────────────┘
-             │ (RLS, 19 tbls)│     ▼
+             │ (RLS, 25 tbls)│     ▼
              └───────────────┘  Celery worker + beat
 ```
 
@@ -61,7 +61,11 @@ reaches it via the **session-pooler** connection string (IPv4; the direct
 
 1. TLS terminator → Uvicorn worker → FastAPI.
 2. Sync `def` endpoint runs in the **AnyIO threadpool** (ceiling `THREADPOOL_TOKENS`,
-   default 40) — the in-flight concurrency cap per process.
+   default 20) — the in-flight concurrency cap per process. It must stay **<=
+   `DB_POOL_SIZE + DB_MAX_OVERFLOW`** (enforced by `production_issues()`): every
+   sync endpoint holds its session for the whole request, so admitting more adds
+   no throughput and makes the surplus 500 on pool timeout (proved by the M3
+   load test — see `docs/LOADTEST_RESULTS.md`).
 3. `get_db` yields a SQLAlchemy `Session` from a pool
    (`DB_POOL_SIZE`+`DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT=10s` fail-fast).
 4. Auth deps: `get_current_user` validates the HS256 JWT and loads the `User`;
@@ -79,7 +83,7 @@ reaches it via the **session-pooler** connection string (IPv4; the direct
   a user to moderator takes effect immediately, without re-login (verified).
 - Auth endpoints are Redis rate-limited (fail-open; default 10/min/IP).
 
-## 6. Data model (21 tables, `public` schema, all RLS-enabled)
+## 6. Data model (25 tables, `public` schema, all RLS-enabled)
 
 Core: `users` (profile + `role`/`membership_tier`/`reputation`/`wallet`/
 `token_balance`/`seller_trust_score`), `badges`, `user_badges`, `products`
@@ -90,6 +94,9 @@ community votes, M2 s2), `questions`, `answers`, `seller_reviews`
 `commissions` (+ tier snapshot columns), `honesty_fund_distributions`,
 `moderation_logs` (also the audit log), `earn_eligible_votes`,
 **`token_transactions`** (append-only ledger, M2 s7), `membership_tiers`,
+**`review_requests`** + **`request_upvotes`** (request board, M3 s9),
+**`review_contracts`** (revenue-share contracts, M3 s10), **`payouts`**
+(disbursement; RLS with no public policy, M3 s11),
 + `alembic_version` (RLS on). Extension `pg_trgm` powers the duplicate-content
 signal. Full column reference: `docs/schema.md`.
 
@@ -192,12 +199,13 @@ outbound click is attributed.
 ## 9. Concurrency model & connection budget
 
 - Sync endpoints run in the AnyIO threadpool → per-process in-flight cap =
-  `THREADPOOL_TOKENS` (40).
-- Each process holds a DB pool of `DB_POOL_SIZE`+`DB_MAX_OVERFLOW` (5+5), 10s
+  `THREADPOOL_TOKENS` (20).
+- Each process holds a DB pool of `DB_POOL_SIZE`+`DB_MAX_OVERFLOW` (10+10), 10s
   fail-fast timeout, 300s recycle (pooler-safe).
 - **Total DB connections ≈ `workers × (pool_size + overflow) + Celery`.** Defaults:
-  `2 × 10 + ~4 ≈ 24` — sized to fit the Supabase session pooler. Scale workers and
-  pool together; keep the product under the pooler max.
+  `2 × 20 + ~4 ≈ 44` — raised in M3 s14 after the load test showed 5+5 starved
+  under 100 users. Scale workers and pool together; keep the product under the
+  pooler max, and keep `THREADPOOL_TOKENS <= pool_size + max_overflow`.
 - The moderator queue is **batch-loaded** (products via one `IN` +
   `selectinload(platforms)`, authors via one `IN`) — no N+1.
 - **Verified:** an 80-request burst (30 list + 30 health + 10 queue + 10 submits at
@@ -219,14 +227,14 @@ outbound click is attributed.
 
 | Check | Result |
 |---|---|
-| Unit + integration tests (`pytest`) | 91 passed (local, Supabase, AND a from-scratch DB); fund tests re-run 3× per env to confirm no cycle-collision flake |
+| Unit + integration tests (`pytest`) | **141 passed** on local AND Supabase |
 | Negative controls (invariant deliberately broken → the check must fail) | 15/15 controls behaved; found 2 coverage gaps, now closed |
 | Lint (`ruff`) | clean |
-| Migrations (base → head → base → head on an empty DB) | 10 apply, 10 reverse cleanly |
-| API smoke — **local** (`scripts/api_smoke.py`, 79 checks) | 79/79 |
-| API smoke — **Supabase** (:8001, same 79 checks) | 79/79 |
+| Migrations | 14 total (0001–0013); applied to local AND Supabase |
+| API smoke — **local** (`scripts/api_smoke.py`, 78 checks) | 78/78 |
+| API smoke — **Supabase** (:8001) | passing |
 | Concurrency burst (80 req) — local & Supabase | 0 server errors |
-| Deep verification (`scripts/supabase_verify.py`, 51 checks: schema truth + whole-DB financial integrity invariants + end-to-end flow asserted row-by-row with direct SQL) | **51/51 on local, Supabase, and a from-scratch DB** |
+| Deep verification (`scripts/supabase_verify.py`, **59 checks**: schema truth + whole-DB financial integrity invariants + end-to-end flow asserted row-by-row with direct SQL) | **59/59 on local AND Supabase** |
 | RLS | every new table RLS-enabled (`review_votes` public-select; `token_transactions` no permissive policy) |
 
 Reusable tool: `python -m scripts.api_smoke --base-url <url> [--concurrency]`
@@ -234,13 +242,22 @@ Reusable tool: `python -m scripts.api_smoke --base-url <url> [--concurrency]`
 
 ## 12. Milestone status & what's next
 
+- **Load test (M3 s14):** 100 users / 5 min — p95 **73 ms**, errors **0.0101%**,
+  **zero 5xx**. See `docs/LOADTEST_RESULTS.md`; it caught a real defect (one slow
+  endpoint 500-ing every other via pool starvation) now fixed and guarded.
 - **Done:** M0 foundations · M1 core (auth, tiers, reviews+versions, AI critique) ·
   **M2 complete** (publication-gated referral flow · community voting + Wilson
   ranking · trust progression + badges · seller/product trust ratings +
   thresholds · advisory fraud signals · commission CSV + tiered split · token
   economy · Honesty Fund + PII retention job bodies) · production hardening ·
   performance P0 (pool tuning, N+1 fix, 2 workers, threadpool knob).
-- **Next:** M3 slices 9–14 per `superpowers/specs/2026-07-13-m3-master-plan.md`
-  (request board, payouts, contracts, frontend integration, load test, deploy).
+- **M3 built, NOT deployed:** request board (slice 9) · contracts (10) · payouts
+  + PayPal adapter and manual rail (11) · real Shopee/Lazada report ingestion (12)
+  · frontend readiness (13) · load test + acceptance plan (14). Schema 21 → 25
+  tables (`review_requests`, `request_upvotes`, `review_contracts`, `payouts`).
+- **Remaining for M3 completion (owner-blocked):** production deploy (host +
+  secrets) and live PayPal sandbox verification (credentials). Operator
+  prerequisite: affiliate links must carry `suggested_sub_id` or commissions
+  cannot be attributed — see `docs/AFFILIATE_REPORT_FORMATS.md`.
 - **M3 flag:** the milestone's Scrapy pipeline contradicts the anti-scraping mandate
   — needs an explicit decision before build (`docs/MILESTONES.md`).

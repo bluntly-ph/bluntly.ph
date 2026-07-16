@@ -174,3 +174,60 @@ Every place the build diverged from the source spec / build prompt, in one place
     DB for a slot with no distributions or commissions. Test-only change; the
     idempotency guarantee itself is unchanged and covered by
     `test_honesty_fund_distribution_proportional_and_idempotent`.
+
+## M3 slices 9–14 — request board, contracts, payouts, ingestion (2026-07-16)
+46. **Request-board escrow resolves exactly once.** The bounty leaves the
+    requester at creation (`spend_request_escrow`), so a reward is always funded.
+    Every close path either refunds it (cancel / expire / moderator remove) or
+    pays it out (fulfil) — never both, never neither; asserted as a whole-database
+    invariant in `scripts/supabase_verify.py`. The up-vote top-up is minted by the
+    platform at fulfilment only (`platform_topup`), capped by `REQUEST_TOPUP_CAP`.
+47. **Fulfilment is an explicit claim, never automatic.** A reviewer links their
+    OWN published review via `POST /requests/{id}/fulfill`. Auto-matching a review
+    to a request would be guesswork, and this moves real tokens.
+48. **Contracts gate the reviewer's share at one integration point.**
+    `contract_service.reviewer_bps_for_review` is consulted by the slice-6 split:
+    `active` → tier bps; `expired` / `bought_out` / none → **0 bps**, and the
+    platform absorbs that share. The Honesty Fund's fixed 30% never moves.
+    `commissions.contract_status` snapshots the state so a row explains its own
+    share forever.
+49. **`python-dateutil` promoted to a direct dependency.** Contract terms need
+    `relativedelta` (Jan 31 + 1 month → Feb 28/29). It was present only
+    transitively via celery; contracts depend on it directly, so a celery change
+    must not be able to remove it.
+50. **The wallet is debited when a payout is *scheduled*, not when paid.** The
+    money is reserved so it cannot be spent twice while a batch is in flight;
+    `failed` and `cancelled` refund it. The whole-DB invariant is therefore
+    `wallet == inflows(commissions + fund + buyouts) − payouts(scheduled |
+    processing | paid)`.
+51. **Missing PayPal credentials are not an error.** The batch stays `scheduled`
+    and is payable through the manual rail (`POST /admin/payouts/{id}/mark-paid`),
+    so payouts are fully operable — and testable — with no PayPal account. The
+    adapter is built to the documented v1 contract and leans on PayPal rejecting a
+    duplicate `sender_batch_id` within 30 days as a second line of defence against
+    double payment.
+52. **Slice 12 was NOT "no code".** The plan assumed manual-CSV-only meant nothing
+    to build. The owner's real Shopee/Lazada exports disproved that: the M2
+    importer would have rejected both at the header, Lazada is **cp1252 not
+    UTF-8**, ~1/3 of rows earn ₱0 (which under all-or-nothing would fail the whole
+    file), and neither report carries a `click_ref` — so `report_formats.py` and
+    sub-ID attribution were built instead. See `docs/AFFILIATE_REPORT_FORMATS.md`.
+53. **Report status gates payment.** Only Shopee `Completed` and Lazada
+    `valid` + `Delivered` rows are importable; pending/cancelled/rejected/returned
+    rows are reported as `skipped_unpayable` and never paid. Paying a pending
+    order is a real financial error, and the M2 importer would have done it.
+54. **Attribution now flows through `referral_links.sub_id`,** unique among
+    *active* links (a review's links share its sub-ID across revoke → re-attach —
+    they all attribute to the same review). ⚠️ **Operational dependency:** the
+    moderator must set `suggested_sub_id` in their affiliate dashboard when
+    generating the link, or the report comes back unattributable.
+55. **`THREADPOOL_TOKENS <= DB_POOL_SIZE + DB_MAX_OVERFLOW` is now enforced**
+    (`production_issues()`). The load test proved the old 40-vs-10 mismatch let
+    ONE slow endpoint (the moderator queue) 500 every other endpoint via pool
+    starvation. Pool raised to 10+10/worker, tokens 20; budget 2×20+4 = 44.
+56. **Known hot spot, deliberately not fixed:** the moderator queue's advisory
+    fraud signals cost 5 queries/card (~37 ms local, ~350 ms over Supabase's
+    network), so a 25-card page is ~0.9 s local / ~9 s on Supabase. It breaches no
+    pinned target and no longer starves other endpoints, but batching those
+    signals is real design work — recorded in `docs/LOADTEST_RESULTS.md` for the
+    owner conversation the M3 plan reserves for it.

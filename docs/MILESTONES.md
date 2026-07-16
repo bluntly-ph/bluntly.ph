@@ -49,13 +49,35 @@ attribution for Shopee/Lazada/Amazon**, **tier-based revenue split calculation**
 > errors) on **both** environments. Acceptance plan: `M2_TEST_PLAN.md`;
 > deviations §35–44 in `DEVIATIONS.md`.
 
-## Milestone 3 — Full System Delivery
+## Milestone 3 — Full System Delivery ⚠️ BUILT, NOT DEPLOYED (2026-07-16)
 **Request board** with AI validation and **dynamic reward calculation**, **earnings
 processing and payment scheduling by membership tier**, **contract duration tracking
 and renewal/buyout logic**, **web scraping pipeline for affiliate performance data
 (Scrapy + proxy rotation)**, **end-to-end frontend integration**, **load testing**,
 and full system **deployed and production-ready**.
 
+> **Slices 9–13 ✅ DONE + slice 14 partially (2026-07-16).** Request board with
+> AI validation and dynamic token rewards (escrow → up-vote top-up → fulfilment)
+> · monetized-review contracts with renewal/buyout, gating the reviewer's share
+> at reconciliation · payouts scheduled by membership-tier priority with a PayPal
+> Payouts adapter + an always-available manual rail · **affiliate ingestion of the
+> REAL Shopee/Lazada exports** (owner decision: manual CSV only; a brand
+> partnership is the intended successor) · frontend readiness (OpenAPI, TS types,
+> `FRONTEND_INTEGRATION.md`) · load test meeting every pinned target.
+> Migrations 0010–0013 on local **and** Supabase. Verified: pytest 141/141 and
+> `supabase_verify` 59/59 on both; load test p95 73 ms / 0.0101% errors / zero
+> 5xx at 100 users. Plans: `M3_TEST_PLAN.md`, `LOADTEST_RESULTS.md`,
+> `AFFILIATE_REPORT_FORMATS.md`; deviations §46–56.
+>
+> **🔒 NOT done — M3 is not complete until these land:** the **production deploy**
+> (owner supplies host + secrets; `PRODUCTION.md` is the runbook) and live PayPal
+> sandbox verification (owner supplies credentials; everything else is verified
+> via mocks + manual mode). Two operator prerequisites are also outstanding:
+> affiliate links must be generated carrying `suggested_sub_id` or commissions
+> cannot be attributed, and the moderator queue is a known slow screen (~9 s on
+> Supabase) awaiting an owner conversation. **No frontend pages exist** — that was
+> always a separate track.
+>
 > **Fully planned (2026-07-13, final Fable pass):**
 > `superpowers/specs/2026-07-13-m3-master-plan.md` — slices 9–14, one **Opus 4.8**
 > session each. Owner decisions recorded: contracts = monetized-review revenue-share
@@ -76,13 +98,22 @@ and full system **deployed and production-ready**.
 | **AI** | Deferred to M5; AI moderation flagged as constrained | M1: AI critique (OpenAI or Claude) | Build a provider-abstracted AI critique service; provider = **pending your choice**. |
 | **Affiliate platforms** | Shopee / Lazada only | + **Amazon** (M2) | Add `amazon` to the platform enum in M2. |
 | **Earnings** | Wallet + PayPal + Honesty Fund | **Token economy** + tier-based splits + payment scheduling | Token-economy data models (M2), payment scheduling (M3). |
-| **Marketplace data** | **No scraping** — ToS-prohibited; manual-first admin workflows (MARKETPLACE_INTEGRATION.md) | M3: **Scrapy + proxy rotation** scraping pipeline | ⚠️ **DIRECT CONTRADICTION.** The original mandate forbids scraping (Shopee/Lazada ToS). This must be explicitly resolved before M3 — see warning. |
+| **Marketplace data** | **No scraping** — ToS-prohibited; manual-first admin workflows (MARKETPLACE_INTEGRATION.md) | M3: **Scrapy + proxy rotation** scraping pipeline | ✅ **RESOLVED (2026-07-15, owner):** scraping is ruled out permanently. Ingestion is **manual CSV** of the owner's own affiliate reports, with a first-party brand partnership as the intended successor. No Scrapy, no proxies, no headless browsers exist in the codebase. See `AFFILIATE_REPORT_FORMATS.md`. |
 | **New concepts** | — | Request board, contract duration / renewal / buyout, review version history | Net-new; designed when their milestone is reached. |
 
-### ⚠️ M3 scraping vs. the anti-scraping mandate
+### ✅ M3 scraping vs. the anti-scraping mandate — RESOLVED (2026-07-15)
+
 The capstone docs treat automated extraction from Shopee/Lazada as a hard ToS
-violation and the entire manual-first design exists because of it. Milestone 3's
-"web scraping pipeline (Scrapy + proxy rotation) for affiliate performance data"
-reverses that stance. Before M3 is built this needs an explicit decision:
-scrape only *first-party affiliate-dashboard/report* data you are authorized to
-access, keep the manual CSV path, or accept the ToS risk. **Not built now; flagged.**
+violation, and the entire manual-first design exists because of it. Milestone 3's
+"web scraping pipeline (Scrapy + proxy rotation)" would have reversed that.
+
+**Owner decision: no scraping, ever.** Affiliate performance data is ingested by
+uploading the reports the owner is already entitled to download from their own
+affiliate dashboards (`POST /api/v1/admin/commissions/import`), and a proper
+partnership with the marketplaces is the intended long-term replacement. The
+milestone text above is left as originally written for the record; this is the
+resolution that governs.
+
+Slice 12 implemented that decision against the owner's REAL exports — which
+turned out to need real code, not none: see `docs/AFFILIATE_REPORT_FORMATS.md`
+and `DEVIATIONS.md` §52–54.

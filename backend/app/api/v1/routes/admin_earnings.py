@@ -24,6 +24,12 @@ class ImportResult(BaseModel):
     skipped_duplicates: int
     unmatched: list[int]
     total_rows: int
+    # Which report format was detected: shopee_commission_report |
+    # lazada_conversion_report | generic_v1.
+    format: str = "generic_v1"
+    # Rows the platform says aren't payable yet (pending/cancelled/rejected/
+    # returned/invalid/zero commission) — skipped, never paid.
+    skipped_unpayable: list[dict] = Field(default_factory=list)
 
 
 @router.post("/commissions/import", response_model=ImportResult,

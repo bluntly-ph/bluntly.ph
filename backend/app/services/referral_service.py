@@ -31,6 +31,7 @@ from app.models.moderation import ModerationLog
 from app.models.product import Product, ProductPlatform
 from app.models.review import ReferralLink, Review
 from app.models.session import Session as ClickSession
+from app.services.contract_service import ensure_contract
 from app.services.pii import retention_deadlines
 from app.services.review_service import recompute_product_aggregates
 from app.services.trust_service import recompute_user_trust
@@ -44,6 +45,18 @@ def _now() -> datetime:
 
 def _conflict(detail: str, code: str) -> AppError:
     return AppError(detail, code=code, status_code=409, title="Conflicting state")
+
+
+def sub_id_for_review(review_id: uuid.UUID) -> str:
+    """The affiliate sub-ID a moderator must set when generating the link.
+
+    Deterministic from the review id so the queue can show it BEFORE the link
+    exists (the moderator needs it to create the link in their dashboard), and so
+    it is reproducible for support. This is the only identifier that survives the
+    round trip into the marketplace's monthly report — see
+    docs/AFFILIATE_REPORT_FORMATS.md.
+    """
+    return f"blt_{review_id.hex[:12]}"
 
 
 def _award_publish_tokens(db: Session, review: Review) -> None:
@@ -114,7 +127,8 @@ def validate_affiliate_url(db: Session, url: str, platform: Platform,
 
 # --- Moderator actions ---
 def attach_link_and_publish(db: Session, review: Review, moderator_id: uuid.UUID,
-                            url: str, platform: Platform) -> Review:
+                            url: str, platform: Platform,
+                            sub_id: str | None = None) -> Review:
     if review.star_rating <= 2:
         raise _conflict("<=2-star reviews route to the Honesty Fund; publish without "
                         "a link instead.", "stars_too_low_for_link")
@@ -126,14 +140,25 @@ def attach_link_and_publish(db: Session, review: Review, moderator_id: uuid.UUID
                         "active_link_exists")
     validate_affiliate_url(db, url, platform, review.product_id)
 
+    # Attribution key (M3 slice 12). Defaults to the review's deterministic
+    # sub-ID; a moderator may override it to match what they actually typed into
+    # the affiliate dashboard. `sub_id_in_url` records whether the pasted link
+    # visibly carries it — a false here means the monthly report will very likely
+    # come back unattributable for this link.
+    effective_sub_id = (sub_id or sub_id_for_review(review.id)).strip()
     db.add(ReferralLink(review_id=review.id, platform=platform, url=url,
                         status=ReferralLinkStatus.active,
+                        sub_id=effective_sub_id,
+                        sub_id_in_url=effective_sub_id in url,
                         review_version=review.current_version, created_by=moderator_id))
     review.affiliate_link = url
     review.earn_eligible_status = EarnEligibleStatus.monetized
     if review.published_at is None:
         review.published_at = _now()
         _award_publish_tokens(db, review)
+    # M3 slice 10: every monetized review runs a revenue-share contract. A
+    # re-attach after a revoke reuses the existing active one (no new term).
+    ensure_contract(db, review)
     _audit(db, moderator_id, ModerationAction.affiliate_link_attach, review.id,
            context={"platform": platform.value, "url": url})
     recompute_product_aggregates(db, review.product_id)

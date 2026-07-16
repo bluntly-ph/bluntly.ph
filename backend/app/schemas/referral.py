@@ -15,6 +15,10 @@ from app.schemas.review import ReviewOut
 class AttachLinkRequest(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
     platform: Platform
+    # The affiliate sub-ID actually set in the dashboard when generating this
+    # link. Defaults to the review's suggested sub-ID (see QueueItem). It is what
+    # the monthly report echoes back, so it is how the commission gets attributed.
+    sub_id: str | None = Field(default=None, max_length=64)
 
 
 class ReasonRequest(BaseModel):
@@ -33,6 +37,10 @@ class ReferralLinkOut(BaseModel):
     platform: Platform
     url: str
     status: ReferralLinkStatus
+    sub_id: str | None = None
+    # False = the pasted URL doesn't visibly carry the sub-ID, so this link's
+    # commissions will most likely come back unattributable.
+    sub_id_in_url: bool = False
     review_version: int
     created_by: uuid.UUID | None = None
     revoked_by: uuid.UUID | None = None
@@ -80,6 +88,10 @@ class QueueItem(BaseModel):
     suggested_platform: Platform | None = None
     edited_since_monetized: bool = False
     signals: QueueSignals = Field(default_factory=QueueSignals)
+    # Put THIS in the affiliate dashboard's sub-ID field when generating the link.
+    # The marketplace echoes it back in the monthly report and it is the only way
+    # the commission can be attributed to this review (M3 slice 12).
+    suggested_sub_id: str | None = None
 
 
 class ReviewQueueResponse(BaseModel):

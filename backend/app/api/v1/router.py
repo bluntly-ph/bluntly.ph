@@ -9,8 +9,11 @@ from app.api.v1.routes import (
     admin_referral,
     ai,
     auth,
+    contracts,
     membership,
+    payouts,
     products,
+    requests,
     reviews,
     sellers,
     tokens,
@@ -28,3 +31,6 @@ api_v1_router.include_router(ai.router)
 api_v1_router.include_router(users.router)
 api_v1_router.include_router(sellers.router)
 api_v1_router.include_router(tokens.router)
+api_v1_router.include_router(requests.router)
+api_v1_router.include_router(contracts.router)
+api_v1_router.include_router(payouts.router)
