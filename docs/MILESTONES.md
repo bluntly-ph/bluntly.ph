@@ -5,6 +5,12 @@
 > they differ. The earlier "M0 Foundations" work (see `superpowers/specs/`) remains
 > the technical base these build on. Reconciliation notes are at the bottom.
 
+> **This file tracks the BACKEND track.** The frontend is a separate track with its own
+> milestones (FE-M1 core layout & auth, FE-M2 core feature screens, FE-M3 remaining screens &
+> full delivery) and its own documentation suite in [`frontend/`](frontend/index.md). The
+> frontend consumes this backend through [`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md)
+> and [`openapi.json`](openapi.json).
+
 ## Milestone 1 — Core System Foundation ✅ DONE (2026-07-12)
 FastAPI application with **JWT/OAuth2 authentication**, user registration and login,
 PostgreSQL database schema (**users, reviews, membership tiers, reputation**),

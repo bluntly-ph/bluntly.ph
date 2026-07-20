@@ -4,6 +4,10 @@ Everything the Next.js app needs to talk to this backend. No frontend pages are
 built yet (owner decision — the frontend is a separate track); this is the
 contract they build against.
 
+> **Frontend track documentation now exists.** The frontend milestones, screen inventory,
+> design system, architecture, and test plan live in [`frontend/`](frontend/index.md). This
+> file remains the authoritative backend API contract that the frontend builds against.
+
 - **Live spec:** `docs/openapi.json` (52 paths, 62 operations, all tagged).
   Browse it at `‹API›/docs` when `ENABLE_DOCS=true`.
 - **Types:** `lib/api-types.d.ts`, generated. Regenerate after any API change:

@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bluntly.ph
 
-## Getting Started
+[![Status: In development](https://img.shields.io/badge/Status-In%20development-yellow)](docs/frontend/index.md)
+[![Frontend: Next.js 16](https://img.shields.io/badge/Frontend-Next.js%2016-black)](docs/frontend/index.md)
+[![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)](docs/MILESTONES.md)
+[![Docs: FMD](https://img.shields.io/badge/Docs-FMD-333)](docs/frontend/index.md)
 
-First, run the development server:
+A verified product and seller review platform for Filipino online shoppers: read and write
+blunt, structured, proof-backed reviews, evaluate sellers, and earn through an honest token
+economy. This repo is a monorepo with a Next.js frontend at the root and a FastAPI backend in
+`backend/`.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Frontend (repo root)
+npm install
+npm run dev            # http://localhost:3000
+npm run gen:api        # regenerate lib/api-types.d.ts from docs/openapi.json
+
+# Backend (separate track)
+cd backend && docker compose up -d --build   # http://localhost:8000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `NEXT_PUBLIC_API_URL=http://localhost:8000` for local development. The backend's
+`CORS_ORIGINS` must include the frontend origin.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Documentation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The two tracks have separate documentation suites.
 
-## Learn More
+**Frontend** (built with the FMD documentation engine); [`docs/frontend/`](docs/frontend/index.md):
 
-To learn more about Next.js, take a look at the following resources:
+- [Index / manifest](docs/frontend/index.md)
+- [PRD](docs/frontend/prd-bluntly-fe.md); screens and features by milestone (FE-M1 / FE-M2 / FE-M3)
+- [Design system](docs/frontend/dsd-bluntly-fe.md) (+ root [`BRAND.md`](BRAND.md), [`DESIGN.md`](DESIGN.md))
+- [System design](docs/frontend/sdd-bluntly-fe.md); Next.js architecture and API integration
+- [QA & test plan](docs/frontend/qad-bluntly-fe.md)
+- [Build guide](docs/frontend/build-bluntly-fe.md) (materialized to root [`AGENTS.md`](AGENTS.md))
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Backend**; [`docs/`](docs/):
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Milestones (M1;M3)](docs/MILESTONES.md), [As-built architecture](docs/ARCHITECTURE_AS_BUILT.md), [Data dictionary](docs/schema.md)
+- [Frontend integration contract](docs/FRONTEND_INTEGRATION.md), [OpenAPI spec](docs/openapi.json)
+- [Production runbook](docs/PRODUCTION.md)
 
-## Deploy on Vercel
+## Repo layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+app/        Next.js App Router frontend (routes, layouts)
+lib/        shared frontend logic + generated API types
+public/      static assets
+backend/     FastAPI backend (separate track, built through M3)
+docs/        backend docs + docs/frontend/ (frontend suite)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Stack
+
+Frontend: Next.js 16.2.10, React 19.2.4, Tailwind CSS v4, TypeScript. Backend: FastAPI,
+SQLAlchemy, Alembic, Celery, Redis, PostgreSQL / Supabase.
