@@ -258,3 +258,28 @@ Every place the build diverged from the source spec / build prompt, in one place
     because the original ARCHITECTURE_AS_BUILT sizing note ("sized to fit the
     Supabase session pooler") was accepting a 4-client ceiling that no
     multi-worker deployment could ever satisfy.
+59. **OTP is delivered by email, not SMS — the design contradicts itself.**
+    The mobile Login/Signup frame reads "We'll text you a code to verify it's
+    really you", but the only input on that frame is an **Email address** field.
+    Building the copy literally would need an SMS vendor, a phone column, and
+    E.164 validation for a field the design never draws. Resolved as **email
+    OTP** (owner decision), with the UI copy corrected to "We'll email you a
+    code". No phone number is collected anywhere in Slice 1.
+60. **The OTP verify limit lives in Postgres, not Redis.**
+    `core/rate_limit.py` fails open by design — "never block auth on a Redis
+    outage" — which is right for password login but would hand an attacker
+    unlimited guesses at a 6-digit code whenever Redis is down. So
+    `email_otps.attempts` is incremented in the same transaction as the check
+    and is the authoritative cap; Redis only throttles *sends*, where failing
+    open merely permits extra email. Covered by
+    `test_attempt_cap_is_enforced_without_redis`.
+61. **The `bluntly.ph` + checkmark logo is dropped.**
+    The desktop frames use a `bluntly.ph` wordmark with a checkmark mark while
+    the mobile frames use a plain lowercase `bluntly`. Owner decision: the
+    `bluntly` wordmark everywhere, so the checkmark is not implemented.
+62. **`username` was added; the Figma `@username` is not `display_name`.**
+    Both designs show a distinct `@handle`, and the desktop signup form has
+    *both* Email and Username fields, but the schema only had a non-unique
+    `display_name`. Added `users.username` (unique, 3–32, `^[a-z0-9_]+$`) and
+    backfilled 2187 existing rows deterministically. `display_name` is retained
+    as the free-text label — the two are not merged.

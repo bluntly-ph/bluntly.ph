@@ -79,6 +79,41 @@ slice 6). New constraint `uq_seller_review_once(seller_id, reviewer_id)` on
 `ix_reviews_discussion_trgm` on `reviews.discussion` (duplicate-content signal,
 slice 5).
 
+## M3 additions (21 → 24 tables; migrations 0010–0014)
+Documented late — these shipped with M3 but were missing from this file:
+**`review_requests`** (the request board: bounty escrow, status, AI screening
+reasons), **`request_upvotes`** (one row per user per request; drives the capped
+`effective_reward` top-up), **`review_contracts`** (6-month revenue-share term,
+`auto_renew`, pending `buyout_offer_amount`). Plus `referral_links.sub_id` +
+`sub_id_in_url` (0013) — the affiliate attribution key, unique among *active*
+links only.
+
+## Slice 1 Phase A additions (24 → 25 tables; migrations 0015–0017)
+
+**`email_otps`** (0015) — one-time codes for passwordless auth:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | `gen_random_uuid()` |
+| `email` | String(320), indexed | **Not** FK'd to `users` — a signup code precedes the user row |
+| `code_hash` | String(255) | Argon2id. The plaintext code is never stored |
+| `purpose` | enum `otp_purpose` (`signup`\|`login`) | |
+| `attempts` | SmallInteger, default 0 | **Authoritative** verify limit — Redis fails open |
+| `expires_at` | timestamptz | issued + `OTP_TTL_SECONDS` (600) |
+| `consumed_at` | timestamptz NULL | single-use |
+| `created_at` | timestamptz | |
+
+Indexes: `ix_email_otps_email`, plus partial `ix_email_otps_live (email, purpose)
+WHERE consumed_at IS NULL` for the "find this address's live code" hot path.
+
+**`users.username`** String(32) UNIQUE NOT NULL (0016) — the stable public
+handle; `display_name` remains the free-text label. Backfilled deterministically
+from `display_name` → email local-part → `user`, with a numeric suffix on
+collision; the SQL slug mirrors `app/services/username.py`.
+
+**`users.avatar_url`** Text NULL (0017) — public URL of an object in the
+Supabase Storage `avatars` bucket.
+
 ## Row-Level Security
 All 15 tables have RLS enabled (31 policies). Owner-write tables key on
 `auth.uid()`; public-read on content/reference tables; admin-only tables

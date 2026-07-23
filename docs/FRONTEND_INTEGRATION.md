@@ -32,12 +32,39 @@ is NOT used for login (ADR-010/011).
 
 ```ts
 // register -> {access_token, expires_in, user}
-POST /api/v1/auth/register   {email, password, display_name?}
+POST /api/v1/auth/register   {email, password, display_name?, username?}
 // login is an OAuth2 password FORM post, not JSON:
 POST /api/v1/auth/login      Content-Type: application/x-www-form-urlencoded
                              username=<email>&password=<password>
 GET  /api/v1/auth/me         -> the current user
 ```
+
+**Passwordless (email OTP).** A second, equal path — one account can use either.
+
+```ts
+POST /api/v1/auth/otp/request  {email, purpose:"signup"|"login"}  -> 202
+POST /api/v1/auth/otp/verify   {email, code}                      -> TokenResponse
+```
+
+- `otp/request` **always returns 202**, registered or not. It is deliberately not
+  an enumeration oracle, so never render "no account with that email" from it.
+  A signup request for an existing address quietly becomes a login code.
+- `otp/verify` returns the **identical `TokenResponse`** as `/auth/login`, so
+  session creation is one code path regardless of how the user authenticated.
+- Codes are 6 digits, expire in 10 minutes, are single-use, and requesting a new
+  one invalidates the previous. After 5 wrong attempts the code is dead and the
+  user must request another.
+
+**Identity fields.** `username` is the unique, URL-safe `@handle` (3–32 chars,
+`^[a-z0-9_]+$`, case-insensitively unique). `display_name` is the free-text
+label and is **not** unique. Both are on `UserOut`, alongside `avatar_url`.
+
+```ts
+POST   /api/v1/users/me/avatar   multipart/form-data, field name `file` -> UserOut
+DELETE /api/v1/users/me/avatar                                          -> 204
+```
+PNG/JPEG/WebP only, 5 MB max. The type is sniffed server-side from magic bytes,
+so a mislabelled `Content-Type` is rejected regardless of what the browser sends.
 
 - Tokens expire after `ACCESS_TOKEN_EXPIRE_MINUTES` (default 1440). On `401` with
   `code: "token_expired"`, clear the session and send the user to login — there is
@@ -71,6 +98,12 @@ Codes worth handling explicitly:
 | `request_invalid` | 422 | Show `reasons[]` from AI screening verbatim. |
 | `review_not_published` | 409 | Explain the review is still awaiting a moderator. |
 | `seller_review_exists` | 409 | You already reviewed this seller. |
+| `otp_invalid` | 409 | Clear the input and let them retry. |
+| `otp_expired` | 409 | Offer "send a new code". |
+| `otp_attempts_exceeded` | 429 | The code is dead; force a new request. |
+| `username_taken` | 409 | Mark the field; suggest an alternative. |
+| `unsupported_media_type` | 415 | Explain PNG/JPEG/WebP only. |
+| `file_too_large` | 413 | Explain the 5 MB cap. |
 | `buyout_already_pending` | 409 | Refresh the contract; an offer exists. |
 
 ## 4. Page → endpoint map
