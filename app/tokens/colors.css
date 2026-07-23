@@ -1,0 +1,128 @@
+/* bluntly.ph — color tokens
+   Vendored verbatim from the Claude Design System project
+   (bluntly.ph Design System, 0cc9dd31-e28a-4dde-967f-b5fa02282f0f).
+   Base values are literal transcriptions from the .fig. Semantic aliases map
+   those bases to usage so components never hardcode hex.
+
+   DO NOT hand-edit the base ramps — re-sync from the design system instead.
+   The dark-mode block at the bottom is OURS: the design system is light-only. */
+
+:root {
+  /* ---- base neutrals ---- */
+  --base-black: rgb(0, 0, 0);
+  --base-ink-900: rgb(17, 17, 17);
+  --base-ink-800: rgb(32, 32, 32);      /* dominant text/fill color, 3765 uses */
+  --base-ink-700: rgb(51, 51, 51);
+  --base-ink-600: rgb(68, 68, 68);
+  --base-ink-500: rgb(85, 85, 85);
+  --base-gray-600: rgb(50, 50, 50);
+  --base-gray-500: rgb(102, 102, 102);
+  --base-gray-450: rgb(89, 89, 89);
+  --base-gray-400: rgb(140, 140, 140);
+  --base-gray-350: rgb(153, 153, 153);
+  --base-gray-300: rgb(170, 170, 170);
+  --base-gray-200: rgb(217, 217, 217);   /* placeholder image / avatar fill */
+  --base-gray-150: rgb(234, 234, 234);
+  --base-gray-100: rgb(242, 242, 242);   /* app surface background */
+  --base-white: rgb(255, 255, 255);
+
+  /* ---- brand orange (primary) ---- */
+  --brand-700: rgb(217, 79, 30);
+  --brand-600: rgb(239, 88, 33);         /* primary brand orange, 482 uses */
+  --brand-500-soft: rgba(239, 88, 33, 0.8);
+  --brand-400: rgb(255, 121, 72);        /* bright FAB variant */
+  --brand-coral: rgb(255, 84, 62);       /* decorative card accent */
+
+  /* ---- semantic ---- */
+  --semantic-success-700: rgb(27, 94, 74);
+  --semantic-success-600: rgb(31, 175, 56);   /* verified / earn / success */
+  --semantic-success-500: rgb(52, 202, 67);
+  --semantic-trust-blue: rgb(55, 113, 200);   /* "Discover", trust shield, verified badge */
+  --semantic-info-blue: rgb(26, 107, 193);
+  --semantic-danger: rgb(216, 0, 39);         /* dislike / destructive */
+  --semantic-maroon: rgb(122, 40, 40);
+  --semantic-star: rgb(250, 200, 0);          /* star rating fill */
+
+  /* ---- lines / overlays (opacity-based, matched to source) ---- */
+  --line-hairline-10: rgba(32, 32, 32, 0.1);   /* inset hairline on pill inputs */
+  --line-hairline-30: rgba(32, 32, 32, 0.3);   /* dividers, muted rule lines */
+  --overlay-scrim-25: rgba(0, 0, 0, 0.25);     /* modal / action-menu scrim */
+  --shadow-color-25: rgba(0, 0, 0, 0.25);
+  --shadow-color-10: rgba(0, 0, 0, 0.1);
+
+  /* ---- gradient (Login/Signup hero; these frames postdate the DS import) ---- */
+  --brand-gradient: linear-gradient(
+    160.87deg,
+    rgb(255, 197, 150) 4.73%,
+    rgb(239, 120, 45) 36.50%,
+    rgb(150, 55, 25) 79.91%,
+    rgb(60, 25, 15) 103.78%
+  );
+
+  /* ---- semantic aliases used by components ---- */
+  --surface-app: var(--base-gray-100);
+  --surface-card: var(--base-white);
+  --surface-inverse: var(--base-ink-800);
+  --surface-input: var(--base-gray-100);
+
+  --text-primary: var(--base-ink-800);
+  --text-secondary: rgba(32, 32, 32, 0.7);
+  --text-muted: rgba(32, 32, 32, 0.4);
+  --text-on-brand: var(--base-gray-100);
+  --text-on-inverse: var(--base-gray-100);
+
+  --border-default: var(--base-gray-600);
+  --border-subtle: var(--line-hairline-10);
+
+  --accent-primary: var(--brand-600);
+  --accent-primary-strong: var(--brand-700);
+  --accent-success: var(--semantic-success-600);
+  --accent-trust: var(--semantic-trust-blue);
+  --accent-danger: var(--semantic-danger);
+  --accent-star: var(--semantic-star);
+}
+
+/* ---- dark mode ----
+   Authored by us: the design system ships no dark values. Only the SEMANTIC
+   layer is overridden — the base ramps stay fixed so a re-sync never conflicts.
+   Measured from the dark desktop frames (Page 2) and the admin dashboard shell.
+
+   Light is the default; dark applies from the `lg` breakpoint up, which is how
+   the design is drawn (mobile light / desktop dark). A user preference stamps
+   data-theme on <html> and wins in both directions. */
+
+/* The two selectors below carry identical declarations. Plain CSS has no way to
+   share a declaration block across a media query and an attribute selector, and
+   a preprocessor is not worth adding for one duplication. Keep them in sync. */
+
+@media (min-width: 64rem) {
+  :root:not([data-theme="light"]) {
+    --surface-app: var(--base-ink-800);
+    --surface-card: rgb(45, 45, 45);
+    --surface-inverse: var(--base-gray-100);
+    --surface-input: rgb(58, 58, 58);
+
+    --text-primary: var(--base-gray-100);
+    --text-secondary: rgba(242, 242, 242, 0.7);
+    --text-muted: rgba(242, 242, 242, 0.4);
+    --text-on-inverse: var(--base-ink-800);
+
+    --border-default: var(--base-gray-450);
+    --border-subtle: rgba(242, 242, 242, 0.12);
+  }
+}
+
+:root[data-theme="dark"] {
+  --surface-app: var(--base-ink-800);
+  --surface-card: rgb(45, 45, 45);
+  --surface-inverse: var(--base-gray-100);
+  --surface-input: rgb(58, 58, 58);
+
+  --text-primary: var(--base-gray-100);
+  --text-secondary: rgba(242, 242, 242, 0.7);
+  --text-muted: rgba(242, 242, 242, 0.4);
+  --text-on-inverse: var(--base-ink-800);
+
+  --border-default: var(--base-gray-450);
+  --border-subtle: rgba(242, 242, 242, 0.12);
+}

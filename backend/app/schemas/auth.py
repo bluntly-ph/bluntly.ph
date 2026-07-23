@@ -45,6 +45,14 @@ class TokenResponse(BaseModel):
     user: UserOut
 
 
+class ProfileUpdateIn(BaseModel):
+    """Onboarding / profile edit. Omitted fields are left untouched."""
+
+    display_name: str | None = Field(default=None, max_length=120)
+    username: str | None = Field(default=None, min_length=3, max_length=32,
+                                 pattern=r"^[a-z0-9_]+$")
+
+
 class OtpRequestIn(BaseModel):
     email: EmailStr
     purpose: OtpPurpose = OtpPurpose.signup

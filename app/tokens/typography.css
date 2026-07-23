@@ -1,0 +1,43 @@
+/* bluntly.ph — type tokens
+   Vendored from the Claude Design System project, with one deliberate change:
+   the DS loads Poppins/Bebas via a Google Fonts @import. We load them through
+   next/font/google in app/layout.tsx instead, so Next self-hosts the files and
+   there is no render-blocking third-party request. The families below therefore
+   point at the CSS variables next/font exposes.
+
+   Poppins is the display/UI workhorse. Arial is the file's own secondary face
+   for dense UGC text. Bebas Neue appears only as oversized step numerals. */
+
+:root {
+  --font-display: var(--font-poppins), -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: var(--font-poppins), -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-system: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', sans-serif;
+  --font-accent: var(--font-bebas), -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* weights actually used (Poppins) */
+  --weight-extralight: 200;
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* type scale — literal sizes pulled from the file, smallest-to-largest */
+  --text-2xs: 10px;      /* micro captions, timestamps ("5h") */
+  --text-xs: 12px;       /* dominant UI size: labels, chips, eyebrow copy */
+  --text-sm: 14px;       /* secondary body */
+  --text-md: 16px;       /* buttons, primary body/inputs */
+  --text-lg: 20px;       /* h4 / section titles */
+  --text-xl: 24px;       /* h3 */
+  --text-2xl: 28px;      /* h2 ("Trust is expensive.") */
+  --text-3xl: 32px;      /* h1 ("Finally. Honest reviews.") */
+  --text-display: 108px; /* rare hero numerals */
+
+  --leading-tight: 100%;       /* nearly everything in this file sets 100% */
+  --tracking-eyebrow: 0.100em; /* uppercase eyebrow labels: "DISCOVER" */
+  --tracking-wide: 0.012em;    /* body micro-tracking */
+}

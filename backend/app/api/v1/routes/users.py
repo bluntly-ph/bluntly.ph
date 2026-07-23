@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import AppError, NotFoundError
@@ -14,7 +14,7 @@ from app.db.session import get_db
 from app.models.enums import MemberRole, ModerationAction, ModerationTargetType
 from app.models.moderation import ModerationLog
 from app.models.user import User, UserBadge
-from app.schemas.auth import UserOut
+from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
 from app.services.storage import delete_avatar_object, upload_avatar
@@ -34,6 +34,27 @@ def _user_or_404(db: Session, user_id: uuid.UUID) -> User:
 
 # Registered before the `/{user_id}/...` routes so the literal `me` segment is
 # never considered as a UUID path parameter.
+@router.patch("/me", response_model=UserOut,
+              responses={401: {"model": Problem}, 409: {"model": Problem}},
+              summary="Update the current user's profile")
+def update_me(payload: ProfileUpdateIn, db: Session = Depends(get_db),
+              user: User = Depends(get_current_user)) -> UserOut:
+    if payload.display_name is not None:
+        user.display_name = payload.display_name
+    if payload.username is not None and payload.username != user.username:
+        clash = db.scalar(select(User.id).where(
+            func.lower(User.username) == payload.username.lower(),
+            User.id != user.id))
+        if clash is not None:
+            raise AppError("That username is already taken.",
+                           code="username_taken", status_code=409,
+                           title="Username already registered")
+        user.username = payload.username
+    db.commit()
+    db.refresh(user)
+    return UserOut.model_validate(user)
+
+
 @router.post("/me/avatar", response_model=UserOut, responses=_AVATAR_PROBLEM,
              summary="Upload or replace the current user's avatar")
 def set_avatar(file: UploadFile, db: Session = Depends(get_db),

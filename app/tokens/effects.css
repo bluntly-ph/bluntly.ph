@@ -1,0 +1,39 @@
+/* bluntly.ph — spacing, radius & shadow tokens
+   Vendored verbatim from the Claude Design System project. */
+
+:root {
+  /* ---- spacing scale (as observed: 4/8/12/16/20/24/32px grid) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- corner radii ---- */
+  --radius-xs: 5px;     /* Action Menu container clip */
+  --radius-sm: 12px;    /* cards, photo tiles, inputs w/ padding */
+  --radius-md: 16px;    /* chips / filter pills */
+  --radius-pill: 32px;  /* search bars, primary buttons, bottom-sheet handles */
+  --radius-circle: 50%; /* avatars, FAB, dots */
+
+  /* ---- shadows (literal from source) ---- */
+  --shadow-card: 0px 4px 4px 0px var(--shadow-color-25);
+  --shadow-fab: 0px 5px 4px 0px var(--shadow-color-25);
+  --shadow-sheet: 0px 1px 8px 0px var(--shadow-color-25);
+  --shadow-inverse-glow: 0px -4px 4px 0px rgba(255, 255, 255, 0.25);
+  --shadow-hairline-inset: inset 0 0 0 1px var(--line-hairline-10);
+
+  /* ---- motion ---- */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  /* ---- control sizing (measured from the auth frames) ---- */
+  --control-input-h: 48px;
+  --control-button-h: 56px;
+  --gutter-mobile: 32px;
+}

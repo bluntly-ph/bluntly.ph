@@ -12,6 +12,15 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not ours to lint. Without these, eslint walks the Python virtualenv and
+    // the bundled skill scripts and reports thousands of problems in vendored
+    // minified JS, burying anything real.
+    "backend/**",
+    ".claude/**",
+    ".remember/**",
+    "node_modules/**",
+    // Generated from docs/openapi.json by `npm run gen:api`.
+    "lib/api-types.d.ts",
   ]),
 ]);
 
