@@ -7,7 +7,26 @@ Two services from one repo, wired by `vercel.json`:
 | `frontend` | `.` | Next.js 16 |
 | `backend` | `backend` | FastAPI |
 
-`/api/backend/*` routes to the backend service; everything else to the frontend.
+## Routing
+
+The rewrites send to the backend exactly the paths FastAPI actually mounts, so
+no prefix rewriting is involved and a URL means the same thing in production as
+it does locally:
+
+| Source | Service | Why |
+|---|---|---|
+| `/api/v1(/.*)?` | backend | Every API route. Matches the FastAPI mount verbatim. |
+| `/r/(.*)` | backend | The affiliate referral redirect. **Public links point here** — if it lands on the frontend, every affiliate click 404s and no commission is ever attributed. |
+| `/health` | backend | Uptime checks. |
+| `/(.*)` | frontend | Everything else, including `/api/bff/*`. |
+
+Order matters: the catch-all is last. `/api/bff/*` is the frontend's own
+forwarder and deliberately does **not** match `/api/v1`, so it keeps attaching
+the session token instead of being handed straight to the backend.
+
+An earlier draft routed `/api/backend/*` to the backend, which meant callers had
+to write `/api/backend/api/v1/…` — a doubled prefix that FastAPI would 404 —
+and, worse, left `/r/{review_id}` falling through to the frontend.
 
 ## Environment variables
 
@@ -22,6 +41,13 @@ Set these in the Vercel project — **not** in `vercel.json`, which is committed
 
 `NEXT_PUBLIC_API_URL` still works as a fallback for existing local setups, but
 production should set `API_URL`.
+
+Because `/api/v1` is now routed to the backend on the same origin, `API_URL` can
+simply be the site origin (`https://bluntly.ph`) — server-side calls then travel
+frontend → rewrite → backend. Pointing it straight at the backend service's own
+origin skips that hop and is preferred if you have the URL; both work, and
+nothing else in the app changes either way. Locally it stays
+`http://localhost:8000`.
 
 ### Backend service
 
@@ -71,13 +97,6 @@ absent. Provision managed Redis and set `REDIS_URL`.
 
 ## Known gaps
 
-- **The `/api/backend` rewrite is unverified.** The frontend reaches the API
-  server-side via `API_URL`, so it does not depend on this rewrite — but if you
-  intend to call the backend from a browser or an external client through
-  `/api/backend/...`, confirm whether Vercel forwards the full path. FastAPI
-  routes are mounted at `/api/v1/...`, so a request arriving as
-  `/api/backend/api/v1/auth/me` will 404 unless the prefix is stripped. Set
-  `root_path` on the FastAPI app if it is not.
 - **No CI.** There is no `.github/workflows`; nothing runs the 206 backend tests
   or the frontend build on push.
 - **`EMAIL_FROM=onboarding@resend.dev`** is an accepted owner decision. Resend
