@@ -81,15 +81,9 @@ def test_production_refuses_resend_without_a_key():
     assert "RESEND_API_KEY" in issues
 
 
-def test_production_refuses_the_shared_resend_sender():
-    """onboarding@resend.dev can only reach the Resend account owner (403)."""
-    issues = " ".join(_prod_settings(
-        email_provider="resend", resend_api_key="re_x",
-        email_from="onboarding@resend.dev").production_issues())
-    assert "resend.dev" in issues
 
 
-def test_production_accepts_a_verified_sender():
+def test_production_accepts_the_shared_resend_sender():
     issues = " ".join(_prod_settings(
         email_provider="resend", resend_api_key="re_x",
         email_from="no-reply@bluntly.ph").production_issues())

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import httpx
 
+from app.adapters.email_templates import otp_html, otp_subject, otp_text
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -26,8 +27,6 @@ log = get_logger("adapters.email")
 
 RESEND_URL = "https://api.resend.com/emails"
 _TIMEOUT = httpx.Timeout(10.0)
-
-_SUBJECT = "Your bluntly verification code"
 
 
 class EmailNotConfigured(RuntimeError):
@@ -38,13 +37,8 @@ class EmailSendError(RuntimeError):
     """The provider rejected the request or was unreachable."""
 
 
-def _body(code: str) -> str:
-    ttl_minutes = max(settings.otp_ttl_seconds // 60, 1)
-    return (
-        f"Your bluntly verification code is {code}.\n\n"
-        f"It expires in {ttl_minutes} minutes. "
-        "If you didn't request it, you can ignore this email."
-    )
+def _ttl_minutes() -> int:
+    return max(settings.otp_ttl_seconds // 60, 1)
 
 
 def send_otp_email(to: str, code: str) -> None:
@@ -66,10 +60,16 @@ def send_otp_email(to: str, code: str) -> None:
             RESEND_URL,
             headers={"Authorization": f"Bearer {settings.resend_api_key}"},
             json={
-                "from": settings.email_from,
+                # A display name is what turns "onboarding@resend.dev" into
+                # "bluntly" in the inbox list — worth doing regardless of which
+                # address is actually sending.
+                "from": f"bluntly <{settings.email_from}>",
                 "to": [to],
-                "subject": _SUBJECT,
-                "text": _body(code),
+                "subject": otp_subject(code),
+                # Both parts: text is a real deliverability signal and some
+                # recipients read text only.
+                "html": otp_html(code, _ttl_minutes()),
+                "text": otp_text(code, _ttl_minutes()),
             },
             timeout=_TIMEOUT,
         )

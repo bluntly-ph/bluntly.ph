@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { API_ORIGIN } from "@/lib/api/origin";
 import { getSessionToken } from "@/lib/session";
 
 /**
@@ -13,8 +14,6 @@ import { getSessionToken } from "@/lib/session";
  * It is a dumb pipe on purpose: no response reshaping, so the problem+json
  * contract reaches the client untouched and `lib/api/errors.ts` still applies.
  */
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
  * Headers that must not be copied onto the upstream request.
@@ -36,7 +35,7 @@ const STRIPPED = new Set([
 
 async function forward(request: NextRequest, path: string[]) {
   const token = await getSessionToken();
-  const target = `${API_URL}/${path.join("/")}${request.nextUrl.search}`;
+  const target = `${API_ORIGIN}/${path.join("/")}${request.nextUrl.search}`;
 
   const headers = new Headers();
   request.headers.forEach((value, key) => {

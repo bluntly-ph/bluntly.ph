@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ApiError, type Problem } from "./errors";
+import { API_ORIGIN } from "./origin";
 
 /**
  * The single place the frontend talks to FastAPI.
@@ -9,8 +10,6 @@ import { ApiError, type Problem } from "./errors";
  * is attached here, on the server, so it never reaches client JavaScript. Client
  * components go through the BFF route handler instead of importing this.
  */
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -74,7 +73,7 @@ export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${API_URL}${path}`;
+  const url = path.startsWith("http") ? path : `${API_ORIGIN}${path}`;
 
   let response: Response;
   try {

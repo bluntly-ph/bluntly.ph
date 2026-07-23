@@ -300,10 +300,11 @@ class Settings(BaseSettings):
                           "provider (resend) before serving production traffic.")
         if self.email_provider == "resend" and not self.resend_api_key:
             issues.append("EMAIL_PROVIDER=resend requires RESEND_API_KEY.")
-        if self.email_provider == "resend" and "resend.dev" in self.email_from:
-            issues.append("EMAIL_FROM still uses the shared resend.dev sender, which "
-                          "only delivers to the Resend account owner. Verify a "
-                          "bluntly.ph sending domain.")
+        # NOT a blocking issue, by owner decision: the shared resend.dev sender
+        # is accepted for now. Be aware of what it costs — Resend answers 403 for
+        # any recipient other than the account owner, so sign-up works only for
+        # that address until a domain is verified. Deliverability also suffers:
+        # a shared sender has no SPF/DKIM alignment with bluntly.ph.
         # Serving from the session pooler is a hard fail in production: it caps
         # at ~4 concurrent clients, so the API 500s under any real load.
         if self.use_supabase:
