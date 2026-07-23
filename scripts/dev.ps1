@@ -83,8 +83,13 @@ Write-Host "Starting API on $ApiPort..." -ForegroundColor Cyan
 # The frontend calls the API server-side, but CORS still has to allow the web
 # origin for anything the browser reaches directly.
 $env:CORS_ORIGINS = "http://localhost:$WebPort"
+# --reload matters more than it looks: without it uvicorn holds the modules it
+# imported at boot, so editing a service or template changes nothing until the
+# process is restarted — and the symptom is silent (the old code just keeps
+# running). The web server already hot-reloads; the API should too.
 Start-Process -FilePath $python `
-    -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--port', "$ApiPort", '--log-level', 'info') `
+    -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--port', "$ApiPort",
+                    '--log-level', 'info', '--reload', '--reload-dir', 'app') `
     -WorkingDirectory (Join-Path $root 'backend') `
     -WindowStyle Minimized | Out-Null
 
