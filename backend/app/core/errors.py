@@ -62,6 +62,24 @@ class RateLimitError(AppError):
     title = "Too many requests"
 
 
+class OtpInvalidError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "otp_invalid"
+    title = "Invalid verification code"
+
+
+class OtpExpiredError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "otp_expired"
+    title = "Verification code expired"
+
+
+class OtpAttemptsExceededError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "otp_attempts_exceeded"
+    title = "Too many verification attempts"
+
+
 def _problem(*, status_code: int, title: str, code: str, detail: str,
              instance: str, extra: dict[str, Any] | None = None) -> JSONResponse:
     body: dict[str, Any] = {
