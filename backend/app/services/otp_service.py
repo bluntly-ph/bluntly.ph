@@ -30,6 +30,7 @@ from app.core.security import hash_password, verify_password
 from app.models.enums import MemberRole, MembershipTier, MemberType, OtpPurpose
 from app.models.otp import EmailOtp
 from app.models.user import User
+from app.services.username import allocate_username
 
 
 def _normalize_email(email: str) -> str:
@@ -110,9 +111,14 @@ def verify_otp(db: Session, email: str, code: str) -> User:
     row.consumed_at = now
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
+        user_uuid = uuid.uuid4()
         user = User(
+            id=user_uuid,
             email=email,
             display_name=None,
+            # OTP signup collects no handle, so derive one from the address.
+            # The onboarding wizard lets them change it later.
+            username=allocate_username(db, None, email, user_uuid),
             role=MemberRole.user,
             member_type=MemberType.shopper,
             membership_tier=MembershipTier.standard,

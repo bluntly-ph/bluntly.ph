@@ -58,6 +58,11 @@ class User(Base, Timestamps):
     # Argon2id hash (ADR-011). Nullable so admin/seed accounts can exist w/o a password.
     password_hash: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(120))
+    # Stable public handle (Slice 1 Phase A). display_name stays the free-text
+    # label; username is the unique, URL-safe identity rendered as @handle.
+    username: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    # Public URL of an object in the Supabase Storage `avatars` bucket.
+    avatar_url: Mapped[str | None] = mapped_column(Text)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Membership tier (M1) — Special/Founding/Standard. Distinct from trust stage.
