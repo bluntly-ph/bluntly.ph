@@ -29,11 +29,13 @@ class UserOut(BaseModel):
     display_name: str | None = None
     username: str | None = None
     avatar_url: str | None = None
+    interests: list[str] | None = None
     role: MemberRole
     membership_tier: MembershipTier
     reputation_score: Decimal
     trust_stage: int
     trust_level_name: str | None = None
+    verified_review_count: int = 0
     is_suspended: bool
     created_at: datetime
 
@@ -51,6 +53,7 @@ class ProfileUpdateIn(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=32,
                                  pattern=r"^[a-z0-9_]+$")
+    interests: list[str] | None = Field(default=None, max_length=20)
 
 
 class OtpRequestIn(BaseModel):

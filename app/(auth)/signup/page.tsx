@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function SignupPage() {
-  return <SignupForm />;
+  return <SignupForm purpose="signup" />;
 }

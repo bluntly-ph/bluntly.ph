@@ -6,10 +6,7 @@
 @import "./tokens/typography.css";
 @import "./tokens/effects.css";
 
-/* Bridge the token custom properties into Tailwind v4 utilities.
-   `@theme inline` keeps the var() reference rather than resolving it, so a
-   utility like `bg-surface-app` stays live under dark mode instead of baking in
-   the light value at build time. */
+/* Bridge the token custom properties into Tailwind v4 utilities. */
 @theme inline {
   --color-surface-app: var(--surface-app);
   --color-surface-card: var(--surface-card);
@@ -39,15 +36,6 @@
   --font-display: var(--font-display);
   --font-accent: var(--font-accent);
 
-  --text-2xs: var(--text-2xs);
-  --text-xs: var(--text-xs);
-  --text-sm: var(--text-sm);
-  --text-md: var(--text-md);
-  --text-lg: var(--text-lg);
-  --text-xl: var(--text-xl);
-  --text-2xl: var(--text-2xl);
-  --text-3xl: var(--text-3xl);
-
   --radius-xs: var(--radius-xs);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
@@ -60,23 +48,9 @@
   --ease-standard: var(--ease-standard);
 }
 
-/* The source file sets line-height to a flat 100% almost universally — tight,
-   poster-like text blocks rather than airy paragraph leading. */
+/* The design is light-only. Declaring it stops browsers from auto-darkening
+   form controls and scrollbars for users whose OS is set to dark. */
 html {
-  color-scheme: light;
-}
-
-@media (min-width: 64rem) {
-  html:not([data-theme="light"]) {
-    color-scheme: dark;
-  }
-}
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-}
-
-html[data-theme="light"] {
   color-scheme: light;
 }
 
@@ -87,8 +61,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The design authors no focus states (it is a static file). These are ours —
-   an interface that cannot be operated from a keyboard is not shippable. */
+/* The source file authors no focus states (it is a static design). These are
+   ours — an interface that cannot be operated from a keyboard is not
+   shippable. */
 :focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;

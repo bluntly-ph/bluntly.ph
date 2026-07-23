@@ -71,6 +71,10 @@ class User(Base, Timestamps):
         default=lambda: f"user_{uuid.uuid4().hex[:16]}")
     # Public URL of an object in the Supabase Storage `avatars` bucket.
     avatar_url: Mapped[str | None] = mapped_column(Text)
+    # Onboarding step 2 ("What do you shop for?") — category slugs that seed the
+    # user's feed. Free-form to match products.category, which is also a plain
+    # string rather than an enum.
+    interests: Mapped[list[str] | None] = mapped_column(JSONB)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Membership tier (M1) — Special/Founding/Standard. Distinct from trust stage.

@@ -1,36 +1,46 @@
 /**
- * The `bluntly` wordmark.
+ * The `bluntly` wordmark — the real artwork from the Figma file.
  *
- * Owner decision: the lowercase `bluntly` wordmark everywhere. The desktop
- * frames use a `bluntly.ph` lockup with a checkmark mark; that variant is
- * deliberately not implemented (docs/DEVIATIONS.md #61).
+ * The exported asset is a single near-white PNG (1024x316) with alpha. Rather
+ * than shipping a second dark copy, it is used as a CSS mask so the mark paints
+ * in `currentColor`: white on the auth gradient, ink on the light app surface,
+ * brand orange where the design calls for it. One asset, every surface, and it
+ * can never drift out of sync with itself.
  *
- * Drawn as text rather than the design system's PNG so it stays crisp at any
- * size, recolours with the theme, and is selectable and readable by assistive
- * tech without alt-text duplication.
+ * It is decorative-by-default here because the surrounding link supplies the
+ * accessible name; pass `label` when the mark stands alone.
  */
 
+const ASPECT = 1024 / 316;
+
 export type LogoProps = {
-  /** Rendered size in px. The wordmark is set at this cap height. */
-  size?: number;
-  /** Force a colour; defaults to inheriting the current text colour. */
-  tone?: "brand" | "inherit";
+  /** Rendered height in px. Width follows the artwork's aspect ratio. */
+  height?: number;
+  /** Accessible name. Omit when an ancestor link/button already names it. */
+  label?: string;
   className?: string;
 };
 
-export function Logo({ size = 24, tone = "brand", className = "" }: LogoProps) {
+export function Logo({ height = 24, label, className = "" }: LogoProps) {
   return (
     <span
-      className={[
-        "inline-flex select-none items-baseline",
-        "font-[family-name:var(--font-body)] font-semibold tracking-[-0.02em]",
-        tone === "brand" ? "text-[var(--accent-primary)]" : "",
-        className,
-      ].join(" ")}
-      style={{ fontSize: `${size}px`, lineHeight: 1 }}
-    >
-      bluntly
-    </span>
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      className={`inline-block shrink-0 bg-current ${className}`}
+      style={{
+        height: `${height}px`,
+        width: `${Math.round(height * ASPECT)}px`,
+        WebkitMaskImage: "url(/bluntly-logo.png)",
+        maskImage: "url(/bluntly-logo.png)",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
   );
 }
 

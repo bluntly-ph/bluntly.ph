@@ -1,18 +1,16 @@
 import type { Metadata } from "next";
 
-import { LoginForm } from "./LoginForm";
+import { SignupForm } from "../signup/SignupForm";
 
 export const metadata: Metadata = {
   title: "Log in — bluntly",
 };
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
-  const { next } = await searchParams;
-  // Only same-origin paths survive; the action re-validates before redirecting.
-  const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "/";
-  return <LoginForm next={safeNext} />;
+/**
+ * Log in reuses the same two steps as signup — the design draws one flow, and
+ * the backend issues the same TokenResponse either way. `purpose` only changes
+ * which code the backend mints and the copy at the foot of the sheet.
+ */
+export default function LoginPage() {
+  return <SignupForm purpose="login" />;
 }

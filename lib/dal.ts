@@ -31,11 +31,13 @@ export type SessionUser = {
   display_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  interests: string[] | null;
   role: "user" | "moderator" | "admin";
   membership_tier: string;
   reputation_score: string;
   trust_stage: number;
   trust_level_name: string | null;
+  verified_review_count: number;
   is_suspended: boolean;
   created_at: string;
 };

@@ -3,171 +3,131 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import {
-  register,
-  requestOtp,
-  verifyOtp,
-  type FormState,
-} from "@/app/actions/auth";
+import { AuthSheet } from "@/components/auth/AuthSheet";
 import { Button } from "@/components/ui/Button";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { TextField } from "@/components/ui/TextField";
+import { requestOtp, verifyOtp, type FormState } from "@/app/actions/auth";
 
 const EMPTY: FormState = {};
 
 /**
- * Sign up. The mobile frame is passwordless (code by email); the desktop frame
- * is email + username + password. Both are offered at both breakpoints — the
- * account is the same either way — with the code path as the default because
- * it is the shorter route to a working account.
+ * Email signup — the "Let's get started!" and "Enter the code" frames.
+ *
+ * The copy is the frames' own, with one correction: the design reads "We'll
+ * text you a code" above an *email* field. Delivery is by email, so the word is
+ * corrected rather than shipping a promise the product does not keep
+ * (docs/DEVIATIONS.md #59).
  */
-export function SignupForm() {
-  const [mode, setMode] = useState<"code" | "password">("code");
-
-  return mode === "code" ? (
-    <CodeSignup onSwitch={() => setMode("password")} />
-  ) : (
-    <PasswordSignup onSwitch={() => setMode("code")} />
-  );
-}
-
-function CodeSignup({ onSwitch }: { onSwitch: () => void }) {
+export function SignupForm({ purpose }: { purpose: "signup" | "login" }) {
   const [sendState, sendAction, sending] = useActionState(requestOtp, EMPTY);
-  const [verifyState, verifyAction, verifying] = useActionState(verifyOtp, EMPTY);
 
-  if (!sendState.emailSent) {
-    return (
-      <form action={sendAction} className="flex flex-col gap-6">
-        <Heading
-          title="Let's get started!"
-          subtitle="We'll email you a code to verify it's really you"
-        />
-        <input type="hidden" name="purpose" value="signup" />
-        <TextField
-          label="Email address"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          error={sendState.fieldErrors?.email}
-        />
-        <FormError state={sendState} />
-        <Button type="submit" fullWidth disabled={sending}>
-          {sending ? "Sending…" : "Send code"}
-        </Button>
-        <SwitchLink onClick={onSwitch}>Use a password instead</SwitchLink>
-        <AlreadyHaveAccount />
-      </form>
-    );
-  }
-
-  return (
-    <form action={verifyAction} className="flex flex-col gap-6">
-      <Heading
-        title="Check your email"
-        subtitle={`We sent a 6-digit code to ${sendState.emailSent}. It expires in 10 minutes.`}
-      />
-      <input type="hidden" name="email" value={sendState.emailSent} />
-      <OtpInput error={verifyState.error} />
-      <Button type="submit" fullWidth disabled={verifying}>
-        {verifying ? "Verifying…" : "Verify"}
-      </Button>
-    </form>
-  );
-}
-
-function PasswordSignup({ onSwitch }: { onSwitch: () => void }) {
-  const [state, formAction, pending] = useActionState(register, EMPTY);
-
-  return (
-    <form action={formAction} className="flex flex-col gap-6">
-      <Heading
-        title="Create an account"
-        subtitle="Honest reviews start with a real account."
-      />
-
-      <TextField
-        label="Email Address"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        error={state.fieldErrors?.email}
-      />
-      <TextField
-        label="Username"
-        name="username"
-        autoComplete="username"
-        adornment="@"
-        pattern="[a-zA-Z0-9_]{3,32}"
-        hint="3–32 characters: letters, numbers and underscores. Leave blank and we'll pick one."
-        error={state.fieldErrors?.username}
-      />
-      <TextField
-        label="Password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        required
-        minLength={8}
-        hint="At least 8 characters."
-        error={state.fieldErrors?.password}
-      />
-
-      <FormError state={state} />
-
-      <Button type="submit" fullWidth disabled={pending}>
-        {pending ? "Creating account…" : "Create Account"}
-      </Button>
-
-      <SwitchLink onClick={onSwitch}>Email me a code instead</SwitchLink>
-      <AlreadyHaveAccount />
-    </form>
-  );
-}
-
-function Heading({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <h1 className="text-[length:var(--text-lg)] font-medium text-[var(--text-primary)]">
-        {title}
-      </h1>
-      <p className="text-[length:var(--text-xs)] text-[var(--text-secondary)]">
-        {subtitle}
-      </p>
-    </div>
-  );
-}
-
-function SwitchLink({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-center text-[length:var(--text-xs)] text-[var(--accent-primary)] underline-offset-4 hover:underline"
-    >
-      {children}
-    </button>
-  );
-}
-
-function AlreadyHaveAccount() {
-  return (
-    <p className="text-center text-[length:var(--text-xs)] text-[var(--text-secondary)]">
-      {"Already have an account? "}
-      <Link
-        href="/login"
-        className="text-[var(--accent-primary)] underline-offset-4 hover:underline"
+  return sendState.emailSent ? (
+    <CodeStep email={sendState.emailSent} purpose={purpose} />
+  ) : (
+    <form action={sendAction} className="contents">
+      <AuthSheet
+        footer={
+          <Button type="submit" fullWidth disabled={sending}>
+            {sending ? "Sending…" : "Send code"}
+          </Button>
+        }
       >
-        Log in
-      </Link>
-    </p>
+        <input type="hidden" name="purpose" value={purpose} />
+        <h1 className="text-[20px] font-medium text-[var(--text-primary)]">
+          Let&rsquo;s get started!
+        </h1>
+        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+          We&rsquo;ll email you a code to verify it&rsquo;s really you
+        </p>
+
+        <div className="mt-6">
+          <TextField
+            label="Email address"
+            labelHidden
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="Email address"
+            required
+            error={sendState.fieldErrors?.email}
+          />
+        </div>
+
+        <FormError state={sendState} />
+
+        <p className="mt-6 text-[12px] text-[var(--text-secondary)]">
+          {purpose === "signup" ? "Already have an account? " : "New here? "}
+          <Link
+            href={purpose === "signup" ? "/login" : "/signup"}
+            className="text-[var(--accent-primary)] underline underline-offset-2"
+          >
+            {purpose === "signup" ? "Log in" : "Sign up"}
+          </Link>
+        </p>
+      </AuthSheet>
+    </form>
+  );
+}
+
+function CodeStep({
+  email,
+  purpose,
+}: {
+  email: string;
+  purpose: "signup" | "login";
+}) {
+  const [verifyState, verifyAction, verifying] = useActionState(verifyOtp, EMPTY);
+  const [resendState, resendAction, resending] = useActionState(requestOtp, EMPTY);
+  const [code, setCode] = useState("");
+
+  return (
+    <form action={verifyAction} className="contents">
+      <AuthSheet
+        footer={
+          <Button
+            type="submit"
+            fullWidth
+            // The frame draws Continue disabled until all six boxes are filled.
+            disabled={verifying || code.length < 6}
+          >
+            {verifying ? "Verifying…" : "Continue"}
+          </Button>
+        }
+      >
+        <input type="hidden" name="email" value={email} />
+        {/* Read by the resend action, which shares this form. */}
+        <input type="hidden" name="purpose" value={purpose} />
+        <h1 className="text-[20px] font-medium text-[var(--text-primary)]">
+          Enter the code
+        </h1>
+        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+          Sent via your email address: {email}
+        </p>
+
+        <div className="mt-6">
+          <OtpInput error={verifyState.error} onChangeValue={setCode} />
+        </div>
+
+        {/* A nested <form> is invalid HTML, so resend posts to its own action
+            via formAction on a sibling submit button. */}
+        <button
+          type="submit"
+          formAction={resendAction}
+          formNoValidate
+          disabled={resending}
+          className="mt-3 self-start text-[12px] text-[var(--accent-primary)] underline-offset-2 hover:underline disabled:opacity-60"
+        >
+          {resending ? "Sending…" : "Resend code"}
+        </button>
+        {resendState.ok ? (
+          <p role="status" className="mt-2 text-[12px] text-[var(--text-secondary)]">
+            A new code is on its way.
+          </p>
+        ) : null}
+      </AuthSheet>
+    </form>
   );
 }
 
@@ -176,7 +136,7 @@ function FormError({ state }: { state: FormState }) {
   return (
     <p
       role="alert"
-      className="rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_12%,transparent)] px-4 py-3 text-[length:var(--text-xs)] text-[var(--accent-danger)]"
+      className="mt-4 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[12px] text-[var(--accent-danger)]"
     >
       {state.error}
     </p>

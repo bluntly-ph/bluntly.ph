@@ -1407,6 +1407,8 @@ export interface components {
             display_name?: string | null;
             /** Username */
             username?: string | null;
+            /** Interests */
+            interests?: string[] | null;
         };
         /** QueueAuthor */
         QueueAuthor: {
@@ -2014,6 +2016,8 @@ export interface components {
             username?: string | null;
             /** Avatar Url */
             avatar_url?: string | null;
+            /** Interests */
+            interests?: string[] | null;
             role: components["schemas"]["MemberRole"];
             membership_tier: components["schemas"]["MembershipTier"];
             /** Reputation Score */
@@ -2022,6 +2026,11 @@ export interface components {
             trust_stage: number;
             /** Trust Level Name */
             trust_level_name?: string | null;
+            /**
+             * Verified Review Count
+             * @default 0
+             */
+            verified_review_count: number;
             /** Is Suspended */
             is_suspended: boolean;
             /**

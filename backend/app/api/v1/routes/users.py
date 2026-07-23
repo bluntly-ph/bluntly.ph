@@ -41,6 +41,10 @@ def update_me(payload: ProfileUpdateIn, db: Session = Depends(get_db),
               user: User = Depends(get_current_user)) -> UserOut:
     if payload.display_name is not None:
         user.display_name = payload.display_name
+    if payload.interests is not None:
+        # De-duplicate while preserving pick order — the feed reads it as a
+        # priority list, not a set.
+        user.interests = list(dict.fromkeys(payload.interests))
     if payload.username is not None and payload.username != user.username:
         clash = db.scalar(select(User.id).where(
             func.lower(User.username) == payload.username.lower(),

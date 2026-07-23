@@ -41,6 +41,12 @@ export async function completeOnboarding(
     .trim()
     .toLowerCase();
   const displayName = String(formData.get("display_name") ?? "").trim();
+  // The wizard carries the picks as a comma-joined hidden field, since a
+  // multi-select of custom cards has no native form control.
+  const interests = String(formData.get("interests") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   try {
     await apiFetch("/api/v1/users/me", {
@@ -49,6 +55,7 @@ export async function completeOnboarding(
       json: {
         ...(username ? { username } : {}),
         ...(displayName ? { display_name: displayName } : {}),
+        ...(interests.length ? { interests } : {}),
       },
     });
 

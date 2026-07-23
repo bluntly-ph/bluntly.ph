@@ -297,3 +297,26 @@ Every place the build diverged from the source spec / build prompt, in one place
     IntegrityError. The model supplies a collision-proof
     `user_<16 hex>` fallback; `allocate_username` still provides the
     human-readable handle wherever one can be derived.
+65. **Page 1 (mobile) is the design of record; there is no dark theme.**
+    An earlier revision read Page 2's dark desktop frames as the desktop design
+    and applied a dark palette above the `lg` breakpoint. That was wrong. The
+    product is designed once, at 390px, in a single light treatment: gray-100
+    surface, white cards, orange gradient on auth. The web build preserves that
+    composition and centres it, rather than inventing a second visual language.
+    All dark-mode tokens and the theme cookie are removed.
+66. **The wordmark is the exported artwork, not set type.**
+    The mark has a custom ligature — the `u` and `n` merge into a single wave —
+    which cannot be reproduced with a font. `public/bluntly-logo.png` is the
+    file's own export, applied as a CSS mask so it paints in `currentColor`
+    (white on the gradient, orange on the app surface) from one asset.
+67. **"Continue with Google" is rendered but not functional.**
+    The welcome frame offers Google sign-in. The backend has no OAuth endpoints,
+    and adding them needs a Google Cloud client id/secret that only the project
+    owner can issue. The button is built to the design and states plainly that
+    it is not set up yet, rather than silently failing. Wire it by adding
+    `/auth/oauth/google` and setting `NEXT_PUBLIC_GOOGLE_AUTH=1`.
+68. **Onboarding step 2 needed a new column.**
+    "What do you shop for?" had nowhere to persist. Added `users.interests`
+    (JSONB array of category slugs, migration 0018) rather than a join table:
+    `products.category` is itself a free string, so there is no category entity
+    to key against.

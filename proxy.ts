@@ -21,7 +21,7 @@ const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME ?? "bluntly_session";
 const PROTECTED = ["/dashboard", "/profile", "/settings", "/admin"];
 
 /** Routes that make no sense while already signed in. */
-const AUTH_ONLY = ["/login", "/signup"];
+const AUTH_ONLY = ["/login", "/signup", "/welcome"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

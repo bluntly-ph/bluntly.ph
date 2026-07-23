@@ -4,8 +4,10 @@
    Base values are literal transcriptions from the .fig. Semantic aliases map
    those bases to usage so components never hardcode hex.
 
-   DO NOT hand-edit the base ramps — re-sync from the design system instead.
-   The dark-mode block at the bottom is OURS: the design system is light-only. */
+   There is deliberately NO dark theme. Page 1 — the design of record — is a
+   single light treatment throughout: gray-100 app surface, white cards, and
+   the orange gradient on the auth screens. An earlier revision here applied a
+   dark palette above the `lg` breakpoint; that was wrong and is removed. */
 
 :root {
   /* ---- base neutrals ---- */
@@ -37,7 +39,7 @@
   --semantic-success-700: rgb(27, 94, 74);
   --semantic-success-600: rgb(31, 175, 56);   /* verified / earn / success */
   --semantic-success-500: rgb(52, 202, 67);
-  --semantic-trust-blue: rgb(55, 113, 200);   /* "Discover", trust shield, verified badge */
+  --semantic-trust-blue: rgb(55, 113, 200);   /* trust shield, verified badge */
   --semantic-info-blue: rgb(26, 107, 193);
   --semantic-danger: rgb(216, 0, 39);         /* dislike / destructive */
   --semantic-maroon: rgb(122, 40, 40);
@@ -50,7 +52,7 @@
   --shadow-color-25: rgba(0, 0, 0, 0.25);
   --shadow-color-10: rgba(0, 0, 0, 0.1);
 
-  /* ---- gradient (Login/Signup hero; these frames postdate the DS import) ---- */
+  /* ---- auth gradient, measured from the Login & Signup frames ---- */
   --brand-gradient: linear-gradient(
     160.87deg,
     rgb(255, 197, 150) 4.73%,
@@ -80,49 +82,8 @@
   --accent-trust: var(--semantic-trust-blue);
   --accent-danger: var(--semantic-danger);
   --accent-star: var(--semantic-star);
-}
 
-/* ---- dark mode ----
-   Authored by us: the design system ships no dark values. Only the SEMANTIC
-   layer is overridden — the base ramps stay fixed so a re-sync never conflicts.
-   Measured from the dark desktop frames (Page 2) and the admin dashboard shell.
-
-   Light is the default; dark applies from the `lg` breakpoint up, which is how
-   the design is drawn (mobile light / desktop dark). A user preference stamps
-   data-theme on <html> and wins in both directions. */
-
-/* The two selectors below carry identical declarations. Plain CSS has no way to
-   share a declaration block across a media query and an attribute selector, and
-   a preprocessor is not worth adding for one duplication. Keep them in sync. */
-
-@media (min-width: 64rem) {
-  :root:not([data-theme="light"]) {
-    --surface-app: var(--base-ink-800);
-    --surface-card: rgb(45, 45, 45);
-    --surface-inverse: var(--base-gray-100);
-    --surface-input: rgb(58, 58, 58);
-
-    --text-primary: var(--base-gray-100);
-    --text-secondary: rgba(242, 242, 242, 0.7);
-    --text-muted: rgba(242, 242, 242, 0.4);
-    --text-on-inverse: var(--base-ink-800);
-
-    --border-default: var(--base-gray-450);
-    --border-subtle: rgba(242, 242, 242, 0.12);
-  }
-}
-
-:root[data-theme="dark"] {
-  --surface-app: var(--base-ink-800);
-  --surface-card: rgb(45, 45, 45);
-  --surface-inverse: var(--base-gray-100);
-  --surface-input: rgb(58, 58, 58);
-
-  --text-primary: var(--base-gray-100);
-  --text-secondary: rgba(242, 242, 242, 0.7);
-  --text-muted: rgba(242, 242, 242, 0.4);
-  --text-on-inverse: var(--base-ink-800);
-
-  --border-default: var(--base-gray-450);
-  --border-subtle: rgba(242, 242, 242, 0.12);
+  /* ---- disabled control, measured from the Send code / Continue frames ---- */
+  --disabled-surface: rgba(32, 32, 32, 0.14);
+  --disabled-text: rgba(32, 32, 32, 0.52);
 }

@@ -4656,6 +4656,21 @@
               }
             ],
             "title": "Username"
+          },
+          "interests": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interests"
           }
         },
         "type": "object",
@@ -6421,6 +6436,20 @@
             ],
             "title": "Avatar Url"
           },
+          "interests": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interests"
+          },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
           },
@@ -6446,6 +6475,11 @@
               }
             ],
             "title": "Trust Level Name"
+          },
+          "verified_review_count": {
+            "type": "integer",
+            "title": "Verified Review Count",
+            "default": 0
           },
           "is_suspended": {
             "type": "boolean",

@@ -4,14 +4,14 @@ import { useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, KeyboardEvent } from "react";
 
 /**
- * Six-digit code entry.
+ * Six-digit code entry — the "Enter the code" frame: six 48px white boxes with
+ * a 12px radius and a 30%-ink hairline.
  *
- * Renders six boxes for the look the design asks for, but keeps a single hidden
- * input as the form value so the whole thing submits as one `code` field and
- * password managers / SMS autofill see one target.
+ * Six visible boxes, one hidden field: the form submits a single `code` value
+ * and password managers / SMS autofill see one target.
  *
- * `inputMode="numeric"` and `autoComplete="one-time-code"` matter here: they are
- * what make a phone show a number pad and offer the code from the notification.
+ * `inputMode="numeric"` and `autoComplete="one-time-code"` are what make a
+ * phone show the number pad and surface the code from the notification.
  */
 
 const LENGTH = 6;
@@ -20,14 +20,14 @@ export type OtpInputProps = {
   name?: string;
   error?: string;
   autoFocus?: boolean;
-  onComplete?: (code: string) => void;
+  onChangeValue?: (code: string) => void;
 };
 
 export function OtpInput({
   name = "code",
   error,
   autoFocus = true,
-  onComplete,
+  onChangeValue,
 }: OtpInputProps) {
   const [digits, setDigits] = useState<string[]>(Array(LENGTH).fill(""));
   const refs = useRef<(HTMLInputElement | null)[]>([]);
@@ -35,21 +35,18 @@ export function OtpInput({
 
   function commit(next: string[]) {
     setDigits(next);
-    const joined = next.join("");
-    if (joined.length === LENGTH && !joined.includes("")) onComplete?.(joined);
+    onChangeValue?.(next.join(""));
   }
 
   function handleChange(index: number, event: ChangeEvent<HTMLInputElement>) {
     const typed = event.target.value.replace(/\D/g, "");
     if (!typed) return;
     const next = [...digits];
-    // Typing over a filled box replaces it; pasting many digits fills forward.
     for (let i = 0; i < typed.length && index + i < LENGTH; i += 1) {
       next[index + i] = typed[i];
     }
     commit(next);
-    const focusAt = Math.min(index + typed.length, LENGTH - 1);
-    refs.current[focusAt]?.focus();
+    refs.current[Math.min(index + typed.length, LENGTH - 1)]?.focus();
   }
 
   function handleKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
@@ -83,16 +80,16 @@ export function OtpInput({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <input type="hidden" name={name} value={value} />
       <div
-        className="flex justify-between gap-2"
+        className="flex gap-2"
         role="group"
         aria-label="Six digit verification code"
       >
         {digits.map((digit, index) => (
           <input
-            // Fixed-length positional boxes; index is the stable identity here.
+            // Fixed-length positional boxes; index is the stable identity.
             key={index}
             ref={(el) => {
               refs.current[index] = el;
@@ -108,10 +105,9 @@ export function OtpInput({
             aria-label={`Digit ${index + 1}`}
             aria-invalid={error ? true : undefined}
             className={[
-              "h-14 w-full min-w-0 rounded-[var(--radius-sm)] text-center",
-              "bg-[var(--surface-card)] text-[length:var(--text-xl)]",
-              "text-[var(--text-primary)] outline-none",
-              "transition-shadow duration-[var(--duration-fast)]",
+              "h-12 w-full min-w-0 rounded-[var(--radius-sm)] text-center",
+              "bg-white text-[18px] font-medium text-[var(--text-primary)]",
+              "outline-none transition-shadow duration-[var(--duration-fast)]",
               error
                 ? "shadow-[inset_0_0_0_1px_var(--accent-danger)]"
                 : "shadow-[inset_0_0_0_1px_var(--line-hairline-30)] focus:shadow-[inset_0_0_0_2px_var(--accent-primary)]",
@@ -120,7 +116,7 @@ export function OtpInput({
         ))}
       </div>
       {error ? (
-        <p role="alert" className="text-[length:var(--text-2xs)] text-[var(--accent-danger)]">
+        <p role="alert" className="text-[12px] text-[var(--accent-danger)]">
           {error}
         </p>
       ) : null}
