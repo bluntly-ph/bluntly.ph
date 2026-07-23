@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { GoogleIcon } from "@/components/ui/GoogleIcon";
 
 /**
  * "Continue with Google" — drawn in the welcome frame.
@@ -33,15 +33,7 @@ export function GoogleButton() {
           }
           setNotice(true);
         }}
-        icon={
-          <Image
-            src="/google-icon.svg"
-            alt=""
-            width={20}
-            height={20}
-            aria-hidden="true"
-          />
-        }
+        icon={<GoogleIcon />}
       >
         Continue with Google
       </Button>
