@@ -1,22 +1,10 @@
-# Bluntly.ph backend — runtime dependencies (M0 Foundations)
-fastapi>=0.115,<0.116
-uvicorn[standard]>=0.32,<0.35
-sqlalchemy>=2.0,<2.1
-alembic>=1.13,<1.15
-psycopg[binary]>=3.2,<3.3
-pydantic>=2.9,<3.0
-pydantic-settings>=2.5,<3.0
-pyjwt[crypto]>=2.9,<2.11
-cryptography>=43.0
-httpx>=0.27,<0.29
-redis>=5.0,<6.0
-celery>=5.4,<5.6
-python-multipart>=0.0.12
-supabase>=2.9,<3.0
-argon2-cffi>=23.1
-anthropic>=0.40
-email-validator>=2.2
-# Contract term arithmetic (M3 slice 10): relativedelta clamps month-end dates
-# correctly (Jan 31 + 1 month -> Feb 28/29). Present transitively via celery, but
-# contracts depend on it directly — declare it so a celery change can't drop it.
-python-dateutil>=2.9
+# Runtime dependencies now live in pyproject.toml, under [project].dependencies.
+#
+# One manifest, so pip, Docker and Vercel install exactly the same set. They used
+# to be listed here while pyproject carried a `[project]` table with no
+# `dependencies` key — fine for pip, and silently fatal on Vercel, which reads
+# pyproject as the manifest, installed nothing, and shipped a function that died
+# on its first import.
+#
+# This file stays so `pip install -r requirements.txt` keeps working.
+.

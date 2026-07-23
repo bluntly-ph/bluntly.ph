@@ -1,4 +1,7 @@
 # Dev/test-only dependencies (not installed in the runtime image).
+# Runtime deps come from pyproject.toml; the tools below mirror its
+# [project.optional-dependencies].dev group, so `pip install -e ".[dev]"` and
+# this file give the same result.
 -r requirements.txt
 pytest>=8.3
 ruff>=0.7

@@ -10,8 +10,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+# pyproject.toml is the dependency manifest. `app/` is copied first because the
+# setuptools backend needs the package present to build the project metadata.
+COPY pyproject.toml README.md ./
+COPY app ./app
+RUN pip install .
 
 COPY . .
 

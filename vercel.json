@@ -6,7 +6,8 @@
             "framework": "nextjs"
         },
         "backend": {
-            "root": "backend"
+            "root": "backend",
+            "framework": "fastapi"
         }
     },
     "rewrites": [
