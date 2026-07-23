@@ -16,7 +16,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.adapters.email import (
@@ -30,6 +30,7 @@ from app.core.errors import (
     OtpAttemptsExceededError,
     OtpExpiredError,
     OtpInvalidError,
+    RateLimitError,
 )
 from app.core.logging import get_logger
 from app.core.security import hash_password, verify_password
@@ -70,6 +71,29 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
         purpose = OtpPurpose.login
 
     now = datetime.now(UTC)
+
+    # Per-address send cap, in Postgres. Redis only throttles by IP and fails
+    # open, so this is the authoritative limit on how much mail one address can
+    # make us send. Counted before anything is minted or sent.
+    window_start = now - timedelta(seconds=settings.otp_send_window_seconds)
+    recent = db.scalar(
+        select(func.count(EmailOtp.id)).where(
+            EmailOtp.email == email, EmailOtp.created_at >= window_start)
+    ) or 0
+    if recent >= settings.otp_max_sends_per_window:
+        oldest = db.scalar(
+            select(func.min(EmailOtp.created_at)).where(
+                EmailOtp.email == email, EmailOtp.created_at >= window_start))
+        retry_after = settings.otp_send_window_seconds
+        if oldest is not None:
+            elapsed = (now - _as_utc(oldest)).total_seconds()
+            retry_after = max(int(settings.otp_send_window_seconds - elapsed), 1)
+        log.info("OTP send throttled", extra={
+            "extra_fields": {"to": email, "sends_in_window": recent}})
+        raise RateLimitError(
+            "Too many codes requested for this address. Try again shortly.",
+            extra={"retry_after_seconds": retry_after})
+
     # Requesting a new code invalidates any outstanding one.
     for row in db.scalars(select(EmailOtp).where(
             EmailOtp.email == email, EmailOtp.consumed_at.is_(None))):

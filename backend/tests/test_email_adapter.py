@@ -55,3 +55,42 @@ def test_provider_failure_does_not_leak_the_code(monkeypatch):
     with pytest.raises(email_adapter.EmailSendError) as exc:
         email_adapter.send_otp_email("someone@example.com", "123456")
     assert "123456" not in str(exc.value)
+
+
+def _prod_settings(**overrides):
+    from app.core.config import Settings
+
+    base = dict(
+        app_env="production", jwt_secret="x" * 40, pii_hash_salt="y" * 40,
+        use_supabase=True, supabase_connection_string="postgresql://x/y",
+        cors_origins="https://bluntly.ph",
+    )
+    base.update(overrides)
+    return Settings(**base)
+
+
+def test_production_refuses_the_console_provider():
+    """console only logs codes — in production every OTP would silently vanish."""
+    issues = " ".join(_prod_settings(email_provider="console").production_issues())
+    assert "EMAIL_PROVIDER=console" in issues
+
+
+def test_production_refuses_resend_without_a_key():
+    issues = " ".join(
+        _prod_settings(email_provider="resend", resend_api_key="").production_issues())
+    assert "RESEND_API_KEY" in issues
+
+
+def test_production_refuses_the_shared_resend_sender():
+    """onboarding@resend.dev can only reach the Resend account owner (403)."""
+    issues = " ".join(_prod_settings(
+        email_provider="resend", resend_api_key="re_x",
+        email_from="onboarding@resend.dev").production_issues())
+    assert "resend.dev" in issues
+
+
+def test_production_accepts_a_verified_sender():
+    issues = " ".join(_prod_settings(
+        email_provider="resend", resend_api_key="re_x",
+        email_from="no-reply@bluntly.ph").production_issues())
+    assert "EMAIL_PROVIDER" not in issues and "RESEND_API_KEY" not in issues

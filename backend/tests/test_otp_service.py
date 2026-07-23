@@ -174,3 +174,47 @@ def test_delivery_failure_rolls_back_and_raises_a_problem(monkeypatch):
         assert _live_row(db, email) is None      # rolled back, no orphan
     finally:
         db.close()
+
+
+@requires_db
+def test_send_throttle_holds_without_redis(monkeypatch):
+    """Redis fails open, so a per-address send cap must live in Postgres.
+
+    Without this, /auth/otp/request is an unmetered outbound-email pump during
+    any Redis outage: real cost, and a wrecked sending-domain reputation.
+    """
+    from app.core.errors import RateLimitError
+
+    sends: list[str] = []
+    monkeypatch.setattr(otp_service, "send_otp_email",
+                        lambda to, code: sends.append(to))
+    email = _fresh_email()
+    db = SessionLocal()
+    try:
+        for _ in range(settings.otp_max_sends_per_window):
+            otp_service.issue_otp(db, email, OtpPurpose.signup)
+        assert len(sends) == settings.otp_max_sends_per_window
+
+        with pytest.raises(RateLimitError) as exc:
+            otp_service.issue_otp(db, email, OtpPurpose.signup)
+        assert exc.value.code == "rate_limited"
+        assert exc.value.extra.get("retry_after_seconds", 0) > 0
+        # The blocked attempt must not have sent anything.
+        assert len(sends) == settings.otp_max_sends_per_window
+    finally:
+        db.close()
+
+
+@requires_db
+def test_send_throttle_is_per_address(monkeypatch):
+    """One address hitting the cap must not lock out everyone else."""
+    monkeypatch.setattr(otp_service, "send_otp_email", lambda to, code: None)
+    busy, quiet = _fresh_email(), _fresh_email()
+    db = SessionLocal()
+    try:
+        for _ in range(settings.otp_max_sends_per_window):
+            otp_service.issue_otp(db, busy, OtpPurpose.signup)
+        otp_service.issue_otp(db, quiet, OtpPurpose.signup)   # must not raise
+        assert _live_row(db, quiet) is not None
+    finally:
+        db.close()

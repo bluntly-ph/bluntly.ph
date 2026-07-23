@@ -163,6 +163,11 @@ class Settings(BaseSettings):
     email_from: str = "onboarding@resend.dev"
     otp_ttl_seconds: int = 600
     otp_max_attempts: int = 5
+    # Per-address send cap, enforced in Postgres. The Redis limiter fails open
+    # (core/rate_limit.py), so without this a Redis outage turns
+    # /auth/otp/request into an unmetered outbound-email pump.
+    otp_send_window_seconds: int = 900
+    otp_max_sends_per_window: int = 5
 
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"

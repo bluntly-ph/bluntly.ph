@@ -320,3 +320,21 @@ Every place the build diverged from the source spec / build prompt, in one place
     (JSONB array of category slugs, migration 0018) rather than a join table:
     `products.category` is itself a free string, so there is no category entity
     to key against.
+69. **OTP send is capped per address in Postgres, not just Redis.**
+    Redis was unreachable in the dev environment, and `enforce_rate_limit`
+    fails open by design — so `/auth/otp/request` was an unmetered outbound-mail
+    pump. That is cheap to ignore while the console provider swallows
+    everything, and expensive the moment real delivery is switched on: Resend
+    quota plus the sending domain's reputation. `email_otps` rows are now
+    counted per address over `OTP_SEND_WINDOW_SECONDS` (900) with a cap of
+    `OTP_MAX_SENDS_PER_WINDOW` (5), enforced before a code is minted or sent,
+    returning `rate_limited` with `retry_after_seconds`. Redis keeps its
+    per-IP role; Postgres is the authoritative per-address limit.
+70. **Resend's two rejections are different failures.**
+    An earlier note attributed a 502 on signup to sender verification. It was
+    not: Resend returns **422** for `example.com` (a blocked test domain) and
+    **403** for any real address other than the account owner's while the
+    shared `onboarding@resend.dev` sender is in use. Verified live —
+    `bluntly.ph@gmail.com` and `delivered@resend.dev` both deliver;
+    `someone@mailinator.com` returns 403. Only the 403 is fixed by verifying a
+    domain.

@@ -16,7 +16,14 @@ import { getSessionToken } from "@/lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-/** Hop-by-hop and length headers must not be copied onto a new request. */
+/**
+ * Headers that must not be copied onto the upstream request.
+ *
+ * Hop-by-hop and length headers are per-connection. `cookie` is dropped
+ * deliberately: the backend authenticates from the Bearer token this handler
+ * attaches and has no use for the browser's cookies, so forwarding them would
+ * hand the session credential to a second system for no reason.
+ */
 const STRIPPED = new Set([
   "host",
   "connection",
@@ -24,6 +31,7 @@ const STRIPPED = new Set([
   "transfer-encoding",
   "upgrade",
   "content-length",
+  "cookie",
 ]);
 
 async function forward(request: NextRequest, path: string[]) {
