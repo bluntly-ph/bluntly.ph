@@ -273,6 +273,17 @@ class Settings(BaseSettings):
                           "or a managed DATABASE_URL in production.")
         if "*" in self.cors_origins:
             issues.append("CORS_ORIGINS must not contain '*' in production.")
+        if "localhost" in self.cors_origins or "127.0.0.1" in self.cors_origins:
+            issues.append("CORS_ORIGINS still points at localhost; a production "
+                          "browser origin would be refused.")
+        # Redis is the ONLY throttle on login/register brute force — the OTP caps
+        # live in Postgres, but nothing else does. enforce_rate_limit fails open
+        # (core/rate_limit.py), so an unreachable Redis removes that protection
+        # silently rather than loudly.
+        if "localhost" in self.redis_url or "127.0.0.1" in self.redis_url:
+            issues.append("REDIS_URL still points at localhost; rate limiting "
+                          "fails open, so auth brute-force protection would be "
+                          "absent in production.")
         if self.pii_hash_salt in ("", "dev-pii-salt"):
             issues.append("PII_HASH_SALT must be a strong random value in production.")
         if self.payout_provider == "paypal_live" and not (

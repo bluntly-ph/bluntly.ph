@@ -94,3 +94,31 @@ def test_production_accepts_a_verified_sender():
         email_provider="resend", resend_api_key="re_x",
         email_from="no-reply@bluntly.ph").production_issues())
     assert "EMAIL_PROVIDER" not in issues and "RESEND_API_KEY" not in issues
+
+
+def test_production_refuses_localhost_cors():
+    """A production browser origin would be refused by a localhost allowlist."""
+    issues = " ".join(_prod_settings(
+        email_provider="resend", resend_api_key="re_x",
+        email_from="no-reply@bluntly.ph",
+        cors_origins="http://localhost:3000").production_issues())
+    assert "CORS_ORIGINS" in issues
+
+
+def test_production_refuses_localhost_redis():
+    """No Redis means enforce_rate_limit fails open and brute-force protection
+    on login/register silently disappears (core/rate_limit.py)."""
+    issues = " ".join(_prod_settings(
+        email_provider="resend", resend_api_key="re_x",
+        email_from="no-reply@bluntly.ph",
+        redis_url="redis://localhost:6379/0").production_issues())
+    assert "REDIS_URL" in issues
+
+
+def test_production_clean_config_has_no_issues():
+    issues = _prod_settings(
+        email_provider="resend", resend_api_key="re_x",
+        email_from="no-reply@bluntly.ph",
+        cors_origins="https://bluntly.ph",
+        redis_url="rediss://cache.internal:6379/0").production_issues()
+    assert issues == [], issues
