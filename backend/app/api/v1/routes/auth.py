@@ -12,9 +12,16 @@ from app.core.rate_limit import auth_rate_limiter
 from app.core.security import create_access_token, get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import (
+    OtpRequestIn,
+    OtpVerifyIn,
+    RegisterRequest,
+    TokenResponse,
+    UserOut,
+)
 from app.schemas.common import Problem
 from app.services.auth_service import authenticate_user, register_user
+from app.services.otp_service import issue_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,6 +54,27 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         raise AuthError("Invalid email or password.", code="invalid_credentials")
     if user.is_suspended:
         raise AuthError("Account is suspended.", code="account_suspended", status_code=403)
+    return _token_response(user)
+
+
+@router.post("/otp/request", status_code=202, responses=_PROBLEM,
+             summary="Request a one-time login/signup code by email")
+def otp_request(payload: OtpRequestIn, db: Session = Depends(get_db),
+                _: None = Depends(auth_rate_limiter("otp_request"))) -> dict[str, str]:
+    # Always 202, whether or not the address has an account — anything else turns
+    # this endpoint into a user-enumeration oracle.
+    issue_otp(db, payload.email, payload.purpose)
+    return {"status": "sent"}
+
+
+@router.post("/otp/verify", response_model=TokenResponse, responses=_PROBLEM,
+             summary="Exchange a one-time code for an access token")
+def otp_verify(payload: OtpVerifyIn, db: Session = Depends(get_db),
+               _: None = Depends(auth_rate_limiter("otp_verify"))) -> TokenResponse:
+    user = verify_otp(db, payload.email, payload.code)
+    if user.is_suspended:
+        raise AuthError("Account is suspended.", code="account_suspended",
+                        status_code=403)
     return _token_response(user)
 
 

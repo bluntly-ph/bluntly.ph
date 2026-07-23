@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import Language, MemberRole, MembershipTier
+from app.models.enums import Language, MemberRole, MembershipTier, OtpPurpose
 
 
 class RegisterRequest(BaseModel):
@@ -39,3 +39,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int  # seconds
     user: UserOut
+
+
+class OtpRequestIn(BaseModel):
+    email: EmailStr
+    purpose: OtpPurpose = OtpPurpose.signup
+
+
+class OtpVerifyIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
