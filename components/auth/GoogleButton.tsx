@@ -26,6 +26,9 @@ export function GoogleButton() {
       <Button
         variant="onBrand"
         fullWidth
+        // Solid gray-100 reads as a raised control on the gradient; on the
+        // desktop card it needs a hairline instead, or it disappears.
+        className="lg:bg-[var(--surface-card)] lg:shadow-[inset_0_0_0_1px_var(--line-hairline-30)] lg:hover:bg-[var(--base-gray-100)]"
         onClick={() => {
           if (enabled) {
             window.location.href = "/api/bff/api/v1/auth/oauth/google";
@@ -41,7 +44,7 @@ export function GoogleButton() {
       {notice ? (
         <p
           role="status"
-          className="text-center text-[12px] font-light text-[rgba(242,242,242,0.85)]"
+          className="text-center text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]"
         >
           Google sign-in isn&rsquo;t set up yet — sign up with your email below.
         </p>

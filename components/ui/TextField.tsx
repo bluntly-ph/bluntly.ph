@@ -69,7 +69,10 @@ export function TextField({
           aria-describedby={describedBy}
           className={[
             "h-[var(--control-input-h)] w-full rounded-[var(--radius-sm)]",
-            "bg-white text-[14px] text-[var(--text-primary)]",
+            // White reads as a field against the mobile sheet's gray-100; on the
+            // desktop card that inverts, so the field takes the gray instead.
+            "bg-white lg:bg-[var(--surface-input)]",
+            "text-[14px] text-[var(--text-primary)]",
             "placeholder:text-[var(--text-muted)]",
             "px-4 outline-none transition-shadow",
             "duration-[var(--duration-fast)] ease-[var(--ease-standard)]",

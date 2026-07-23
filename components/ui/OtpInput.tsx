@@ -106,7 +106,9 @@ export function OtpInput({
             aria-invalid={error ? true : undefined}
             className={[
               "h-12 w-full min-w-0 rounded-[var(--radius-sm)] text-center",
-              "bg-white text-[18px] font-medium text-[var(--text-primary)]",
+              // See TextField: white on the mobile sheet, gray on the desktop card.
+              "bg-white lg:bg-[var(--surface-input)]",
+              "text-[18px] font-medium text-[var(--text-primary)]",
               "outline-none transition-shadow duration-[var(--duration-fast)]",
               error
                 ? "shadow-[inset_0_0_0_1px_var(--accent-danger)]"

@@ -19,7 +19,7 @@ export default async function Home() {
   if (!user) redirect("/welcome");
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col gap-6 bg-[var(--surface-app)] px-8 py-8">
+    <main className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col gap-6 bg-[var(--surface-app)] px-8 py-8 lg:max-w-[64rem] lg:gap-10 lg:px-12 lg:py-12">
       <header className="flex items-center justify-between">
         <span className="text-[var(--accent-primary)]">
           <Logo height={22} label="bluntly" />
@@ -32,7 +32,7 @@ export default async function Home() {
       </header>
 
       <section>
-        <h1 className="text-[32px] font-bold leading-[1.15] text-[var(--text-primary)]">
+        <h1 className="text-[32px] font-bold leading-[1.15] text-[var(--text-primary)] lg:text-[56px]">
           Finally.
           <br />
           Honest reviews<span className="text-[var(--accent-primary)]">.</span>
@@ -42,7 +42,7 @@ export default async function Home() {
         </p>
       </section>
 
-      <section className="rounded-[var(--radius-sm)] bg-white p-5 shadow-[var(--shadow-card)]">
+      <section className="rounded-[var(--radius-sm)] bg-white p-5 shadow-[var(--shadow-card)] lg:max-w-[28rem] lg:p-7">
         <div className="flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
             {`@${user.username ?? "—"}`}

@@ -49,7 +49,16 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
   return (
     <form
       action={formAction}
-      className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-[var(--surface-app)] px-8 pb-10 pt-12"
+      className={[
+        // Mobile: the frame — a single full-height column.
+        "mx-auto flex min-h-dvh w-full max-w-[430px] flex-col",
+        "bg-[var(--surface-app)] px-8 pb-10 pt-12",
+        // Desktop: a centred card wide enough for the interests grid to sit in
+        // four columns — at phone width it is two columns and eight tiles, which
+        // on a wide screen would be a needless scroll.
+        "lg:my-16 lg:min-h-0 lg:max-w-[46rem] lg:rounded-[20px]",
+        "lg:bg-[var(--surface-card)] lg:p-12 lg:shadow-[var(--shadow-card)]",
+      ].join(" ")}
     >
       {/* Collected across steps, submitted once at the end. */}
       <input type="hidden" name="username" value={username} />
@@ -104,7 +113,9 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
         </p>
       ) : null}
 
-      <div className="mt-8 shrink-0">
+      {/* A single action stretched across the full card width reads as a
+          banner rather than a button, so it keeps the column width on desktop. */}
+      <div className="mt-8 shrink-0 lg:mx-auto lg:w-full lg:max-w-[24rem]">
         {step < 4 ? (
           <Button
             type="button"
@@ -156,7 +167,7 @@ function StepIdentity({
   error?: string;
 }) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-[24rem]">
       <h1 className="mt-6 text-[24px] font-semibold text-[var(--text-primary)]">
         Who do we have here?
       </h1>
@@ -237,7 +248,7 @@ function StepInterests({
         {`Pick ${REQUIRED_INTERESTS} interest to cater your feed`}
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {INTERESTS.map((interest) => {
           const isOn = selected.includes(interest.slug);
           return (
@@ -248,11 +259,17 @@ function StepInterests({
               onClick={() => onToggle(interest.slug)}
               className={[
                 "flex min-h-[104px] flex-col items-start gap-4 rounded-[var(--radius-sm)]",
+                // White on the mobile gray surface; on the white desktop card
+                // the fill flips so the tiles still read as cards.
                 "bg-white p-4 text-left shadow-[var(--shadow-card)]",
-                "transition-shadow duration-[var(--duration-fast)]",
+                "lg:bg-[var(--surface-app)] lg:shadow-none",
+                // The ring is an outline, not a shadow: the base shadow is
+                // dropped at lg, and a shadow-based ring would go with it.
+                "outline-offset-0 transition-[outline-color,background-color]",
+                "duration-[var(--duration-fast)]",
                 isOn
-                  ? "shadow-[0_0_0_2px_var(--accent-primary)]"
-                  : "hover:shadow-[0_0_0_1px_var(--line-hairline-30)]",
+                  ? "outline outline-2 outline-[var(--accent-primary)]"
+                  : "outline outline-1 outline-transparent hover:outline-[var(--line-hairline-30)]",
               ].join(" ")}
             >
               <span
@@ -293,7 +310,7 @@ function StepInterests({
 
 function StepIntro() {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-[24rem]">
       <h1 className="mt-6 text-[24px] font-semibold text-[var(--text-primary)]">
         Introducing{" "}
         <span className="text-[var(--accent-primary)]">bluntly.ph</span>
@@ -331,7 +348,7 @@ function StepDone({
   const progress = Math.min(user.verifiedReviewCount / target, 1) * 100;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-[24rem]">
       <h1 className="mt-6 text-[24px] font-semibold text-[var(--text-primary)]">
         {`You're all set, @${username}!`}
       </h1>
