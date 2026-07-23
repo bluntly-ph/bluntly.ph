@@ -15,6 +15,10 @@ from app.main import app
 settings.auth_rate_limit_max = 1_000_000
 settings.vote_rate_limit_max = 1_000_000
 
+# The suite must never reach Resend: no network, no spend, no codes in transit.
+settings.email_provider = "console"
+settings.resend_api_key = ""
+
 
 @pytest.fixture(scope="session")
 def client() -> TestClient:

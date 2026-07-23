@@ -157,6 +157,13 @@ class Settings(BaseSettings):
     paypal_secret: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
+    # --- Email + OTP (Slice 1 Phase A) ---
+    email_provider: str = "console"      # console | resend
+    resend_api_key: str = ""
+    email_from: str = "onboarding@resend.dev"
+    otp_ttl_seconds: int = 600
+    otp_max_attempts: int = 5
+
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"
 
@@ -270,6 +277,17 @@ class Settings(BaseSettings):
         if self.payout_provider == "paypal_live" and "sandbox" in self.paypal_base_url:
             issues.append("PAYOUT_PROVIDER=paypal_live but PAYPAL_BASE_URL still "
                           "points at the sandbox.")
+        # The console provider only logs codes — in production that means every
+        # OTP silently fails to reach the user, and the codes land in the logs.
+        if self.email_provider == "console":
+            issues.append("EMAIL_PROVIDER=console only logs OTP codes; set a real "
+                          "provider (resend) before serving production traffic.")
+        if self.email_provider == "resend" and not self.resend_api_key:
+            issues.append("EMAIL_PROVIDER=resend requires RESEND_API_KEY.")
+        if self.email_provider == "resend" and "resend.dev" in self.email_from:
+            issues.append("EMAIL_FROM still uses the shared resend.dev sender, which "
+                          "only delivers to the Resend account owner. Verify a "
+                          "bluntly.ph sending domain.")
         # Serving from the session pooler is a hard fail in production: it caps
         # at ~4 concurrent clients, so the API 500s under any real load.
         if self.use_supabase:
