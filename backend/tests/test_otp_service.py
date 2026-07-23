@@ -147,3 +147,30 @@ def test_signup_for_existing_address_becomes_a_login_code(monkeypatch):
         assert row is not None and row.purpose is OtpPurpose.login
     finally:
         db.close()
+
+
+@requires_db
+def test_delivery_failure_rolls_back_and_raises_a_problem(monkeypatch):
+    """A provider rejection must not strand a live code nobody received.
+
+    Regression: send used to happen after commit, and EmailSendError was not an
+    AppError — so a rejected send returned a text/plain 500 that escaped the
+    RFC 9457 contract entirely, while leaving a usable OTP row behind.
+    """
+    from app.adapters.email import EmailSendError
+    from app.core.errors import EmailDeliveryError
+
+    def _boom(to, code):
+        raise EmailSendError("domain not verified")
+
+    monkeypatch.setattr(otp_service, "send_otp_email", _boom)
+    email = _fresh_email()
+    db = SessionLocal()
+    try:
+        with pytest.raises(EmailDeliveryError) as exc:
+            otp_service.issue_otp(db, email, OtpPurpose.signup)
+        assert exc.value.code == "email_send_failed"
+        assert exc.value.status_code == 502
+        assert _live_row(db, email) is None      # rolled back, no orphan
+    finally:
+        db.close()

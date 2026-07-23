@@ -19,18 +19,26 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.adapters.email import send_otp_email
+from app.adapters.email import (
+    EmailNotConfigured,
+    EmailSendError,
+    send_otp_email,
+)
 from app.core.config import settings
 from app.core.errors import (
+    EmailDeliveryError,
     OtpAttemptsExceededError,
     OtpExpiredError,
     OtpInvalidError,
 )
+from app.core.logging import get_logger
 from app.core.security import hash_password, verify_password
 from app.models.enums import MemberRole, MembershipTier, MemberType, OtpPurpose
 from app.models.otp import EmailOtp
 from app.models.user import User
 from app.services.username import allocate_username
+
+log = get_logger("services.otp")
 
 
 def _normalize_email(email: str) -> str:
@@ -74,8 +82,20 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
         purpose=purpose,
         expires_at=now + timedelta(seconds=settings.otp_ttl_seconds),
     ))
+
+    # Send BEFORE committing. If delivery fails we roll back, so a failed
+    # request leaves no orphan code behind and the user can simply retry.
+    # (Committing first would strand a live code nobody ever received.)
+    try:
+        send_otp_email(email, code)
+    except (EmailNotConfigured, EmailSendError) as exc:
+        db.rollback()
+        log.error("OTP email delivery failed", extra={
+            "extra_fields": {"to": email, "error": str(exc)}})
+        raise EmailDeliveryError(
+            "We couldn't send your code right now. Please try again shortly."
+        ) from exc
     db.commit()
-    send_otp_email(email, code)
 
 
 def verify_otp(db: Session, email: str, code: str) -> User:

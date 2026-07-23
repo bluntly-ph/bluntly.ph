@@ -389,7 +389,13 @@ def test_every_documented_failure_status_is_treated_as_failure(txn):
 def test_live_provider_requires_credentials_and_non_sandbox_url():
     from app.core.config import Settings
 
+    # Every field this assertion depends on is passed explicitly: Settings also
+    # reads the repo-root .env, so a developer with real PAYPAL_* values
+    # configured would otherwise see the credentials check correctly pass and
+    # this test fail for reasons that have nothing to do with the code.
     s = Settings(app_env="production", payout_provider="paypal_live",
+                 paypal_client_id="", paypal_secret="",
+                 paypal_base_url="https://api-m.sandbox.paypal.com",
                  jwt_secret="x" * 40, pii_hash_salt="y" * 40,
                  use_supabase=True, supabase_connection_string="postgresql://x/y")
     issues = " ".join(s.production_issues())

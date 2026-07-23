@@ -60,7 +60,15 @@ class User(Base, Timestamps):
     display_name: Mapped[str | None] = mapped_column(String(120))
     # Stable public handle (Slice 1 Phase A). display_name stays the free-text
     # label; username is the unique, URL-safe identity rendered as @handle.
-    username: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    #
+    # NOT NULL in the DB, so the default matters: any code path that builds a
+    # User without going through services.username.allocate_username (seeds,
+    # fixtures, admin tooling) would otherwise hit an IntegrityError. The
+    # fallback is collision-proof rather than pretty; allocate_username supplies
+    # a human-readable handle when one can be derived.
+    username: Mapped[str | None] = mapped_column(
+        String(32), unique=True, index=True,
+        default=lambda: f"user_{uuid.uuid4().hex[:16]}")
     # Public URL of an object in the Supabase Storage `avatars` bucket.
     avatar_url: Mapped[str | None] = mapped_column(Text)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

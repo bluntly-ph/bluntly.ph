@@ -283,3 +283,17 @@ Every place the build diverged from the source spec / build prompt, in one place
     `display_name`. Added `users.username` (unique, 3–32, `^[a-z0-9_]+$`) and
     backfilled 2187 existing rows deterministically. `display_name` is retained
     as the free-text label — the two are not merged.
+63. **OTP delivery failure returns 502 problem+json, not a bare 500.**
+    Found in live testing: `EmailSendError` was not an `AppError`, so a provider
+    rejection escaped the RFC 9457 handler and returned `text/plain`
+    "Internal Server Error" — a body the frontend's error layer cannot branch
+    on. Now mapped to `EmailDeliveryError` (502, `email_send_failed`).
+    Separately, the code row was committed *before* the send, so a failed
+    delivery stranded a live code nobody received; the send now happens before
+    the commit and rolls back on failure.
+64. **`users.username` carries a model-level default.**
+    The column is NOT NULL, so every `User(...)` construction that does not go
+    through `allocate_username` — fixtures, seeds, admin tooling — would hit an
+    IntegrityError. The model supplies a collision-proof
+    `user_<16 hex>` fallback; `allocate_username` still provides the
+    human-readable handle wherever one can be derived.

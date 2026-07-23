@@ -62,6 +62,19 @@ class RateLimitError(AppError):
     title = "Too many requests"
 
 
+class EmailDeliveryError(AppError):
+    """The provider refused the message or was unreachable.
+
+    502, not 500: the failure is upstream of us, and it must still render as
+    problem+json — an unhandled exception here would escape the RFC 9457
+    contract and hand the frontend a text/plain body it cannot branch on.
+    """
+
+    status_code = status.HTTP_502_BAD_GATEWAY
+    code = "email_send_failed"
+    title = "Could not send the verification email"
+
+
 class OtpInvalidError(AppError):
     status_code = status.HTTP_409_CONFLICT
     code = "otp_invalid"
