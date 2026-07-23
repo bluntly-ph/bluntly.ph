@@ -47,3 +47,6 @@ __pycache__/
 backend/.pytest_cache/
 backend/.ruff_cache/
 .python-version
+
+# local server logs
+*.log
