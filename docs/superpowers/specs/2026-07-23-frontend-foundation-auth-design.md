@@ -195,43 +195,86 @@ Migrations run on the **session** pooler (`:5432`), runtime on the
 
 # Phase B — Frontend
 
-## 7. Token layer
+## 7. Token layer — adopted from the Claude Design System
 
-`app/globals.css`, Tailwind v4 `@theme`. Two tiers.
+The `bluntly.ph Design System` project
+(`0cc9dd31-e28a-4dde-967f-b5fa02282f0f`, reachable via `DesignSync`) contains
+tokens transcribed literally from the `.fig`. **These are authoritative and are
+adopted verbatim** — the token layer is not hand-authored.
 
-**Primitives**, measured from Figma node `5348:2789` and the desktop frames:
+Vendored into `app/tokens/` and imported by `app/globals.css`:
 
-```
---brand-500: #EF782D
---brand-gradient: linear-gradient(160.87deg,
-    #FFC596 4.73%, #EF782D 36.50%, #963719 79.91%, #3C190F 103.78%)
---ink: #202020            /* used at 100 / 70 / 52 / 30 / 14 % alpha */
---grey-100: #F2F2F2       /* sheet surface */
---grey-300: #D9D9D9       /* grabber */
---radius-md: 12px         /* inputs, cards */
---radius-xl: 32px         /* sheets, pill buttons */
-```
+| Source | Contents |
+|---|---|
+| `tokens/colors.css` | base neutrals, brand orange ramp, semantic colors, and the `--surface-*` / `--text-*` / `--accent-*` aliases components consume |
+| `tokens/typography.css` | Poppins/Bebas/Arial stacks, weight names, and the `--text-2xs`…`--text-3xl` scale |
+| `tokens/effects.css` | 4→48px spacing scale, radii (`5/12/16/32/circle`), the three shadow recipes, motion easing/durations |
 
-Spacing on a 4/8px scale. Gutter 32px at 390px width (content 326px).
-Control heights: input 48px, primary button 56px.
+Tailwind v4's `@theme` maps these existing custom properties into utilities, so
+there is a single source of truth for every value and the DS can be re-synced
+later without a rewrite.
 
-Typography is **Poppins** (Regular 400 / Medium 500) via `next/font/google`.
-The scaffold's Geist fonts are removed.
+Key facts this corrects from the pre-DS assumptions:
 
-**Semantic tokens**, resolved per mode:
+- Brand orange is **`rgb(239,88,33)`**, not the `#EF782D` measured off the login
+  gradient. That measurement was a *gradient stop*, not the brand color. Solid
+  actions use `--accent-primary`; the login gradient is kept literal.
+- The app surface is **gray-100 `rgb(242,242,242)`**, not white. White is
+  reserved for cards and sheets that must lift off that gray.
+- Line-height is a flat **100%** nearly everywhere; `12px` is the *most common*
+  text size, not a detail size.
+- Borders are almost never solid strokes — a 1px **inset** hairline at 10–30%
+  ink is the house style.
 
-```
---color-surface, --color-surface-raised, --color-text, --color-text-muted,
---color-border, --color-accent, --color-disabled-surface, --color-disabled-text
-```
+Fonts load via `next/font/google` (Poppins, Bebas Neue) rather than the DS's
+`@import`, so Next self-hosts them and avoids the render-blocking request. The
+scaffold's Geist fonts are removed.
 
-Light values from the mobile frames, dark from the desktop frames.
+### 7.1 Components: tokens adopted, implementations re-written
 
-**Mode resolution.** Light is the default. Dark values apply at the `lg`
-breakpoint and above via a CSS media query on the semantic custom properties —
-pure CSS, no JavaScript, no viewport sniffing, no flash. A user preference is
-stored in a `theme` cookie, read server-side, stamped as `data-theme` on
-`<html>`, and overrides the breakpoint default in both directions. Follows
+The DS components (`Button`, `Card`, `Avatar`, `Chip`, `StarRating`,
+`VerifiedBadge`, `SearchBar`, `BottomSheet`, `ActionMenuFab`,
+`CategoryFilterRow`, `PhotoStripBanner`, `Icon`) are **styled with inline React
+style objects**. Inline styles cannot express media queries, `:hover`,
+`:focus-visible`, or `prefers-color-scheme` — precisely what the responsive
+shell and the breakpoint-driven dark mode require. Their press states also use
+`onMouseDown`, which never fires on touch.
+
+Therefore: **the DS component JSX is treated as reference, not vendored code.**
+Each component this slice needs is re-implemented in Tailwind v4 against the
+same CSS variables, adding real focus-visible rings, touch-safe press states,
+and dark-mode variants. Every radius, shadow, color, and spacing value is taken
+from the tokens — none are re-invented.
+
+`assets/logo/bluntly-logo.png` and `assets/icons/icon-data.js` **are** used
+directly; they are extracted artwork, not styling.
+
+### 7.2 What the design system does not cover
+
+Verified against its own readme, and important because it bounds what can be
+adopted:
+
+- **The auth screens.** The DS import was scoped to 93 Page-1 frames. The 14
+  Login/Signup frames carry far higher node ids (`5348`–`5407`) and the readme
+  asserts *"No gradients on the mobile app"*, yet the login frame is a full
+  orange gradient. Those frames postdate the import. Auth screens are built
+  from the Figma frames directly, using DS tokens.
+- **Desktop.** The readme states Page-2 *"were not read or built against"*. All
+  ~20 dark desktop frames sit outside the DS.
+- **Dark mode.** The tokens are light-only, with a single `--surface-inverse`.
+
+### 7.3 Dark mode
+
+Because the DS ships no dark values, a `[data-theme="dark"]` block is authored
+on top of the DS aliases — overriding only the semantic layer
+(`--surface-*`, `--text-*`, `--border-*`), never the base ramps. Values are
+measured from the dark desktop frames and the admin dashboard shell.
+
+Light is the default. Dark applies at the `lg` breakpoint and above via a CSS
+media query — pure CSS, no JavaScript, no viewport sniffing, no flash. A user
+preference is stored in a `theme` cookie, read server-side, stamped as
+`data-theme` on `<html>`, and overrides the breakpoint default in both
+directions. Follows
 `node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md`.
 
 ## 8. API layer
