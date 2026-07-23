@@ -190,6 +190,13 @@ class RequestStatus(str, enum.Enum):
     removed = "removed"
 
 
+class OtpPurpose(str, enum.Enum):
+    """What a one-time code authorises (Slice 1 Phase A)."""
+
+    signup = "signup"
+    login = "login"
+
+
 # Human-readable trust stage names (FR-7). Index == trust_stage (0..5).
 TRUST_STAGE_NAMES = [
     "Newcomer",
