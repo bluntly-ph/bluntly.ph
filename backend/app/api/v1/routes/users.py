@@ -4,20 +4,25 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import AppError, NotFoundError
-from app.core.security import require_role
+from app.core.security import get_current_user, require_role
 from app.db.session import get_db
 from app.models.enums import MemberRole, ModerationAction, ModerationTargetType
 from app.models.moderation import ModerationLog
 from app.models.user import User, UserBadge
 from app.schemas.auth import UserOut
+from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
+from app.services.storage import delete_avatar_object, upload_avatar
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+_AVATAR_PROBLEM = {401: {"model": Problem}, 413: {"model": Problem},
+                   415: {"model": Problem}}
 
 
 def _user_or_404(db: Session, user_id: uuid.UUID) -> User:
@@ -25,6 +30,38 @@ def _user_or_404(db: Session, user_id: uuid.UUID) -> User:
     if user is None:
         raise NotFoundError("User not found.", code="user_not_found")
     return user
+
+
+# Registered before the `/{user_id}/...` routes so the literal `me` segment is
+# never considered as a UUID path parameter.
+@router.post("/me/avatar", response_model=UserOut, responses=_AVATAR_PROBLEM,
+             summary="Upload or replace the current user's avatar")
+def set_avatar(file: UploadFile, db: Session = Depends(get_db),
+               user: User = Depends(get_current_user)) -> UserOut:
+    data = file.file.read()
+    new_url = upload_avatar(user.id, data)
+    previous = user.avatar_url
+    user.avatar_url = new_url
+    db.commit()
+    db.refresh(user)
+    # Only drop the old object once the new one is committed — a failure here
+    # must never leave the user with no avatar at all.
+    if previous:
+        delete_avatar_object(previous)
+    return UserOut.model_validate(user)
+
+
+@router.delete("/me/avatar", status_code=204, responses=_AVATAR_PROBLEM,
+               # response_model=None: without it FastAPI infers a model from the
+               # `-> None` annotation, which a 204 may not carry.
+               response_model=None, summary="Remove the current user's avatar")
+def clear_avatar(db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)) -> None:
+    previous = user.avatar_url
+    user.avatar_url = None
+    db.commit()
+    if previous:
+        delete_avatar_object(previous)
 
 
 @router.get("/{user_id}/trust", response_model=UserTrustOut,
