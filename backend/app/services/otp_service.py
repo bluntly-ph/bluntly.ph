@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -43,7 +43,7 @@ def _generate_code() -> str:
 
 def _as_utc(value: datetime) -> datetime:
     """Postgres may hand back naive datetimes depending on the driver path."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
@@ -60,7 +60,7 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
         # leaking that the address is taken.
         purpose = OtpPurpose.login
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Requesting a new code invalidates any outstanding one.
     for row in db.scalars(select(EmailOtp).where(
             EmailOtp.email == email, EmailOtp.consumed_at.is_(None))):
@@ -80,7 +80,7 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
 def verify_otp(db: Session, email: str, code: str) -> User:
     """Consume a code and return the authenticated user, creating it on signup."""
     email = _normalize_email(email)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     row = db.scalar(
         select(EmailOtp)
         .where(EmailOtp.email == email, EmailOtp.consumed_at.is_(None))

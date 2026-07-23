@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -75,7 +75,7 @@ def test_expired_code_is_rejected(monkeypatch):
     try:
         otp_service.issue_otp(db, email, OtpPurpose.signup)
         row = _live_row(db, email)
-        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         db.commit()
         with pytest.raises(OtpExpiredError):
             otp_service.verify_otp(db, email, sent["code"])
