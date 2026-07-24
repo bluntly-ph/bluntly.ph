@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CaretLeft,
   Check,
+  ImageSquare,
   SealCheck,
   ShareNetwork,
   ShieldCheck,
@@ -13,7 +14,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
-import { ageLabel, type ReviewFull, type Verdict } from "@/lib/reviews";
+import { ageLabel, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
 
 const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof ThumbsUp }> = {
   yes_absolutely: {
@@ -110,14 +111,25 @@ export function ReviewDetail({
         ) : null}
       </div>
 
-      {/* Product image (placeholder until real photos are wired) */}
-      <div
-        aria-hidden="true"
-        className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)]"
-        style={{
-          background: `linear-gradient(150deg, hsl(20 70% 60%), hsl(30 50% 38%))`,
-        }}
-      />
+      {/* The reviewer's proof photo, or a clean branded placeholder when none. */}
+      {usablePhoto(review.photo_url) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={usablePhoto(review.photo_url) as string}
+          alt={review.title}
+          className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)] object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          className="mt-6 grid aspect-[16/10] w-full place-items-center rounded-[var(--radius-sm)]"
+          style={{
+            background: `linear-gradient(150deg, hsl(20 42% 74%), hsl(30 38% 55%))`,
+          }}
+        >
+          <ImageSquare size={40} weight="light" className="text-white/55" />
+        </div>
+      )}
 
       {/* Body */}
       <Section title="The review">

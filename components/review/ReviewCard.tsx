@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowFatUp, ChatCircle } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, ChatCircle, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import type { ReviewCardData } from "@/lib/landing-data";
 
@@ -29,13 +29,26 @@ export function ReviewCard({
       ].join(" ")}
     >
       <div className="relative aspect-square w-full overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
-          style={{
-            background: `linear-gradient(150deg, hsl(${review.imageHue} 70% 62%), hsl(${review.imageHue + 24} 55% 38%))`,
-          }}
-        />
+        {review.imageUrl ? (
+          // A reviewer's own photo. Plain img so no image-domain config is needed;
+          // the feed filters out the synthetic seed URLs.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={review.imageUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 grid place-items-center transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
+            style={{
+              background: `linear-gradient(150deg, hsl(${review.imageHue} 42% 74%), hsl(${review.imageHue + 24} 38% 55%))`,
+            }}
+          >
+            <ImageSquare size={30} weight="light" className="text-white/55" />
+          </div>
+        )}
         {/* Legibility scrim behind the author, as drawn (Rectangle 233). */}
         <div
           aria-hidden="true"

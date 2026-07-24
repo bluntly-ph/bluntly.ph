@@ -64,8 +64,10 @@ export type ReviewCardData = {
   title: string;
   upvotes: string;
   comments: string;
-  /** A hue for the placeholder product image until real photos are wired. */
+  /** A hue for the branded placeholder shown when a review has no photo. */
   imageHue: number;
+  /** The reviewer's submitted photo, when there is one. */
+  imageUrl?: string | null;
 };
 
 export const READING_REVIEWS: ReviewCardData[] = [

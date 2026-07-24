@@ -105,6 +105,12 @@ function authorName(item: FeedItem): string {
   return item.author?.display_name || item.author?.username || "reviewer";
 }
 
+/** A submitted photo we can actually render — not the synthetic seed placeholder. */
+export function usablePhoto(url: string | null): string | null {
+  if (!url || url.includes("example.com")) return null;
+  return url.startsWith("http") ? url : null;
+}
+
 /** The review's own title, prefixed with the product when we have a name. */
 function cardTitle(item: FeedItem): string {
   const product = item.product?.canonical_name?.trim();
@@ -125,6 +131,7 @@ function toCard(item: FeedItem): ReviewCardData {
     upvotes: compact(item.review.helpful_votes),
     comments: "",
     imageHue: hueOf(item.review.id),
+    imageUrl: usablePhoto(item.review.photo_url),
   };
 }
 
