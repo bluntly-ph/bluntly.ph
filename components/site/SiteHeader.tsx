@@ -60,6 +60,13 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
           </Link>
 
           <Link
+            href="/questions"
+            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:inline"
+          >
+            Q&amp;A
+          </Link>
+
+          <Link
             href="/requests"
             className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:inline"
           >

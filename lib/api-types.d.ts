@@ -607,6 +607,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List questions */
+        get: operations["list_questions_api_v1_questions_get"];
+        put?: never;
+        /** Ask a question about a product */
+        post: operations["ask_question_api_v1_questions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a question with its answers */
+        get: operations["get_question_api_v1_questions__question_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/questions/{question_id}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer a question */
+        post: operations["answer_question_api_v1_questions__question_id__answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/questions/{question_id}/answers/{answer_id}/best": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Award Best Answer (asker only) */
+        post: operations["best_answer_api_v1_questions__question_id__answers__answer_id__best_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tokens/balance": {
         parameters: {
             query?: never;
@@ -1014,6 +1083,44 @@ export interface components {
             amount: number;
             /** Note */
             note: string;
+        };
+        /** AnswerCreate */
+        AnswerCreate: {
+            /** Body */
+            body: string;
+        };
+        /** AnswerOut */
+        AnswerOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Answer Id */
+            answer_id?: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Is Best Answer
+             * @default false
+             */
+            is_best_answer: boolean;
+            /**
+             * Is First Responder
+             * @default false
+             */
+            is_first_responder: boolean;
+            /**
+             * Helpful Votes
+             * @default 0
+             */
+            helpful_votes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            responder?: components["schemas"]["QAAuthor"] | null;
         };
         /** AssignTierRequest */
         AssignTierRequest: {
@@ -1505,6 +1612,116 @@ export interface components {
             username?: string | null;
             /** Interests */
             interests?: string[] | null;
+        };
+        /**
+         * QAAuthor
+         * @description The public author fields a Q&A card needs.
+         */
+        QAAuthor: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Trust Stage
+             * @default 0
+             */
+            trust_stage: number;
+            /** Trust Level Name */
+            trust_level_name?: string | null;
+        };
+        /** QuestionCreate */
+        QuestionCreate: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Body */
+            body: string;
+            /** @default buyers */
+            directed_to: components["schemas"]["QuestionDirectedTo"];
+        };
+        /** QuestionDetailOut */
+        QuestionDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question Id */
+            question_id?: string | null;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name?: string | null;
+            /** Body */
+            body: string;
+            directed_to: components["schemas"]["QuestionDirectedTo"];
+            /** Best Answer Id */
+            best_answer_id?: string | null;
+            /**
+             * Answer Count
+             * @default 0
+             */
+            answer_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            asker?: components["schemas"]["QAAuthor"] | null;
+            /**
+             * Answers
+             * @default []
+             */
+            answers: components["schemas"]["AnswerOut"][];
+        };
+        /**
+         * QuestionDirectedTo
+         * @enum {string}
+         */
+        QuestionDirectedTo: "buyers" | "seller";
+        /** QuestionOut */
+        QuestionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question Id */
+            question_id?: string | null;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name?: string | null;
+            /** Body */
+            body: string;
+            directed_to: components["schemas"]["QuestionDirectedTo"];
+            /** Best Answer Id */
+            best_answer_id?: string | null;
+            /**
+             * Answer Count
+             * @default 0
+             */
+            answer_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            asker?: components["schemas"]["QAAuthor"] | null;
         };
         /** QueueAuthor */
         QueueAuthor: {
@@ -3762,6 +3979,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SellerProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_questions_api_v1_questions_get: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_question_api_v1_questions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_question_api_v1_questions__question_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_question_api_v1_questions__question_id__answers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnswerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    best_answer_api_v1_questions__question_id__answers__answer_id__best_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+                answer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionDetailOut"];
                 };
             };
             /** @description Validation Error */

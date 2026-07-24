@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     membership,
     payouts,
     products,
+    qa,
     requests,
     reviews,
     sellers,
@@ -30,6 +31,7 @@ api_v1_router.include_router(membership.router)
 api_v1_router.include_router(ai.router)
 api_v1_router.include_router(users.router)
 api_v1_router.include_router(sellers.router)
+api_v1_router.include_router(qa.router)
 api_v1_router.include_router(tokens.router)
 api_v1_router.include_router(requests.router)
 api_v1_router.include_router(contracts.router)
