@@ -40,10 +40,10 @@ export function MobileNav() {
 
   return (
     <>
-      <div aria-hidden="true" className="h-[68px] lg:hidden" />
+      <div aria-hidden="true" className="h-[68px] md:hidden" />
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-[var(--border-subtle)] bg-[var(--surface-card)] pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-[var(--border-subtle)] bg-[var(--surface-card)] pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {ITEMS.map(({ href, icon: Icon, label, primary }) => {
           const active = isActive(href);

@@ -17,8 +17,8 @@ export type HeaderUser = {
  */
 export function SiteHeader({ user }: { user: HeaderUser }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--surface-app)]">
-      <div className="mx-auto flex h-16 w-full max-w-[72rem] items-center gap-4 px-6 lg:h-[72px] lg:px-10">
+    <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface-app)_85%,transparent)] backdrop-blur-md">
+      <div className="mx-auto flex h-16 w-full max-w-[72rem] items-center gap-4 px-6 md:h-[72px] md:px-10">
         <Link href="/" aria-label="bluntly home" className="text-[var(--accent-primary)]">
           <Logo height={22} label="bluntly" />
         </Link>
@@ -27,7 +27,7 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
         <form
           action="/search"
           role="search"
-          className="ml-4 hidden flex-1 items-center lg:flex"
+          className="ml-4 hidden flex-1 items-center md:flex"
         >
           <div className="relative w-full max-w-[32rem]">
             <MagnifyingGlass
@@ -43,39 +43,39 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
           </div>
         </form>
 
-        <div className="ml-auto flex items-center gap-2 lg:gap-3">
+        <div className="ml-auto flex items-center gap-2 md:gap-3">
           <Link
             href="/search"
             aria-label="Search"
-            className="grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] lg:hidden"
+            className="grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] md:hidden"
           >
             <MagnifyingGlass size={24} />
           </Link>
 
           <Link
             href="/categories"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:inline"
+            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
           >
             Categories
           </Link>
 
           <Link
             href="/questions"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:inline"
+            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
           >
             Q&amp;A
           </Link>
 
           <Link
             href="/requests"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] lg:inline"
+            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
           >
             Requests
           </Link>
 
           <Link
             href="/reviews/new"
-            className="hidden items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)] lg:inline-flex"
+            className="hidden items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)] md:inline-flex"
           >
             <PencilSimpleLine size={16} weight="bold" />
             Write a review

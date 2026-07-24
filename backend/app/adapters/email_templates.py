@@ -10,9 +10,9 @@ app's markup:
 * **Poppins will not load.** Almost no client honours @font-face or a Google
   Fonts link, so the brand face is declared first and a web-safe stack carries
   the actual rendering.
-* **The wordmark is set as text.** The real mark is a PNG with a custom
-  ligature, and a remote image needs a public host plus survives image-blocking
-  in maybe half of inboxes. A styled text wordmark always renders.
+* **The wordmark is the real PNG**, served from the production host and shown
+  on the orange band (white artwork). `alt="bluntly"` covers the ~half of
+  inboxes that block remote images.
 * **A gradient needs a solid fallback.** `background-color` is declared before
   `background-image` so clients that drop gradients still get brand orange
   rather than white.
@@ -30,6 +30,10 @@ _INK = "#202020"
 _SURFACE = "#f2f2f2"
 _WHITE = "#ffffff"
 _MUTED = "rgba(32,32,32,0.62)"
+
+# The wordmark PNG, served from the production site. White artwork, shown on the
+# orange band. Override with EMAIL_LOGO_URL if the canonical domain changes.
+_LOGO_URL = "https://www.bluntly.ph/bluntly-logo.png"
 
 # Kept as its own constant so the style attribute stays inside the line limit.
 _BRAND_GRADIENT = (
@@ -97,9 +101,12 @@ def otp_html(code: str, ttl_minutes: int) -> str:
           <td align="center"
               style="background-color:{_ORANGE};
                      background-image:{_BRAND_GRADIENT};
-                     border-radius:20px 20px 0 0; padding:36px 32px;">
-            <span style="font-family:{_FONT}; font-size:26px; font-weight:700;
-                         letter-spacing:-0.5px; color:{_WHITE};">bluntly</span>
+                     border-radius:20px 20px 0 0; padding:34px 32px;">
+            <!-- The real wordmark (white PNG) on the orange band. `alt` carries
+                 the brand for the ~half of inboxes that block remote images. -->
+            <img src="{_LOGO_URL}" alt="bluntly" width="132" height="41"
+                 style="display:block; width:132px; height:41px; border:0;
+                        margin:0 auto; outline:none; text-decoration:none;" />
           </td>
         </tr>
 

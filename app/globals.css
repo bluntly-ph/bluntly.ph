@@ -54,11 +54,65 @@ html {
   color-scheme: light;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--surface-app);
   color: var(--text-primary);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Links ease their colour on hover/focus so navigation feels alive. */
+a {
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+/* ---- Motion: entrance + page-transition animations ---- */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Route transitions: app/template.tsx re-mounts per navigation and plays this.
+   Opacity only — a transform here would break the sticky header's positioning. */
+.animate-page {
+  animation: fade-in var(--duration-base) var(--ease-standard) both;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s var(--ease-standard) both;
+}
+
+/* Stagger helpers for sequential reveals. */
+.delay-1 {
+  animation-delay: 60ms;
+}
+.delay-2 {
+  animation-delay: 120ms;
+}
+.delay-3 {
+  animation-delay: 180ms;
+}
+.delay-4 {
+  animation-delay: 240ms;
 }
 
 /* The source file authors no focus states (it is a static design). These are

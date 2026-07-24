@@ -25,7 +25,7 @@ export function Hero({ featured }: { featured: FeaturedData }) {
       />
 
       <div className="relative mx-auto grid w-full max-w-[72rem] gap-12 px-6 py-14 lg:min-h-[86vh] lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-10 lg:py-20">
-        <div>
+        <div className="animate-fade-up">
           <h1 className="text-[34px] font-bold leading-[1.1] text-[var(--text-primary)] lg:text-[56px]">
             Finally.
             <br />
@@ -59,7 +59,7 @@ export function Hero({ featured }: { featured: FeaturedData }) {
         </div>
 
         {/* Featured review with the two floating chips. */}
-        <div className="relative mx-auto w-full max-w-[26rem] pt-8 lg:pt-0">
+        <div className="animate-fade-up delay-2 relative mx-auto w-full max-w-[26rem] pt-8 lg:pt-0">
           <span className="absolute -top-2 right-1 z-10 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-3 py-1.5 text-[12px] font-medium text-white shadow-[var(--shadow-card)]">
             {FEATURED_REVIEW.earned}
           </span>
