@@ -3,6 +3,8 @@ import { Bebas_Neue, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 
+import { MobileNav } from "@/components/site/MobileNav";
+
 // Self-hosted by Next rather than the design system's Google Fonts @import, so
 // there is no render-blocking third-party request. The weights are the ones the
 // source file actually uses.
@@ -51,7 +53,10 @@ export default async function RootLayout({
       data-theme={dataTheme}
       className={`${poppins.variable} ${bebasNeue.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <MobileNav />
+      </body>
     </html>
   );
 }
