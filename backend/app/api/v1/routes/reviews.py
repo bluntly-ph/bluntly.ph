@@ -20,10 +20,20 @@ from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.enums import MemberRole
+from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
 from app.schemas.ai import CritiqueResponse
-from app.schemas.review import ReviewCreate, ReviewOut, ReviewUpdate, ReviewVersionOut, VoteIn
+from app.schemas.review import (
+    FeedAuthor,
+    FeedItemOut,
+    FeedProduct,
+    ReviewCreate,
+    ReviewOut,
+    ReviewUpdate,
+    ReviewVersionOut,
+    VoteIn,
+)
 from app.services import review_service, vote_service
 from app.services.ai_critique import get_provider
 
@@ -75,11 +85,46 @@ def list_reviews(db: Session = Depends(get_db),
     return [ReviewOut.model_validate(r) for r in rows]
 
 
+# Declared before "/{review_id}" so "feed" is matched as this route rather than
+# being parsed as a review UUID (which would 422).
+@router.get("/feed", response_model=list[FeedItemOut],
+            summary="Public feed: published reviews joined with author + product")
+def review_feed(db: Session = Depends(get_db), limit: int = 8,
+                product_id: uuid.UUID | None = None,
+                author_id: uuid.UUID | None = None, category: str | None = None,
+                q: str | None = None,
+                sort: Literal["newest", "wilson"] = "wilson") -> list[FeedItemOut]:
+    items = review_service.list_feed(db, limit=min(limit, 100), product_id=product_id,
+                                     author_id=author_id, category=category, q=q, sort=sort)
+    return [
+        FeedItemOut(
+            review=ReviewOut.model_validate(r),
+            author=FeedAuthor.model_validate(a) if a is not None else None,
+            product=FeedProduct.model_validate(p) if p is not None else None,
+        )
+        for r, a, p in items
+    ]
+
+
 @router.get("/{review_id}", response_model=ReviewOut, summary="Get a review")
 def get_review(review_id: uuid.UUID, db: Session = Depends(get_db),
                user: User | None = Depends(get_optional_user)) -> ReviewOut:
     review = _visible_or_404(review_service.get_review_or_404(db, review_id), user)
     return ReviewOut.model_validate(review)
+
+
+@router.get("/{review_id}/full", response_model=FeedItemOut,
+            summary="A review with its author + product (respects the publication gate)")
+def get_review_full(review_id: uuid.UUID, db: Session = Depends(get_db),
+                    user: User | None = Depends(get_optional_user)) -> FeedItemOut:
+    review = _visible_or_404(review_service.get_review_or_404(db, review_id), user)
+    author = db.get(User, review.author_id) if review.author_id is not None else None
+    product = db.get(Product, review.product_id)
+    return FeedItemOut(
+        review=ReviewOut.model_validate(review),
+        author=FeedAuthor.model_validate(author) if author is not None else None,
+        product=FeedProduct.model_validate(product) if product is not None else None,
+    )
 
 
 @router.patch("/{review_id}", response_model=ReviewOut,

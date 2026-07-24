@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,6 +26,8 @@ router = APIRouter(tags=["tokens"])
 class TokenBalanceOut(BaseModel):
     user_id: uuid.UUID
     token_balance: int
+    # PHP affiliate / Honesty-Fund earnings wallet (M3) — the reviewer's own money.
+    wallet_balance: Decimal = Decimal("0")
 
 
 class TokenTransactionOut(BaseModel):
@@ -48,7 +51,8 @@ class AdminTokenGrant(BaseModel):
 @router.get("/tokens/balance", response_model=TokenBalanceOut,
             summary="Your token balance")
 def get_balance(user: User = Depends(get_current_user)) -> TokenBalanceOut:
-    return TokenBalanceOut(user_id=user.id, token_balance=user.token_balance)
+    return TokenBalanceOut(user_id=user.id, token_balance=user.token_balance,
+                           wallet_balance=user.wallet_balance)
 
 
 @router.get("/tokens/transactions", response_model=list[TokenTransactionOut],

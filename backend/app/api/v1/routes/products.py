@@ -52,8 +52,11 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db),
 
 @router.get("", response_model=list[ProductOut], summary="List products")
 def list_products(db: Session = Depends(get_db), limit: int = 50,
+                  q: str | None = None,
                   include_low_trust: bool = False) -> list[ProductOut]:
     stmt = select(Product)
+    if q and q.strip():
+        stmt = stmt.where(Product.canonical_name.ilike(f"%{q.strip()}%"))
     # Visibility threshold (M2 slice 4): with enough reviews and a trust score
     # below the configured floor, a product drops out of the default listing.
     # Threshold 0.0 (default) disables the filter entirely.

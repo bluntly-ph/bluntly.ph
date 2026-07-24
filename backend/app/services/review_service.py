@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -12,6 +12,7 @@ from app.core.errors import NotFoundError
 from app.models.enums import EarnEligibleStatus, VerificationStatus
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
+from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
 
 # Fields captured in each version snapshot.
@@ -144,3 +145,48 @@ def list_versions(db: Session, review_id: uuid.UUID) -> list[ReviewVersion]:
         select(ReviewVersion).where(ReviewVersion.review_id == review_id)
         .order_by(ReviewVersion.version_number)
     ))
+
+
+def list_feed(
+    db: Session, *, limit: int = 8, product_id: uuid.UUID | None = None,
+    author_id: uuid.UUID | None = None, category: str | None = None,
+    q: str | None = None, sort: str = "wilson",
+) -> list[tuple[Review, User | None, Product | None]]:
+    """Published reviews with their author + product, for public card surfaces.
+
+    Batch-loads authors and products by id (two extra queries total) rather than
+    an ORM join, so the shape stays trivial and the N+1 is avoided.
+    """
+    stmt = select(Review).where(
+        Review.is_removed.is_(False), Review.published_at.isnot(None)
+    )
+    if product_id is not None:
+        stmt = stmt.where(Review.product_id == product_id)
+    if author_id is not None:
+        stmt = stmt.where(Review.author_id == author_id)
+    if category or q:
+        stmt = stmt.join(Product, Review.product_id == Product.id)
+        if category:
+            stmt = stmt.where(Product.category == category)
+        if q:
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(
+                or_(Review.title.ilike(like), Product.canonical_name.ilike(like))
+            )
+    if sort == "wilson":
+        stmt = stmt.order_by(Review.wilson_score.desc(), Review.created_at.desc())
+    else:
+        stmt = stmt.order_by(Review.created_at.desc())
+
+    reviews = list(db.scalars(stmt.limit(limit)))
+    author_ids = {r.author_id for r in reviews if r.author_id is not None}
+    product_ids = {r.product_id for r in reviews}
+    authors = (
+        {u.id: u for u in db.scalars(select(User).where(User.id.in_(author_ids)))}
+        if author_ids else {}
+    )
+    products = (
+        {p.id: p for p in db.scalars(select(Product).where(Product.id.in_(product_ids)))}
+        if product_ids else {}
+    )
+    return [(r, authors.get(r.author_id), products.get(r.product_id)) for r in reviews]

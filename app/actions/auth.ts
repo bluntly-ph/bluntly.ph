@@ -118,6 +118,7 @@ export async function verifyOtp(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  let onboarded = false;
   try {
     const token = await apiFetch<TokenResponse>("/api/v1/auth/otp/verify", {
       method: "POST",
@@ -127,10 +128,21 @@ export async function verifyOtp(
       },
     });
     await establish(token);
+    // One code path serves both signup and login (same endpoint, same
+    // TokenResponse), so "is this a brand-new user?" cannot be read from
+    // `purpose` alone — a signup that abandoned onboarding and later returns via
+    // /login is still unfinished. The reliable signal is whether they have
+    // picked interests, which only completeOnboarding sets. Returning members
+    // land on the home page; genuinely new accounts go through onboarding.
+    const me = await apiFetch<{ interests: string[] | null }>(
+      "/api/v1/auth/me",
+      { token: token.access_token },
+    );
+    onboarded = Array.isArray(me.interests) && me.interests.length > 0;
   } catch (error) {
     return toFormState(error);
   }
-  redirect("/onboarding");
+  redirect(onboarded ? "/" : "/onboarding");
 }
 
 export async function logout(): Promise<void> {

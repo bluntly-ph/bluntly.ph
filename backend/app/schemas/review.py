@@ -93,6 +93,44 @@ class ReviewOut(BaseModel):
         return None
 
 
+class FeedAuthor(BaseModel):
+    """The author fields a public card needs (never email or wallet data)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str | None = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    trust_stage: int = 0
+    trust_level_name: str | None = None
+
+
+class FeedProduct(BaseModel):
+    """The product fields a public card needs."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    canonical_name: str | None = None
+    category: str | None = None
+    avg_rating: Decimal = Decimal("0")
+    review_count: int = 0
+
+
+class FeedItemOut(BaseModel):
+    """A published review joined with its author and product.
+
+    The reviews list returns a bare ReviewOut (no author/product), which every
+    card surface (landing, search, category, profile) then cannot render. This
+    is the read-side join for those surfaces; the raw ReviewOut is unchanged.
+    """
+
+    review: ReviewOut
+    author: FeedAuthor | None = None
+    product: FeedProduct | None = None
+
+
 class ReviewVersionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

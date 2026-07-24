@@ -1,0 +1,258 @@
+import Link from "next/link";
+import {
+  CaretLeft,
+  Check,
+  SealCheck,
+  ShareNetwork,
+  ShieldCheck,
+  ShoppingBag,
+  Star,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from "@phosphor-icons/react/dist/ssr";
+
+import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
+import { ageLabel, type ReviewFull, type Verdict } from "@/lib/reviews";
+
+const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof ThumbsUp }> = {
+  yes_absolutely: {
+    label: "Yes, absolutely",
+    className: "bg-[color-mix(in_srgb,var(--accent-success)_14%,transparent)] text-[var(--accent-success)]",
+    Icon: ThumbsUp,
+  },
+  it_depends: {
+    label: "It depends",
+    className: "bg-[color-mix(in_srgb,var(--accent-star)_18%,transparent)] text-[var(--base-ink-700)]",
+    Icon: ShieldCheck,
+  },
+  hard_pass: {
+    label: "Hard pass",
+    className: "bg-[color-mix(in_srgb,var(--accent-danger)_12%,transparent)] text-[var(--accent-danger)]",
+    Icon: ThumbsDown,
+  },
+};
+
+export function ReviewDetail({
+  data,
+  canVote,
+}: {
+  data: ReviewFull;
+  canVote: boolean;
+}) {
+  const { review, author, product } = data;
+  const verdict = VERDICT[review.verdict] ?? VERDICT.it_depends;
+  const authorName = author?.display_name || author?.username || "reviewer";
+  const hasPros = (review.pros?.length ?? 0) > 0;
+  const hasCons = (review.cons?.length ?? 0) > 0;
+
+  return (
+    <article className="mx-auto w-full max-w-[44rem] px-6 py-6 lg:py-10">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+      >
+        <CaretLeft size={16} /> Back
+      </Link>
+
+      {/* Product context */}
+      {product ? (
+        <div className="mt-5 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
+          {product.category ? (
+            <span className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-2.5 py-1 capitalize text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
+              {product.category}
+            </span>
+          ) : null}
+          {product.canonical_name ? <span>{product.canonical_name}</span> : null}
+        </div>
+      ) : null}
+
+      {/* Author */}
+      <div className="mt-4 flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white"
+          style={{ background: "hsl(24 55% 55%)" }}
+        >
+          {authorName.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+          {author?.username ? `@${author.username}` : authorName}
+        </span>
+        {author ? (
+          <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-trust)]">
+            <ShieldCheck size={15} weight="fill" />
+            {author.trust_level_name ?? `Stage ${author.trust_stage}`}
+          </span>
+        ) : null}
+        <span className="text-[12px] text-[var(--text-muted)]">
+          · {ageLabel(review.created_at)}
+        </span>
+      </div>
+
+      {/* Title + verdict + rating */}
+      <h1 className="mt-4 text-[24px] font-bold leading-tight text-[var(--text-primary)] lg:text-[30px]">
+        {review.title}
+      </h1>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] font-semibold ${verdict.className}`}
+        >
+          <verdict.Icon size={16} weight="fill" />
+          {verdict.label}
+        </span>
+        <Stars rating={review.star_rating} />
+        {review.verification_status === "verified" ? (
+          <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-success)]">
+            <SealCheck size={15} weight="fill" />
+            Verified purchase
+          </span>
+        ) : null}
+      </div>
+
+      {/* Product image (placeholder until real photos are wired) */}
+      <div
+        aria-hidden="true"
+        className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)]"
+        style={{
+          background: `linear-gradient(150deg, hsl(20 70% 60%), hsl(30 50% 38%))`,
+        }}
+      />
+
+      {/* Body */}
+      <Section title="The review">
+        <p className="whitespace-pre-line">{review.discussion}</p>
+      </Section>
+
+      {review.verdict_explanation ? (
+        <Section title="Verdict">
+          <p className="whitespace-pre-line">{review.verdict_explanation}</p>
+        </Section>
+      ) : null}
+
+      {review.target_audience ? (
+        <Section title="Best for">
+          <p>{review.target_audience}</p>
+        </Section>
+      ) : null}
+
+      {review.anti_target_audience ? (
+        <Section title="This is not for">
+          <p>{review.anti_target_audience}</p>
+        </Section>
+      ) : null}
+
+      {hasPros || hasCons ? (
+        <div className="mt-8 grid gap-6 sm:grid-cols-2">
+          {hasPros ? (
+            <ProsCons kind="pro" items={review.pros ?? []} />
+          ) : null}
+          {hasCons ? (
+            <ProsCons kind="con" items={review.cons ?? []} />
+          ) : null}
+        </div>
+      ) : null}
+
+      {review.price_paid ? (
+        <p className="mt-6 text-[13px] text-[var(--text-secondary)]">
+          Paid <span className="font-semibold text-[var(--text-primary)]">₱{review.price_paid}</span>
+        </p>
+      ) : null}
+
+      {/* Action bar */}
+      <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-6">
+        <ReviewVoteBar
+          reviewId={review.id}
+          helpful={review.helpful_votes}
+          unhelpful={review.unhelpful_votes}
+          canVote={canVote}
+        />
+
+        {review.referral_redirect_url ? (
+          <a
+            href={review.referral_redirect_url}
+            target="_blank"
+            rel="noopener noreferrer nofollow sponsored"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)]"
+          >
+            <ShoppingBag size={16} weight="fill" />
+            Buy it here
+          </a>
+        ) : (
+          <span
+            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--line-hairline-30)] px-5 py-2.5 text-[13px] font-semibold text-[var(--text-muted)]"
+            title="An affiliate link is added once a moderator approves this review."
+          >
+            <ShoppingBag size={16} />
+            Buy link pending
+          </span>
+        )}
+
+        <button
+          type="button"
+          className="ml-auto inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
+        >
+          <ShareNetwork size={16} />
+          Share
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function Stars({ rating }: { rating: number }) {
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          size={18}
+          weight={i < rating ? "fill" : "regular"}
+          className={i < rating ? "text-[var(--accent-star)]" : "text-[var(--base-gray-300)]"}
+        />
+      ))}
+    </span>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        {title}
+      </h2>
+      <div className="mt-2 text-[15px] leading-relaxed text-[var(--text-primary)]">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function ProsCons({ kind, items }: { kind: "pro" | "con"; items: string[] }) {
+  const isPro = kind === "pro";
+  return (
+    <div>
+      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">
+        {isPro ? "Pros" : "Cons"}
+      </h3>
+      <ul className="mt-3 flex flex-col gap-2.5">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-[14px] text-[var(--text-secondary)]">
+            <span
+              className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
+                isPro
+                  ? "bg-[color-mix(in_srgb,var(--accent-success)_16%,transparent)] text-[var(--accent-success)]"
+                  : "bg-[color-mix(in_srgb,var(--accent-danger)_14%,transparent)] text-[var(--accent-danger)]"
+              }`}
+            >
+              {isPro ? <Check size={12} weight="bold" /> : <X size={12} weight="bold" />}
+            </span>
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default ReviewDetail;

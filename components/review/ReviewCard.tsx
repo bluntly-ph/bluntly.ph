@@ -1,0 +1,84 @@
+import Link from "next/link";
+import { ArrowFatUp, ChatCircle } from "@phosphor-icons/react/dist/ssr";
+
+import type { ReviewCardData } from "@/lib/landing-data";
+
+/**
+ * The review card used on the landing rail, search results and category pages —
+ * a square cover with the author floated over its top, then title and the
+ * upvote / comment counts. The product image is a hue-tinted placeholder until
+ * real photos are wired (see lib/landing-data.ts).
+ */
+export function ReviewCard({
+  review,
+  className = "",
+}: {
+  review: ReviewCardData;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={`/reviews/${review.id}`}
+      className={[
+        "group flex flex-col overflow-hidden rounded-[var(--radius-sm)]",
+        "bg-[var(--surface-card)] shadow-[var(--shadow-card)]",
+        "outline outline-1 outline-transparent transition-[outline-color]",
+        "duration-[var(--duration-fast)] hover:outline-[var(--line-hairline-10)]",
+        "focus-visible:outline-[var(--accent-primary)]",
+        className,
+      ].join(" ")}
+    >
+      <div className="relative aspect-square w-full overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
+          style={{
+            background: `linear-gradient(150deg, hsl(${review.imageHue} 70% 62%), hsl(${review.imageHue + 24} 55% 38%))`,
+          }}
+        />
+        {/* Legibility scrim behind the author, as drawn (Rectangle 233). */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-14 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.35),transparent)]"
+        />
+        <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3 text-white">
+          <span
+            aria-hidden="true"
+            className="h-6 w-6 shrink-0 rounded-full ring-1 ring-white/40"
+            style={{ background: `hsl(${review.authorHue} 55% 55%)` }}
+          />
+          <span className="text-[12px] font-medium">{review.author}</span>
+          <span aria-hidden="true" className="text-white/70">
+            ·
+          </span>
+          <span className="text-[12px] text-white/80">{review.ageLabel}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col p-3">
+        <h3 className="line-clamp-3 text-[14px] font-semibold leading-snug text-[var(--text-primary)]">
+          {review.title}
+        </h3>
+        <div className="mt-3 flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+          <span className="inline-flex items-center gap-1">
+            <ArrowFatUp size={14} weight="fill" className="text-[var(--accent-success)]" />
+            {review.upvotes}
+          </span>
+          {review.comments ? (
+            <>
+              <span aria-hidden="true" className="text-[var(--text-muted)]">
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <ChatCircle size={14} />
+                {review.comments}
+              </span>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default ReviewCard;

@@ -50,3 +50,6 @@ backend/.ruff_cache/
 
 # local server logs
 *.log
+
+.vercel
+.env*

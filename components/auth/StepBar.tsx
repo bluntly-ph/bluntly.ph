@@ -15,9 +15,9 @@ export function StepBar({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-[var(--text-secondary)]">
+        <span className="text-[12px] font-medium text-[var(--text-primary)]">
           {`Step ${step} of ${total}`}
         </span>
         {action}
@@ -34,7 +34,8 @@ export function StepBar({
           <span
             key={i}
             className={[
-              "h-1 flex-1 rounded-full",
+              "h-2 flex-1 rounded-full transition-colors",
+              "duration-[var(--duration-base)] ease-[var(--ease-standard)]",
               i < step
                 ? "bg-[var(--accent-primary)]"
                 : "bg-[var(--base-gray-200)]",

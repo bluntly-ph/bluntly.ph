@@ -176,6 +176,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public feed: published reviews joined with author + product */
+        get: operations["review_feed_api_v1_reviews_feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}": {
         parameters: {
             query?: never;
@@ -192,6 +209,23 @@ export interface paths {
         head?: never;
         /** Edit a review (creates a new version) */
         patch: operations["update_review_api_v1_reviews__review_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/reviews/{review_id}/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A review with its author + product (respects the publication gate) */
+        get: operations["get_review_full_api_v1_reviews__review_id__full_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/reviews/{review_id}/versions": {
@@ -1141,6 +1175,68 @@ export interface components {
          * @enum {string}
          */
         EarnEligibleStatus: "none" | "pending" | "approved" | "rejected" | "monetized" | "honesty_fund";
+        /**
+         * FeedAuthor
+         * @description The author fields a public card needs (never email or wallet data).
+         */
+        FeedAuthor: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /**
+             * Trust Stage
+             * @default 0
+             */
+            trust_stage: number;
+            /** Trust Level Name */
+            trust_level_name?: string | null;
+        };
+        /**
+         * FeedItemOut
+         * @description A published review joined with its author and product.
+         *
+         *     The reviews list returns a bare ReviewOut (no author/product), which every
+         *     card surface (landing, search, category, profile) then cannot render. This
+         *     is the read-side join for those surfaces; the raw ReviewOut is unchanged.
+         */
+        FeedItemOut: {
+            review: components["schemas"]["ReviewOut"];
+            author?: components["schemas"]["FeedAuthor"] | null;
+            product?: components["schemas"]["FeedProduct"] | null;
+        };
+        /**
+         * FeedProduct
+         * @description The product fields a public card needs.
+         */
+        FeedProduct: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Canonical Name */
+            canonical_name?: string | null;
+            /** Category */
+            category?: string | null;
+            /**
+             * Avg Rating
+             * @default 0
+             */
+            avg_rating: string;
+            /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
+        };
         /** FulfillRequest */
         FulfillRequest: {
             /**
@@ -1955,6 +2051,11 @@ export interface components {
             user_id: string;
             /** Token Balance */
             token_balance: number;
+            /**
+             * Wallet Balance
+             * @default 0
+             */
+            wallet_balance: string;
         };
         /**
          * TokenKind
@@ -2446,6 +2547,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                q?: string | null;
                 include_low_trust?: boolean;
             };
             header?: never;
@@ -2605,6 +2707,42 @@ export interface operations {
             };
         };
     };
+    review_feed_api_v1_reviews_feed_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                product_id?: string | null;
+                author_id?: string | null;
+                category?: string | null;
+                q?: string | null;
+                sort?: "newest" | "wilson";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_review_api_v1_reviews__review_id__get: {
         parameters: {
             query?: never;
@@ -2658,6 +2796,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_full_api_v1_reviews__review_id__full_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedItemOut"];
                 };
             };
             /** @description Validation Error */

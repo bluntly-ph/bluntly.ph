@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useActionState, useRef, useState } from "react";
+import { ChatCircle, Confetti, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
 import { completeOnboarding, type ProfileState } from "@/app/actions/profile";
 import { StepBar } from "@/components/auth/StepBar";
@@ -322,8 +323,13 @@ function StepIntro() {
       <div className="mt-10 flex flex-col items-center gap-8">
         <div
           aria-hidden="true"
-          className="h-[140px] w-[140px] rounded-full bg-[var(--base-gray-200)]"
-        />
+          className="relative grid h-[140px] w-[140px] place-items-center rounded-full bg-[image:var(--brand-gradient)] text-[var(--base-gray-100)] shadow-[var(--shadow-card)]"
+        >
+          <MagnifyingGlass size={56} weight="bold" />
+          <span className="absolute -bottom-1 -right-1 grid h-11 w-11 place-items-center rounded-full bg-[var(--surface-card)] text-[var(--accent-primary)] shadow-[var(--shadow-card)]">
+            <ChatCircle size={22} weight="fill" />
+          </span>
+        </div>
         <div className="text-center">
           <h2 className="text-[18px] font-semibold text-[var(--text-primary)]">
             Search or Ask
@@ -359,8 +365,10 @@ function StepDone({
       <div className="mt-10 flex justify-center">
         <div
           aria-hidden="true"
-          className="h-[110px] w-[110px] rounded-full bg-[var(--base-gray-200)]"
-        />
+          className="grid h-[110px] w-[110px] place-items-center rounded-full bg-[image:var(--brand-gradient)] text-[var(--base-gray-100)] shadow-[var(--shadow-card)]"
+        >
+          <Confetti size={48} weight="fill" />
+        </div>
       </div>
 
       <div className="mt-8 rounded-[var(--radius-sm)] bg-white p-5 shadow-[var(--shadow-card)]">
