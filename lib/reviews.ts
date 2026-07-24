@@ -111,13 +111,13 @@ export function usablePhoto(url: string | null): string | null {
   return url.startsWith("http") ? url : null;
 }
 
-/** The review's own title, prefixed with the product when we have a name. */
+/**
+ * The card headline. Reviewers write titles that already name the product
+ * ("Akko 5075B Plus — the budget board…"), so we use the title as-is; prefixing
+ * the canonical product name only produced "Product — Product — …" duplication.
+ */
 function cardTitle(item: FeedItem): string {
-  const product = item.product?.canonical_name?.trim();
-  const title = item.review.title.trim();
-  return product && !title.toLowerCase().includes(product.toLowerCase())
-    ? `${product} — ${title}`
-    : title;
+  return item.review.title.trim();
 }
 
 function toCard(item: FeedItem): ReviewCardData {
