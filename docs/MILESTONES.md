@@ -1,5 +1,9 @@
 # Bluntly.ph — Delivery Milestones (M1–M3)
 
+> **Want to verify these yourself?** `LOCAL_TESTING_GUIDE.md` walks a non-technical
+> tester through running the whole M1–M3 acceptance check on their own computer with
+> Docker — no Python, database setup, or credentials needed.
+
 > Authoritative build milestones provided by the product owner (2026-07-12).
 > These **supersede** the milestone sequencing in `03-bluntly-ph-roadmap.md` where
 > they differ. The earlier "M0 Foundations" work (see `superpowers/specs/`) remains

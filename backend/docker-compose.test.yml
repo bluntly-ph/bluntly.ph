@@ -1,0 +1,39 @@
+# Verification overlay — adds a one-shot `verify` service to the local stack.
+#
+# Why this exists: the runtime image deliberately omits things the acceptance
+# verifier needs. `.dockerignore` drops `tests/` and `*.md`, and the build context
+# is `backend/`, so none of these are inside the image:
+#
+#   backend/tests/fixtures/*.csv   real Shopee/Lazada reports (M3 ingestion checks)
+#   lib/api-types.d.ts             generated TS client (M3 frontend-readiness check)
+#   docs/FRONTEND_INTEGRATION.md   integration guide (same check)
+#   docs/LOADTEST_RESULTS.md       load-test evidence (M3 load-testing check)
+#
+# Running the verifier in the plain `api` container would therefore fail those
+# checks for a packaging reason, not a real defect. This service mounts the whole
+# repository read-only and runs from the mounted source, so every M1–M3 claim is
+# checked against the files actually in the repo.
+#
+# Usage (from backend/, with the stack already up):
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm verify
+
+services:
+  verify:
+    build: .
+    env_file:
+      - ../.env
+    environment:
+      # Same in-network targets the api service uses.
+      DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      REDIS_URL: redis://redis:6379/0
+      # Never let a local verification run reach a real email provider.
+      EMAIL_PROVIDER: console
+    volumes:
+      # Read-only: verification must never mutate the working tree.
+      - ../:/repo:ro
+    working_dir: /repo/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # In-process (TestClient) against the same Postgres — no base URL needed.
+    command: python -m scripts.verify_milestones
