@@ -77,9 +77,18 @@ export function ReviewDetail({
         >
           {authorName.slice(0, 1).toUpperCase()}
         </span>
-        <span className="text-[14px] font-semibold text-[var(--text-primary)]">
-          {author?.username ? `@${author.username}` : authorName}
-        </span>
+        {author?.id ? (
+          <Link
+            href={`/u/${author.id}`}
+            className="text-[14px] font-semibold text-[var(--text-primary)] hover:text-[var(--accent-primary)]"
+          >
+            {author.username ? `@${author.username}` : authorName}
+          </Link>
+        ) : (
+          <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+            {authorName}
+          </span>
+        )}
         {author ? (
           <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-trust)]">
             <ShieldCheck size={15} weight="fill" />

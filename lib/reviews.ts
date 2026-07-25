@@ -179,6 +179,47 @@ export async function searchReviews(opts: {
   }
 }
 
+export type AuthorProfile = {
+  id: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+  trust: string;
+  trustStage: number;
+};
+
+/**
+ * A public reviewer profile: the author's public identity plus their published
+ * reviews. Built from the same public feed (filtered by `author_id`), so no
+ * privileged endpoint is needed — the author block on their own reviews carries
+ * everything the header shows. Returns null when the reviewer has nothing public.
+ */
+export async function getAuthorProfile(authorId: string): Promise<{
+  author: AuthorProfile;
+  cards: ReviewCardData[];
+} | null> {
+  try {
+    const items = await apiFetch<FeedItem[]>(
+      `/api/v1/reviews/feed?author_id=${encodeURIComponent(authorId)}&sort=newest&limit=48`,
+    );
+    const a = items?.[0]?.author;
+    if (!a) return null;
+    return {
+      author: {
+        id: a.id,
+        name: a.display_name || a.username || "reviewer",
+        username: a.username,
+        avatarUrl: a.avatar_url,
+        trust: a.trust_level_name ?? `Stage ${a.trust_stage}`,
+        trustStage: a.trust_stage,
+      },
+      cards: items.map(toCard),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getLandingReviews(): Promise<{
   featured: FeaturedData;
   cards: ReviewCardData[];
