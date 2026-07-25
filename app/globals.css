@@ -124,6 +124,75 @@ a {
   border-radius: 4px;
 }
 
+/* ---- Long-form content (About, How it works, Terms, FAQs, …) ----
+   The design has no editorial-typography spec, so this is a restrained,
+   readable prose scale built entirely from the design tokens. */
+.prose {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.prose > * + * {
+  margin-top: 1rem;
+}
+.prose h1 {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.prose h2 {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 2.25rem;
+}
+.prose h3 {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 1.5rem;
+}
+.prose .lead {
+  font-size: 17px;
+  line-height: 1.6;
+}
+.prose a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose a:hover {
+  color: var(--accent-primary-strong);
+}
+.prose strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.25rem;
+}
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li + li {
+  margin-top: 0.4rem;
+}
+.prose li::marker {
+  color: var(--text-muted);
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line-hairline-10);
+  margin: 2rem 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
