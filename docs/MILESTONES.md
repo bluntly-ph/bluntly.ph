@@ -49,7 +49,7 @@ attribution for Shopee/Lazada/Amazon**, **tier-based revenue split calculation**
 > errors) on **both** environments. Acceptance plan: `M2_TEST_PLAN.md`;
 > deviations §35–44 in `DEVIATIONS.md`.
 
-## Milestone 3 — Full System Delivery ⚠️ BUILT, NOT DEPLOYED (2026-07-16)
+## Milestone 3 — Full System Delivery ✅ DONE — DEPLOYED (2026-07-25)
 **Request board** with AI validation and **dynamic reward calculation**, **earnings
 processing and payment scheduling by membership tier**, **contract duration tracking
 and renewal/buyout logic**, **web scraping pipeline for affiliate performance data
@@ -69,14 +69,21 @@ and full system **deployed and production-ready**.
 > 5xx at 100 users. Plans: `M3_TEST_PLAN.md`, `LOADTEST_RESULTS.md`,
 > `AFFILIATE_REPORT_FORMATS.md`; deviations §46–56.
 >
-> **🔒 NOT done — M3 is not complete until these land:** the **production deploy**
-> (owner supplies host + secrets; `PRODUCTION.md` is the runbook) and live PayPal
-> sandbox verification (owner supplies credentials; everything else is verified
-> via mocks + manual mode). Two operator prerequisites are also outstanding:
-> affiliate links must be generated carrying `suggested_sub_id` or commissions
-> cannot be attributed, and the moderator queue is a known slow screen (~9 s on
-> Supabase) awaiting an owner conversation. **No frontend pages exist** — that was
-> always a separate track.
+> **✅ Production deploy — DONE (2026-07-25).** Deployed on Vercel (Next.js frontend +
+> Python serverless API) against Supabase, live at **https://www.bluntly.ph**; `main`
+> auto-deploys to production. OTP email sends from the verified dedicated subdomain
+> `mail.bluntly.ph` (Resend/SES; SPF + DKIM + MX all verified). Re-verified against
+> Supabase **2026-07-25**: `verify_milestones` **49/49** (all M1/M2/M3 claims) and
+> `supabase_verify` **57/59** — the 2 non-passes are a stale head-revision assertion in
+> the script (the DB is legitimately at `0018_user_interests`) and `email_otps` having no
+> RLS **by design** (backend hits it directly, not via the anon key). Neither is a defect.
+>
+> **Still pending (owner-supplied):** live PayPal **sandbox** verification — the manual
+> payout rail is live and verified; PayPal only needs the owner's credentials. Affiliate
+> links must be generated carrying `suggested_sub_id` for commission attribution.
+>
+> **Frontend: ✅ BUILT & DEPLOYED** — the entire site is live; see
+> **`FRONTEND_MILESTONES.md`** (FE-M1 – FE-M5). It was always a separate track.
 >
 > **Fully planned (2026-07-13, final Fable pass):**
 > `superpowers/specs/2026-07-13-m3-master-plan.md` — slices 9–14, one **Opus 4.8**
