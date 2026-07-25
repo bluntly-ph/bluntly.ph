@@ -7,7 +7,7 @@ What it does, in order:
   2. Delete every synthetic user, keeping only real accounts (@gmail.com).
   3. Promote bluntly.ph@gmail.com to moderator (the platform superadmin).
   4. Reseed a small, realistic, fully working dataset (authors, products,
-     published + monetized reviews, a seller, Q&A, and review requests).
+     published + monetized reviews, Q&A, and review requests).
 
 Run: python -m scripts.reset_and_seed
 """
@@ -27,19 +27,6 @@ _WIPE = (
     "payouts, commissions, honesty_fund_distributions, token_transactions, "
     "moderation_logs, sessions, user_badges, email_otps"
 )
-
-_SELLER = """
-INSERT INTO public.users
-  (id, user_id, email, username, display_name, role, member_type, trust_stage,
-   seller_trust_score, seller_aggregates)
-VALUES
-  ('00000000-0000-0000-0000-0000000f0001','usr_show_seller',
-   'seller@showcase.bluntly.ph','techhaven','TechHaven PH','seller','seller',2,
-   0.87000,
-   '{"count":42,"accuracy_pct":95,"completeness_pct":92,
-     "customer_service_avg":4.6,"packaging_avg":4.8,"recommend_pct":94}'::jsonb)
-ON CONFLICT (id) DO NOTHING;
-"""
 
 _QA = """
 INSERT INTO public.questions (id, question_id, product_id, asker_id, body, directed_to)
@@ -127,10 +114,9 @@ def run() -> None:
     print("Seeding authors / products / reviews…")
     seed_showcase.seed()
 
-    print("Seeding seller / Q&A / requests…")
+    print("Seeding Q&A / requests…")
     db = SessionLocal()
     try:
-        db.execute(text(_SELLER))
         db.execute(text(_QA))
         db.execute(text(_REQUESTS))
         db.commit()
