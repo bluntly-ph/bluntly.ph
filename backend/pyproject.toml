@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "ruff>=0.7", "locust>=2.31"]
+dev = ["pytest>=8.3", "ruff>=0.7", "locust>=2.31", "matplotlib>=3.9"]
 
 [build-system]
 requires = ["setuptools>=68"]

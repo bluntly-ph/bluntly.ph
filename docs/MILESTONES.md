@@ -4,6 +4,10 @@
 > tester through running the whole M1–M3 acceptance check on their own computer with
 > Docker — no Python, database setup, or credentials needed.
 
+> **How the ranking behaves under load?** `RANKING_SIMULATION.md` drives four vote-influx
+> scenarios (brigade, decay handover, down-vote raid, small-sample fairness) through the
+> live Wilson/decay/velocity code and shows the effect on the homepage, with graphs.
+
 > Authoritative build milestones provided by the product owner (2026-07-12).
 > These **supersede** the milestone sequencing in `03-bluntly-ph-roadmap.md` where
 > they differ. The earlier "M0 Foundations" work (see `superpowers/specs/`) remains

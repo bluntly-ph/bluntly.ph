@@ -25,3 +25,7 @@ Implemented in `app/services/ranking.py` (unit-tested in `tests/test_ranking.py`
 ## Consequences
 Every parameter is a named constant, changeable with its test. These are
 launch calibrations to be revisited with real vote-volume data (M4→M5).
+
+`../RANKING_SIMULATION.md` shows how these values behave under four vote-influx
+scenarios and what each does to the homepage — the baseline to recalibrate against.
+It also records two findings about where the velocity signal is and is not reached.
