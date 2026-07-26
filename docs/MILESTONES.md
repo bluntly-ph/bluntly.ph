@@ -7,6 +7,8 @@
 > **How the ranking behaves under load?** `RANKING_SIMULATION.md` drives four vote-influx
 > scenarios (brigade, decay handover, down-vote raid, small-sample fairness) through the
 > live Wilson/decay/velocity code and shows the effect on the homepage, with graphs.
+> `RANKING_SIMULATION_GUIDE.md` is the runbook for it plus a capstone-defense demo
+> script and panel Q&A.
 
 > Authoritative build milestones provided by the product owner (2026-07-12).
 > These **supersede** the milestone sequencing in `03-bluntly-ph-roadmap.md` where

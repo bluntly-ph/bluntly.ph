@@ -9,6 +9,8 @@ sees on bluntly.ph.
 - **Simulation source:** `backend/sim/`
 - **Assertions:** `backend/tests/test_ranking_simulation.py` (19 tests)
 - **Reproduce:** `cd backend && python -m sim`
+- **How to run, extend, and present this:**
+  [RANKING_SIMULATION_GUIDE.md](RANKING_SIMULATION_GUIDE.md)
 
 Every number quoted below is computed by `sim.scenarios.headline_facts()` and asserted
 in the test suite. Nothing here is hand-written arithmetic.
