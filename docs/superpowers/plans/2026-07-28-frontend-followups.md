@@ -1359,7 +1359,13 @@ git add backend/alembic/versions/0021_drop_seller_reviews.py
 git commit -m "feat(db): migration to drop seller_reviews (NOT YET APPLIED)"
 ```
 
-- [ ] **Step 7: STOP — hand back to the owner for the apply decision**
+- [ ] **Step 7: Reconcile the documentation claim**
+
+Task 5 wrote "(written, not yet applied)" beside every citation of this migration in `MILESTONES.md`, `ARCHITECTURE_AS_BUILT.md`, `schema.md`, `BACKEND_CAPSTONE_PAPER.md` and `FRONTEND_MILESTONES.md`. That claim was premature then and becomes true the moment Step 6 commits.
+
+Verify the wording is now accurate in each of those files. Do not change it to "applied" — it is committed but deliberately unapplied, which is exactly what the text says.
+
+- [ ] **Step 8: STOP — hand back to the owner for the apply decision**
 
 Report the row count from Step 1 and the backup path from Step 2. Do not run `alembic upgrade head`.
 
