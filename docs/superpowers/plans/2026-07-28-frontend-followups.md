@@ -261,7 +261,7 @@ git commit -m "fix(scripts): drop seller checks from milestone verification"
 
 In each document, where seller trust ratings are described as delivered, keep the description and append:
 
-> **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a seller directory. The frontend, API, model and table were removed; `0019_drop_seller_reviews` drops the data.
+> **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a seller directory. The frontend, API, model and table were removed; `0021_drop_seller_reviews` drops the data.
 
 A capstone that documents a scope change defends better than one with a milestone quietly missing.
 
@@ -288,6 +288,34 @@ Also add a caveat wherever the verification protocol is documented: the repaired
 ```bash
 git add docs
 git commit -m "docs: record seller ratings as built-then-withdrawn"
+```
+
+---
+
+### Task 5b: Retire the seller rows in the M2 test plan
+
+**Files:**
+- Modify: `docs/M2_TEST_PLAN.md` — acceptance rows C4–C8
+
+Flagged by Task 5 as out of its declared scope. `M2_TEST_PLAN.md` still contains seller acceptance tests that can no longer pass — anyone working the plan hits five dead steps.
+
+- [ ] **Step 1: Read rows C4–C8 and classify each**
+
+Some may test *product* trust rather than seller trust. Product trust survives. Do not retire a row that still describes a working feature — read each one before deciding.
+
+- [ ] **Step 2: Mark the genuinely seller-specific rows as withdrawn**
+
+Do NOT delete them. Follow the same convention Task 5 established in the other docs: keep the row, strike or annotate it, and add the withdrawal reason and date (2026-07-28, owner decision). The test plan is capstone evidence that these tests once existed and passed.
+
+- [ ] **Step 3: Reconcile the stated total**
+
+If the document states a pass count or row total, correct it and note why, matching the caveat style used in `MILESTONES.md`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/M2_TEST_PLAN.md
+git commit -m "docs: mark M2 seller acceptance rows as withdrawn"
 ```
 
 ---
