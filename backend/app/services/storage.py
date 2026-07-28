@@ -83,3 +83,34 @@ def delete_avatar_object(url: str) -> None:
         get_service_client().storage.from_(AVATAR_BUCKET).remove([path])
     except Exception:  # noqa: BLE001
         pass
+
+
+PRODUCT_BUCKET = "product-images"
+MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def validate_product_image(data: bytes) -> str:
+    """Return the sniffed MIME type, or raise an AppError.
+
+    Same magic-byte discipline as avatars: a merchant server's Content-Type is
+    no more trustworthy than a browser's.
+    """
+    if len(data) > MAX_PRODUCT_IMAGE_BYTES:
+        raise AppError("Product image must be 5 MB or smaller.", code="file_too_large",
+                       status_code=413, title="File too large")
+    mime = sniff_image_type(data)
+    if mime is None:
+        raise AppError("Product image must be a PNG, JPEG, or WebP image.",
+                       code="unsupported_media_type", status_code=415,
+                       title="Unsupported media type")
+    return mime
+
+
+def upload_product_image(product_id: uuid.UUID, data: bytes) -> str:
+    """Upload to the public product-images bucket and return the public URL."""
+    mime = validate_product_image(data)
+    path = f"{product_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
+    client = get_service_client()
+    client.storage.from_(PRODUCT_BUCKET).upload(
+        path, data, {"content-type": mime, "upsert": "true"})
+    return client.storage.from_(PRODUCT_BUCKET).get_public_url(path)
