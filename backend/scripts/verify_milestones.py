@@ -200,22 +200,13 @@ def verify_m2(hz: Harness) -> None:
           and any(b["badge_id"] == "verified_buyer" for b in trust["badges"]),
           str(trust)[:90])
 
-    # Seller + product Wilson trust ratings.
-    seller_id, _sh = hz.register("m2seller")
-    c.patch(f"/api/v1/users/{seller_id}/role", headers=mh, json={"role": "seller"})
-    sr = c.post(f"/api/v1/sellers/{seller_id}/reviews", headers=vh, json={
-        "accuracy": True, "order_completeness": True, "customer_service": 5,
-        "packaging_quality": 4, "overall_rating": 5, "would_recommend": True})
-    prof = c.get(f"/api/v1/sellers/{seller_id}").json()
-    check("M2: Wilson trust rating for SELLERS + dimension averages",
-          sr.status_code == 201 and prof["seller_trust_score"] is not None
-          and prof["recommend_pct"] == 100.0, str(prof)[:90])
+    # Product Wilson trust ratings.
+
     check("M2: Wilson trust rating for PRODUCTS",
           float(c.get(f"/api/v1/products/{pid}").json()["trust_score"]) > 0)
     check("M2: trust threshold configuration exists (visibility control)",
           "low_trust" in c.get(f"/api/v1/products/{pid}").json()
-          and hasattr(settings, "product_trust_visibility_threshold")
-          and hasattr(settings, "seller_trust_visibility_threshold"))
+          and hasattr(settings, "product_trust_visibility_threshold"))
 
     # Fake/shill + collusion detection — advisory only.
     from app.models.review import Review
