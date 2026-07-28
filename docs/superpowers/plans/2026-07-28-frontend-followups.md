@@ -68,7 +68,7 @@ git commit -m "refactor(fe): remove the unlinked seller surface"
 - Delete: `backend/app/api/v1/routes/sellers.py`
 - Delete: `backend/app/models/seller_review.py`
 - Delete: `backend/app/schemas/seller.py`
-- Delete: `backend/app/services/trust_rating_service.py`
+- **Edit, do NOT delete:** `backend/app/services/trust_rating_service.py` — see the split below
 - Delete: `backend/tests/test_sellers_api.py`
 - Modify: `backend/app/api/v1/router.py:8-22` (import list) and `:33` (`include_router`)
 - Modify: `backend/app/models/__init__.py` — drop the `seller_review` import
@@ -82,15 +82,33 @@ git commit -m "refactor(fe): remove the unlinked seller surface"
 Run: `grep -rn "seller" backend/app backend/tests --include=*.py`
 Expected: a bounded list. Anything outside the five files above (for example a trust-service import) must be resolved in this task, not left dangling.
 
-- [ ] **Step 2: Delete the modules**
+- [ ] **Step 2: Delete the seller-only modules**
 
 ```bash
 git rm backend/app/api/v1/routes/sellers.py \
        backend/app/models/seller_review.py \
        backend/app/schemas/seller.py \
-       backend/app/services/trust_rating_service.py \
        backend/tests/test_sellers_api.py
 ```
+
+- [ ] **Step 2b: Split `trust_rating_service.py` — do not delete it**
+
+This module serves **two** features. Product trust is a surviving M2 deliverable consumed by `review_service.py:59-60`, `products.py:24,31`, and the nightly sweep in `workers/tasks.py:29-40`. Deleting the file breaks it.
+
+**Keep:** `_conflict` (if still referenced), `recompute_product_trust`, `product_low_trust`.
+
+**Remove:** `recompute_seller_trust`, `seller_or_404`, `create_seller_review`, `list_seller_reviews`, `seller_low_trust`, `seller_review_count`.
+
+**Edit:** `recompute_all_trust_ratings` currently recomputes both and returns a dict covering each. Drop its seller half and the corresponding dict key, then update `workers/tasks.py:29-40` to match the new return shape — a stale key there is a silent nightly-job failure.
+
+**Rewrite the module docstring.** It currently opens "Product & seller Wilson trust ratings + seller reviews (M2 slice 4)" and documents the seller publication-gate deviation. Both become false.
+
+Keep the filename as-is; renaming would churn every importer for no functional gain.
+
+- [ ] **Step 2c: Verify product trust still works**
+
+Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/test_trust.py tests/test_trust_api.py -q`
+Expected: PASS. If a test covered *seller* trust specifically, remove that test; if it covered *product* trust, it must still pass unchanged.
 
 - [ ] **Step 3: Unregister the router**
 
