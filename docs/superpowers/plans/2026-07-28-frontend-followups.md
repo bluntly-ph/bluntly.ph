@@ -214,6 +214,44 @@ table.
 
 ---
 
+### Task 4b: Repair the milestone verification script
+
+**Files:**
+- Modify: `backend/scripts/verify_milestones.py:203-218`
+
+`verify_milestones.py` is one of the four commands in the owner's M1–M3 production verification protocol. Seller removal broke it: it `POST`s to `/api/v1/sellers/{id}/reviews`, which no longer exists, so the M2 run now fails partway. This is a working-tool regression, not cosmetic.
+
+- [ ] **Step 1: Remove the seller trust check, keep the product one**
+
+At `:203-211`, delete the seller block entirely — the `m2seller` registration, the `role: seller` patch, the seller-review `POST`, the profile `GET`, and the `"M2: Wilson trust rating for SELLERS + dimension averages"` check.
+
+**Keep** `"M2: Wilson trust rating for PRODUCTS"` at `:212-213` — product trust survives and this check must still pass.
+
+- [ ] **Step 2: Fix the threshold check**
+
+At `:214-218`, drop the trailing `and hasattr(settings, "seller_trust_visibility_threshold")` clause. That setting was deleted in Task 3, so the condition is now permanently False and the check would fail. Leave the `product_trust_visibility_threshold` clause intact.
+
+- [ ] **Step 3: Verify the script runs**
+
+Run: `cd backend && .venv/Scripts/python.exe scripts/verify_milestones.py`
+
+Expected: it completes and the M2 section passes. Record the new total check count — it drops by exactly one (the removed SELLERS check).
+
+If the script requires a live database or environment this run cannot reach, say so plainly in the report and confirm correctness by inspection instead. Do not fake a pass.
+
+- [ ] **Step 4: Report the count change**
+
+The owner's documented verification counts (referenced in `docs/MILESTONES.md` and the memory of a "159/49/59 green" run) include this check. Report the old and new counts so the documentation can be corrected — do not edit those docs in this task.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/scripts/verify_milestones.py
+git commit -m "fix(scripts): drop seller checks from milestone verification"
+```
+
+---
+
 ### Task 5: Record the withdrawal in the documentation
 
 **Files:**
