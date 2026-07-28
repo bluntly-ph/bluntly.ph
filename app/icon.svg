@@ -1,4 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#ef5821" />
-  <text x="32" y="47" text-anchor="middle" font-family="'Poppins', 'Segoe UI', Arial, sans-serif" font-size="44" font-weight="700" fill="#ffffff">b</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="bluntly">
+  <!--
+    The bluntly mark: the wave-form "n" from the wordmark (public/bluntly-logo.png),
+    lifted out of the lockup and set in the brand ring. Drawn as a stroked path rather
+    than text so it stays crisp at 16px and needs no webfont; SVG app icons are served
+    with sizes="any".
+  -->
+  <circle cx="32" cy="32" r="28" fill="#ffffff" />
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#ef5821" stroke-width="6" />
+  <path
+    d="M20 18 V32 c0 7 8 9 12 3 l4 -6.5 c3 -5 12 -3.5 12 3.5 V42"
+    fill="none"
+    stroke="#ef5821"
+    stroke-width="10"
+    stroke-linecap="butt"
+    stroke-linejoin="round"
+  />
 </svg>
