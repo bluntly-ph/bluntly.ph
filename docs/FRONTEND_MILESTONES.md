@@ -14,7 +14,7 @@
 >
 > **Live:** https://www.bluntly.ph — Vercel auto-deploys `main` → production.
 
-## FE-M1 — Foundations & Auth ✅ DONE
+## FE-M1 — Foundations & Auth
 App shell and the full passwordless auth journey.
 
 **As built:** Next 16 App Router with the token-bridged Tailwind theme and the
@@ -30,7 +30,7 @@ visible `StepBar`).
 - Signed-out visitors can read the public site; protected routes redirect to login.
 - OTP email is branded (real logo) and sent from the dedicated `mail.bluntly.ph`.
 
-## FE-M2 — Public read surfaces ✅ DONE
+## FE-M2 — Public read surfaces
 Everything a logged-out reader can browse, wired to live data.
 
 **As built:** `/` landing (hero + ask-anything search, featured review, reading rail,
@@ -46,7 +46,7 @@ trust standing, their published reviews). Data from `GET /reviews/feed` and
 - Review detail shows the full structured format; the author name links to `/u/{id}`.
 - "Buy it here" 302-redirects through `/r/{id}` and never exposes a raw affiliate URL.
 
-## FE-M3 — Reviewer & community flows ✅ DONE
+## FE-M3 — Reviewer & community flows
 The create/participate surfaces.
 
 **As built:** `/reviews/new` — a two-step write flow (find/create the product from a
@@ -60,7 +60,7 @@ directed-to) · Review requests / bounties: `/requests` (board + up-vote), `/req
 - A vote persists and updates counts; self-voting and double-voting are rejected.
 - Ask a question, answer one, mark a best answer; post and up-vote a request.
 
-## FE-M4 — Earnings, profile & moderation ✅ DONE
+## FE-M4 — Earnings, profile & moderation
 Money, identity, and the admin surface.
 
 **As built:** `/dashboard` — reviewer earnings (wallet in ₱, token balance, payouts,
@@ -73,7 +73,7 @@ role-gated via `requireRole`.
 - A moderator can action the queue; a non-moderator is refused (`/moderate` gated).
 - Payout-account (PayPal email) validates before saving.
 
-## FE-M5 — Content, polish & deploy ✅ DONE
+## FE-M5 — Content, polish & deploy
 The pages that make it a real site, responsiveness, motion, and production.
 
 **As built:** editorial + legal pages behind every footer link — `/about`,

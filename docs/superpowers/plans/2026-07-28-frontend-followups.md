@@ -144,84 +144,19 @@ git commit -m "chore(types): regenerate API types after seller removal"
 
 ---
 
-### Task 4: Destructive migration `0019` — drop seller tables
+### Task 4: (moved) — the seller table drop is **Task 16**, at the end of this plan
 
-> **GATE: do not run `alembic upgrade` in this task without an explicit go-ahead from the owner.** This drops rows that no amount of `git revert` brings back. Write the migration, get it reviewed, then apply it as a separate deliberate act.
+The destructive migration is deliberately the **last** migration in the chain
+(`0021_drop_seller_reviews`), not the first.
 
-**Files:**
-- Create: `backend/alembic/versions/0019_drop_seller_reviews.py`
+Reason: it is gated on owner approval, and a gate at `0019` would block
+`alembic upgrade head` for the product-image and bookmark migrations that follow —
+stalling Phases 2 and 3 behind an approval that has nothing to do with them. Ordering it
+last makes the gate cost nothing.
 
-- [ ] **Step 1: Count what would be lost**
-
-Run against the target database:
-```sql
-SELECT count(*) FROM seller_reviews;
-```
-Report the number to the owner. If it is non-trivial, stop and re-confirm before continuing.
-
-- [ ] **Step 2: Take a retained backup**
-
-```bash
-pg_dump "$DATABASE_URL" -t seller_reviews -t sellers -Fc -f seller_tables_20260728.dump
-```
-Store this outside the database. Confirm the file is non-empty before proceeding.
-
-- [ ] **Step 3: Write the migration**
-
-```python
-"""drop seller_reviews and seller trust columns
-
-Sellers were delivered in M2 and withdrawn by owner decision on 2026-07-28: the
-product is an affiliate-review platform, not a seller directory. The tables are
-dropped rather than orphaned so the schema stops implying a feature that no
-longer exists.
-
-Irreversible: downgrade recreates the structure but not the rows.
-
-Revision ID: 0019_drop_seller_reviews
-Revises: 0018_user_interests
-"""
-from __future__ import annotations
-
-import sqlalchemy as sa
-from alembic import op
-
-revision = "0019_drop_seller_reviews"
-down_revision = "0018_user_interests"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    op.drop_table("seller_reviews")
-
-
-def downgrade() -> None:
-    # Structure only. The rows are gone; restore them from the pg_dump taken
-    # before upgrade if they are ever needed.
-    op.create_table(
-        "seller_reviews",
-        sa.Column("id", sa.UUID(as_uuid=True), primary_key=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-    )
-```
-
-Inspect the live table before finalising `downgrade` — mirror the real column list rather than the stub above if the table has more columns.
-
-- [ ] **Step 4: Verify the migration is well-formed without applying it**
-
-Run: `cd backend && alembic heads`
-Expected: a single head, `0019_drop_seller_reviews`.
-
-- [ ] **Step 5: Commit the migration unapplied**
-
-```bash
-git add backend/alembic/versions/0019_drop_seller_reviews.py
-git commit -m "feat(db): migration to drop seller_reviews (NOT YET APPLIED)"
-```
-
-- [ ] **Step 6: STOP — hand back to the owner for the apply decision**
+Phase 1 therefore ends with the code and documentation removed and the table still present.
+That is a deliberate, temporary state: the API and model are gone, so nothing reads the
+table.
 
 ---
 
@@ -253,10 +188,10 @@ git commit -m "docs: record seller ratings as built-then-withdrawn"
 
 # Phase 2 — Product images
 
-### Task 6: Migration `0020` and model columns
+### Task 6: Migration `0019` and model columns
 
 **Files:**
-- Create: `backend/alembic/versions/0020_product_image.py`
+- Create: `backend/alembic/versions/0019_product_image.py`
 - Modify: `backend/app/models/product.py` (add three columns to `Product`)
 - Modify: `backend/app/models/enums.py` (add `ImageSource`)
 
@@ -301,16 +236,16 @@ Product listing imagery, so the feed stops rendering hue placeholders. Populated
 once by scripts/seed_product_images.py and thereafter by moderators; the running
 application never fetches a URL.
 
-Revision ID: 0020_product_image
-Revises: 0019_drop_seller_reviews
+Revision ID: 0019_product_image
+Revises: 0018_user_interests
 """
 from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0020_product_image"
-down_revision = "0019_drop_seller_reviews"
+revision = "0019_product_image"
+down_revision = "0018_user_interests"
 branch_labels = None
 depends_on = None
 
@@ -341,7 +276,7 @@ Expected: upgrade succeeds, prints the column.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/models backend/alembic/versions/0020_product_image.py
+git add backend/app/models backend/alembic/versions/0019_product_image.py
 git commit -m "feat(db): product listing image columns"
 ```
 
@@ -841,11 +776,11 @@ git commit -m "docs: footnote the one-off product image backfill"
 
 # Phase 3 — Bookmarks and Recent Reads
 
-### Task 11: Bookmark model and migration `0021`
+### Task 11: Bookmark model and migration `0020`
 
 **Files:**
 - Create: `backend/app/models/bookmark.py`
-- Create: `backend/alembic/versions/0021_bookmarks.py`
+- Create: `backend/alembic/versions/0020_bookmarks.py`
 - Modify: `backend/app/models/__init__.py`
 
 **Interfaces:**
@@ -888,13 +823,13 @@ class Bookmark(Base, UUIDPrimaryKey, Timestamps):
     )
 ```
 
-- [ ] **Step 2: Write migration `0021_bookmarks.py`**
+- [ ] **Step 2: Write migration `0020_bookmarks.py`**
 
 ```python
 """bookmarks — reader's saved reviews
 
-Revision ID: 0021_bookmarks
-Revises: 0020_product_image
+Revision ID: 0020_bookmarks
+Revises: 0019_product_image
 """
 from __future__ import annotations
 
@@ -902,8 +837,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0021_bookmarks"
-down_revision = "0020_product_image"
+revision = "0020_bookmarks"
+down_revision = "0019_product_image"
 branch_labels = None
 depends_on = None
 
@@ -935,12 +870,12 @@ Check the `id` / `created_at` / `updated_at` column definitions against an exist
 - [ ] **Step 3: Apply and verify**
 
 Run: `cd backend && alembic upgrade head && alembic current`
-Expected: `0021_bookmarks`.
+Expected: `0020_bookmarks`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add backend/app/models backend/alembic/versions/0021_bookmarks.py
+git add backend/app/models backend/alembic/versions/0020_bookmarks.py
 git commit -m "feat(db): bookmarks table"
 ```
 
@@ -1198,6 +1133,101 @@ Run: `npm run build` and confirm every footer link still resolves.
 git add app
 git commit -m "docs(legal): PH-specific privacy, terms and guidelines"
 ```
+
+---
+
+# Phase 5 — The destructive migration
+
+### Task 16: Drop the seller tables — migration `0021`
+
+> **GATE: this task writes the migration and STOPS. Do not run `alembic upgrade` without an explicit go-ahead from the owner.** It drops rows that no `git revert` brings back. Every other task in this plan is reversible; this one is not.
+
+Runs last so the gate blocks nothing else. By this point the seller API, model, schema and frontend are already gone (Tasks 1-3), so nothing reads the table.
+
+**Files:**
+- Create: `backend/alembic/versions/0021_drop_seller_reviews.py`
+
+**Interfaces:**
+- Consumes: `0020_bookmarks` as `down_revision`
+
+- [ ] **Step 1: Count what would be lost**
+
+```sql
+SELECT count(*) FROM seller_reviews;
+```
+Report the number to the owner. If it is non-trivial, stop and re-confirm before continuing.
+
+- [ ] **Step 2: Take a retained backup**
+
+```bash
+pg_dump "$DATABASE_URL" -t seller_reviews -Fc -f seller_tables_20260728.dump
+```
+Store it outside the database. Confirm the file is non-empty before proceeding.
+
+- [ ] **Step 3: Inspect the live table**
+
+```sql
+\d seller_reviews
+```
+The `downgrade` below must mirror the real column list, not a stub.
+
+- [ ] **Step 4: Write the migration**
+
+```python
+"""drop seller_reviews
+
+Seller trust ratings were delivered in M2 and withdrawn by owner decision on
+2026-07-28: bluntly.ph is an affiliate-review platform, not a seller directory.
+The table is dropped rather than orphaned so the schema stops implying a feature
+that no longer exists.
+
+Irreversible: downgrade recreates the structure but not the rows. Restore from
+the pg_dump taken before upgrade if they are ever needed.
+
+Revision ID: 0021_drop_seller_reviews
+Revises: 0020_bookmarks
+"""
+from __future__ import annotations
+
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "0021_drop_seller_reviews"
+down_revision = "0020_bookmarks"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.drop_table("seller_reviews")
+
+
+def downgrade() -> None:
+    # Structure only — replace this column list with the real one from Step 3.
+    op.create_table(
+        "seller_reviews",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+    )
+```
+
+- [ ] **Step 5: Verify it is well-formed without applying it**
+
+Run: `cd backend && alembic heads`
+Expected: a single head, `0021_drop_seller_reviews`.
+
+- [ ] **Step 6: Commit the migration unapplied**
+
+```bash
+git add backend/alembic/versions/0021_drop_seller_reviews.py
+git commit -m "feat(db): migration to drop seller_reviews (NOT YET APPLIED)"
+```
+
+- [ ] **Step 7: STOP — hand back to the owner for the apply decision**
+
+Report the row count from Step 1 and the backup path from Step 2. Do not run `alembic upgrade head`.
 
 ---
 
