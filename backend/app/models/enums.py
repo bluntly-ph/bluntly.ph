@@ -197,6 +197,12 @@ class OtpPurpose(str, enum.Enum):
     login = "login"
 
 
+class ImageSource(str, enum.Enum):
+    seeded = "seeded"        # one-off backfill script, 2026-07-28
+    moderator = "moderator"  # supplied by a human at link-attach time
+    none = "none"            # no image resolved
+
+
 # Human-readable trust stage names (FR-7). Index == trust_stage (0..5).
 TRUST_STAGE_NAMES = [
     "Newcomer",

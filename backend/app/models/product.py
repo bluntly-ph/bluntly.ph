@@ -8,11 +8,12 @@ with status `pending`; an admin sets the canonical name fields and flips it to
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     Date,
+    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -25,7 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
-from app.models.enums import Platform, ProductStatus
+from app.models.enums import ImageSource, Platform, ProductStatus
 
 
 class Product(Base, UUIDPrimaryKey, Timestamps):
@@ -47,6 +48,15 @@ class Product(Base, UUIDPrimaryKey, Timestamps):
         server_default=ProductStatus.pending.value,
     )
     source_url: Mapped[str | None] = mapped_column(Text)
+    # Product listing imagery. Distinct from a review's proof photo: this is the
+    # merchant's picture of the item, not evidence that a reviewer owns one.
+    image_url: Mapped[str | None] = mapped_column(Text)
+    image_source: Mapped[ImageSource] = mapped_column(
+        Enum(ImageSource, name="image_source"),
+        default=ImageSource.none, nullable=False,
+        server_default=ImageSource.none.value,
+    )
+    image_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
