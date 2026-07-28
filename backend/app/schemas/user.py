@@ -40,16 +40,3 @@ class RoleUpdate(BaseModel):
     role: MemberRole
 
 
-class SellerProfileOut(BaseModel):
-    """Public seller profile with live per-dimension aggregates (M2 slice 4)."""
-
-    id: uuid.UUID
-    display_name: str | None = None
-    seller_trust_score: Decimal | None = None
-    low_trust: bool = False
-    review_count: int = 0
-    accuracy_pct: float | None = None
-    completeness_pct: float | None = None
-    customer_service_avg: float | None = None
-    packaging_avg: float | None = None
-    recommend_pct: float | None = None

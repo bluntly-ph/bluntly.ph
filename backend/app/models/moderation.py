@@ -4,7 +4,7 @@ Doubles as the platform AUDIT LOG (deviation/changelog): to honour the 15-table
 Data Dictionary we broaden this table's action enum to cover admin/audit actions
 (csv_import, payout, honesty_fund_distribution) rather than adding a 16th table.
 The target is polymorphic (`target_type` + `target_ref` UUID) since it can point
-at reviews, answers, seller_reviews, questions, or users.
+at reviews, answers, questions, or users.
 """
 
 from __future__ import annotations

@@ -129,7 +129,6 @@ class Settings(BaseSettings):
     # --- Trust visibility thresholds (M2 slice 4; defaults OFF for cold start) ---
     product_trust_visibility_threshold: float = 0.0
     product_trust_min_reviews: int = 5
-    seller_trust_visibility_threshold: float = 0.0
 
     # --- Fraud signals (M2 slice 5; advisory-only, never auto-block) ---
     duplicate_similarity_threshold: float = 0.85

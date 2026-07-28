@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Bluntly.ph API",
-    "description": "Verified product & seller review platform. All error responses use the RFC 9457 problem+json schema. Identity is a FastAPI-issued JWT (ADR-010).",
+    "description": "Verified product review platform. All error responses use the RFC 9457 problem+json schema. Identity is a FastAPI-issued JWT (ADR-010).",
     "version": "0.1.0"
   },
   "paths": {

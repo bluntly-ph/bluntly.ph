@@ -32,7 +32,7 @@ app = FastAPI(
     title="Bluntly.ph API",
     version=settings.app_version,
     description=(
-        "Verified product & seller review platform. All error responses use the "
+        "Verified product review platform. All error responses use the "
         "RFC 9457 problem+json schema. Identity is a FastAPI-issued JWT (ADR-010)."
     ),
     openapi_url="/openapi.json" if settings.enable_docs else None,
