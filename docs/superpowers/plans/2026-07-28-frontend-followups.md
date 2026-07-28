@@ -269,6 +269,20 @@ A capstone that documents a scope change defends better than one with a mileston
 
 Replace the `/sellers` bullet at `FRONTEND_MILESTONES.md:102-105` with a statement that the surface is fully removed, referencing the migration.
 
+- [ ] **Step 2b: Correct the M2 verification check count**
+
+`backend/scripts/verify_milestones.py` dropped from **49 checks to 48** — the "M2: Wilson trust rating for SELLERS + dimension averages" check went with the feature (Task 4b, commit `b0f8ba0`).
+
+Grep the docs for the old figure and correct every occurrence:
+
+```bash
+grep -rn "49" docs/MILESTONES.md docs/M2_TEST_PLAN.md docs/PRODUCTION.md docs/LOCAL_TESTING_GUIDE.md
+```
+
+Only change counts that genuinely refer to the milestone-verification total — `49` appears in other contexts and a blind replace would corrupt them. Where a count is stated, note the reason for the change alongside it rather than silently editing the number.
+
+Also add a caveat wherever the verification protocol is documented: the repaired script has been verified by inspection but **not yet executed against a live environment**, so the 48 figure is expected rather than observed. Remove that caveat once someone runs it for real.
+
 - [ ] **Step 3: Commit**
 
 ```bash
