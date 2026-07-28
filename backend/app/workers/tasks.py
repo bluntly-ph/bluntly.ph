@@ -28,7 +28,7 @@ def _session():
 
 @celery_app.task(name="app.workers.tasks.recompute_wilson_scores")
 def recompute_wilson_scores() -> dict:
-    """Nightly re-decay of review wilson scores + product/seller trust (M2 s2/s4)."""
+    """Nightly re-decay of review wilson scores + product trust (M2 s2/s4)."""
     from app.services import trust_rating_service, vote_service
 
     with _session() as db:

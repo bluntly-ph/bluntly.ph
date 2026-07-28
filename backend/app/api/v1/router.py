@@ -16,7 +16,6 @@ from app.api.v1.routes import (
     qa,
     requests,
     reviews,
-    sellers,
     tokens,
     users,
 )
@@ -30,7 +29,6 @@ api_v1_router.include_router(admin_earnings.router)
 api_v1_router.include_router(membership.router)
 api_v1_router.include_router(ai.router)
 api_v1_router.include_router(users.router)
-api_v1_router.include_router(sellers.router)
 api_v1_router.include_router(qa.router)
 api_v1_router.include_router(tokens.router)
 api_v1_router.include_router(requests.router)
