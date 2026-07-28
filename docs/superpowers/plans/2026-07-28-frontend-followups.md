@@ -1288,8 +1288,17 @@ Runs last so the gate blocks nothing else. By this point the seller API, model, 
 
 ```sql
 SELECT count(*) FROM seller_reviews;
+SELECT count(*) FROM users WHERE seller_trust_score IS NOT NULL OR seller_aggregates IS NOT NULL;
 ```
-Report the number to the owner. If it is non-trivial, stop and re-confirm before continuing.
+Report both numbers to the owner. If either is non-trivial, stop and re-confirm before continuing.
+
+- [ ] **Step 1b: Note the two vestigial user columns**
+
+Found during the algorithms-notebook review: `backend/app/models/user.py:120-122` still carries `seller_aggregates` and `seller_trust_score`, with zero references anywhere in `backend/app/`. They drop in this migration too — remove them from the model in the same commit.
+
+**`ModerationTargetType.seller_review` (`backend/app/models/enums.py:101`) STAYS.** Do not remove it and do not alter the Postgres enum type. Historical rows in the moderation audit log may reference that value, and dropping it would either fail or corrupt the audit trail. Add a one-line comment at that enum member recording that it is retained for historical moderation records only and is no longer issued.
+
+This is the one piece of "sellers must be gone" that deliberately does not go, and the reason is auditability rather than oversight.
 
 - [ ] **Step 2: Take a retained backup**
 
