@@ -59,6 +59,14 @@ attribution for Shopee/Lazada/Amazon**, **tier-based revenue split calculation**
 > errors) on **both** environments. Acceptance plan: `M2_TEST_PLAN.md`;
 > deviations §35–44 in `DEVIATIONS.md`.
 
+> **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
+> verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
+> seller directory. The frontend, API, model and table were removed;
+> `0021_drop_seller_reviews` drops the data (written, not yet applied). Product
+> trust ratings are unaffected. Frontend removal: `cf7afbc`; backend removal:
+> `8936dda`; types/remnants sweep: `9366a5b`; verification-script update:
+> `b0f8ba0`.
+
 ## Milestone 3 — Full System Delivery ✅ DONE — DEPLOYED (2026-07-25)
 **Request board** with AI validation and **dynamic reward calculation**, **earnings
 processing and payment scheduling by membership tier**, **contract duration tracking
@@ -87,6 +95,14 @@ and full system **deployed and production-ready**.
 > `supabase_verify` **57/59** — the 2 non-passes are a stale head-revision assertion in
 > the script (the DB is legitimately at `0018_user_interests`) and `email_otps` having no
 > RLS **by design** (backend hits it directly, not via the anon key). Neither is a defect.
+>
+> **Count correction (2026-07-28):** `verify_milestones.py` dropped from **49 checks
+> to 48** — the "M2: Wilson trust rating for SELLERS + dimension averages" check was
+> removed alongside the seller-ratings withdrawal above (`b0f8ba0`). The 49/49 figure
+> is the true result of the 2026-07-25 run, from before the check was dropped. The
+> script has been repaired and verified **by inspection only**; it has not yet been
+> re-executed against a live environment, so **48/48** is expected, not observed.
+> Remove this caveat once someone runs it for real.
 >
 > **Still pending (owner-supplied):** live PayPal **sandbox** verification — the manual
 > payout rail is live and verified; PayPal only needs the owner's credentials. Affiliate

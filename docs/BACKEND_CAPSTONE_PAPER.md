@@ -73,10 +73,10 @@ the codebase (§12).
 |---|---|---|
 | 1 | Proof-of-purchase verification | Photo-at-submission ⇒ `verification_status = verified`; unverified reviews can never be monetised (guard beyond spec, FR-3). |
 | 2 | Structured review format | `reviews` enforces discussion, `verdict` (yes_absolutely/it_depends/hard_pass), 1–5 stars, pros/cons (JSONB), title, photo. |
-| 3 | Four-dimension seller reviews | `seller_reviews`: accuracy + order_completeness (binary), customer_service + packaging_quality (1–5), overall rating, would-recommend. |
+| 3 | Four-dimension seller reviews | `seller_reviews`: accuracy + order_completeness (binary), customer_service + packaging_quality (1–5), overall rating, would-recommend. **Withdrawn 2026-07-28** — see §6.7. |
 | 4 | Hybrid incentive model | 40/30/30 split (`constants.py`); six-stage trust; moderator-gated `earn_eligible` routing ≥3★→affiliate, ≤2★→Honesty Fund. |
 | 5 | Community Q&A | `questions`/`answers` with buyer/seller routing, Best Answer, First Responder (schema + trust hooks present; UI is a separate track). |
-| 6 | Research consolidation | Verified reviews, seller reviews, community price observations (`price_history`, 3-observation rule), and product data in one API. |
+| 6 | Research consolidation | Verified reviews, seller reviews (**withdrawn 2026-07-28**, §6.7), community price observations (`price_history`, 3-observation rule), and product data in one API. |
 
 ---
 
@@ -184,7 +184,7 @@ testability choice, DEVIATIONS §6).
 | **Catalogue** | `products`, `product_platforms`, `price_history` |
 | **Reviews** | `reviews`, `review_versions`, `review_votes`, `referral_links` |
 | **Q&A** | `questions`, `answers` |
-| **Seller** | `seller_reviews` |
+| **Seller** | `seller_reviews` — **withdrawn 2026-07-28**, see §6.7 (table drop `0021_drop_seller_reviews`, written, not yet applied) |
 | **Attribution & money** | `sessions`, `commissions`, `honesty_fund_distributions`, `token_transactions`, `payouts` |
 | **Gate & moderation** | `earn_eligible_votes`, `moderation_logs` |
 | **M3 request/contract** | `review_requests`, `request_upvotes`, `review_contracts` |
@@ -276,6 +276,14 @@ there is no endpoint to set a stage directly. The public surface is
 recommendations, with per-dimension aggregates in JSONB. Config-driven visibility
 thresholds (default **off** for cold-start) can hide low-trust products from
 listings while keeping them fetchable by id with `low_trust: true`.
+
+> **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
+> verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
+> seller directory. The frontend, API, model and table were removed;
+> `0021_drop_seller_reviews` drops the data (written, not yet applied). **Product**
+> trust ratings (`products.trust_score`, first paragraph above) are unaffected and
+> remain live. Frontend removal: `cf7afbc`; backend removal: `8936dda`;
+> types/remnants sweep: `9366a5b`; verification-script update: `b0f8ba0`.
 
 ### 6.8 Fraud and collusion signals (M2 — advisory only)
 `fraud_service` computes, on read, for the moderator queue card only: **velocity**
@@ -522,6 +530,15 @@ Argon2id; the raw affiliate URL appears in no public body. The suite also uses
 **negative controls** — deliberately breaking an invariant to confirm the check
 fails — which previously surfaced two coverage gaps that were then closed.
 
+> **Post-report note (2026-07-28):** every "49/49" figure in this report (Abstract,
+> this table, §15, Appendix A) reflects `scripts/verify_milestones.py` as it stood
+> at the time of writing (2026-07-17), before the seller trust-ratings withdrawal.
+> That check ("M2: Wilson trust rating for SELLERS + dimension averages") was
+> removed with the feature (`b0f8ba0`), so the script now totals **48** checks. It
+> has been verified by inspection only, **not yet re-executed** against a live
+> environment — see `docs/MILESTONES.md` for the corrected, dated figure and
+> caveat. This report's historical figures are left as originally recorded.
+
 Coverage maps to the capstone's ISO/IEC 25010:2011 evaluation as follows:
 *functional suitability* and *reliability* via the integration and invariant suites;
 *performance efficiency* via the load test with pinned targets; *security* via the
@@ -544,6 +561,7 @@ Every divergence is catalogued in `docs/DEVIATIONS.md`; the principal ones:
 | Marketplace data | "Scrapy + proxy rotation" (M3 milestone text) | **no scraping, ever** — manual CSV of first-party reports | MILESTONES §resolution |
 | `commissions.review_id` | polymorphic TEXT | typed enum + real FKs with CHECK | DEVIATIONS §3 |
 | `reputation_score`, Wilson/decay params | undefined | defined, pinned, unit-tested | ADR-003/004 |
+| Seller trust ratings | delivered and verified in M2 (`seller_reviews`, `users.seller_trust_score`) | **withdrawn 2026-07-28** (owner decision): bluntly.ph is an affiliate-review platform, not a seller directory; frontend/API/model removed, table drop `0021_drop_seller_reviews` written but not yet applied | §6.7; `MILESTONES.md` |
 
 The single most consequential deviation is the **permanent rejection of the
 milestone's scraping pipeline**: it directly contradicts the anti-scraping mandate on

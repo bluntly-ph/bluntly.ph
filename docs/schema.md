@@ -30,7 +30,7 @@ migrated**; deviations from the original Data Dictionary are in
 | 7 | `reviews` | Structured reviews | `verdict`, `star_rating`, `pros/cons`(JSONB), `photo_url`, `receipt_url`, `verification_status`, `verification_tier`, `wilson_score`, `earn_eligible_status`, `affiliate_link` |
 | 8 | `questions` | Q&A questions | `directed_to`, `best_answer_id`(deferred FK, use_alter) |
 | 9 | `answers` | Q&A answers | `is_best_answer`, `is_first_responder`, `wilson_score`, **`earn_eligible`(unwired, ADR-006)** |
-| 10 | `seller_reviews` | 4-dimension seller reviews | `accuracy`, `order_completeness`(binary), `customer_service`, `packaging_quality`, `overall_rating`, `would_recommend` |
+| 10 | `seller_reviews` | 4-dimension seller reviews — **withdrawn 2026-07-28**, see note below | `accuracy`, `order_completeness`(binary), `customer_service`, `packaging_quality`, `overall_rating`, `would_recommend` |
 | 11 | `sessions` | Affiliate click tracking + PII lifecycle | `click_ref`/`order_ref`, `conversion_status`, `user_agent`, `ip_address`, `ip_hash`, precomputed `ua_purge_at`/`ip_hash_at`/`ip_delete_at` |
 | 12 | `commissions` | Reconciled commissions | `target_type`+typed `review_id`/`answer_id` FKs (CHECK), 40/30/30 shares, `uq(csv_source,row_reference)` (idempotency) |
 | 13 | `honesty_fund_distributions` | Monthly HF payouts | `cycle_month`, `honesty_score`, `pool_amount`, `payout_amount`, `uq(cycle_month,review_id)` |
@@ -78,6 +78,16 @@ slice 6). New constraint `uq_seller_review_once(seller_id, reviewer_id)` on
 `seller_reviews` (slice 4). Extension **`pg_trgm`** + GIN index
 `ix_reviews_discussion_trgm` on `reviews.discussion` (duplicate-content signal,
 slice 5).
+
+> **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
+> verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
+> seller directory. `seller_reviews`, `users.seller_trust_score`, and
+> `users.seller_aggregates` are removed from the frontend, API, and model;
+> `0021_drop_seller_reviews` drops the table (written, not yet applied). The
+> `uq_seller_review_once` constraint above went with the table. `products.trust_score`
+> (M2 slices 2–8 additions above) is unaffected. Frontend removal: `cf7afbc`;
+> backend removal: `8936dda`; types/remnants sweep: `9366a5b`; verification-script
+> update: `b0f8ba0`.
 
 ## M3 additions (21 → 24 tables; migrations 0010–0014)
 Documented late — these shipped with M3 but were missing from this file:

@@ -96,11 +96,13 @@ unreachable from IPv4 networks.
 ## 6. Data model (25 tables, `public` schema, all RLS-enabled)
 
 Core: `users` (profile + `role`/`membership_tier`/`reputation`/`wallet`/
-`token_balance`/`seller_trust_score`), `badges`, `user_badges`, `products`
+`token_balance`/`seller_trust_score` — **seller_trust_score withdrawn 2026-07-28,
+see §8b note**), `badges`, `user_badges`, `products`
 (+ `trust_score`), `product_platforms` (`is_monetizable`), `price_history`,
 `reviews`, `review_versions`, **`referral_links`**, **`review_votes`** (equal-weight
 community votes, M2 s2), `questions`, `answers`, `seller_reviews`
-(one per seller+reviewer), `sessions` (affiliate clicks + PII lifecycle),
+(one per seller+reviewer — **withdrawn 2026-07-28**, `0021_drop_seller_reviews`
+written not yet applied), `sessions` (affiliate clicks + PII lifecycle),
 `commissions` (+ tier snapshot columns), `honesty_fund_distributions`,
 `moderation_logs` (also the audit log), `earn_eligible_votes`,
 **`token_transactions`** (append-only ledger, M2 s7), `membership_tiers`,
@@ -183,6 +185,13 @@ outbound click is attributed.
   seller-review `would_recommend` + per-dimension aggregates in JSONB. Visibility
   thresholds are env-config, default OFF; a filtered product stays fetchable by id
   with `low_trust: true`; seller profiles are flagged, never hidden.
+  > **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
+  > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
+  > seller directory. The frontend, API, model and table were removed;
+  > `0021_drop_seller_reviews` drops the data (written, not yet applied). Product
+  > trust ratings (`products.trust_score`, above) are unaffected. Frontend removal:
+  > `cf7afbc`; backend removal: `8936dda`; types/remnants sweep: `9366a5b`;
+  > verification-script update: `b0f8ba0`.
 - **Fraud signals** (`fraud_service`, ADVISORY ONLY — FR-8): velocity (>10
   up-votes/h), collusion (≥5 up-voters, >0.6 reciprocated by the author),
   pg_trgm duplicate content (>0.85, same product/author). Computed on read for the
@@ -260,9 +269,10 @@ Reusable tool: `python -m scripts.api_smoke --base-url <url> [--concurrency]`
 - **Done:** M0 foundations · M1 core (auth, tiers, reviews+versions, AI critique) ·
   **M2 complete** (publication-gated referral flow · community voting + Wilson
   ranking · trust progression + badges · seller/product trust ratings +
-  thresholds · advisory fraud signals · commission CSV + tiered split · token
-  economy · Honesty Fund + PII retention job bodies) · production hardening ·
-  performance P0 (pool tuning, N+1 fix, 2 workers, threadpool knob).
+  thresholds (**seller half withdrawn 2026-07-28 — §8b**) · advisory fraud
+  signals · commission CSV + tiered split · token economy · Honesty Fund + PII
+  retention job bodies) · production hardening · performance P0 (pool tuning,
+  N+1 fix, 2 workers, threadpool knob).
 - **M3 built, NOT deployed:** request board (slice 9) · contracts (10) · payouts
   + PayPal adapter and manual rail (11) · real Shopee/Lazada report ingestion (12)
   · frontend readiness (13) · load test + acceptance plan (14). Schema 21 → 25

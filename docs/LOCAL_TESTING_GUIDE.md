@@ -7,8 +7,13 @@ install Python, set up a database, or have any passwords or API keys.
 **What you will prove:** that all three delivery milestones actually work —
 **M1** (accounts, login, reviews, version history, AI critique), **M2** (trust scores,
 voting, affiliate links, revenue split, token economy), and **M3** (request board,
-contracts, payouts, affiliate report ingestion). One command checks **49 separate
+contracts, payouts, affiliate report ingestion). One command checks **48 separate
 claims** and prints PASS or FAIL for each.
+
+> **Note (2026-07-28):** this was 49 claims until the seller trust-ratings feature
+> was withdrawn by owner decision and its verification check removed (`b0f8ba0`).
+> The script has been verified by inspection only — **48/48 is expected, not yet
+> observed** against a live run. Remove this note once someone runs it for real.
 
 Everything runs on your own machine, on a throwaway database. It touches nothing live,
 sends no email, and spends no money.
@@ -114,10 +119,11 @@ checks the results in the database.
 ending with:
 
 ```
-=== MILESTONE CLAIMS: 49/49 verified ===
+=== MILESTONE CLAIMS: 48/48 verified ===
 ```
 
-**49/49 means every M1, M2 and M3 claim passed.** If any line says `[FAIL]`, copy the
+**48/48 means every M1, M2 and M3 claim passed.** (Expected, not yet observed — see
+the note in Step 6's introduction.) If any line says `[FAIL]`, copy the
 whole output and send it to the team — that is exactly what they need.
 
 ---

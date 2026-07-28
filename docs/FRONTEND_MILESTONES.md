@@ -99,10 +99,13 @@ to production on Vercel (auto-deploy on `main`).
   backend milestones + their verification are in `MILESTONES.md`.
 
 ## Known, intentional non-goals / follow-ups
-- **No seller-facing frontend.** The backend models seller trust ratings (M2), but the
-  product is an affiliate-review platform, not a seller directory — so no seller pages
-  are surfaced (owner decision). A legacy `/sellers/[id]` route is unlinked and slated
-  for removal.
+- **Seller-facing frontend: fully removed (2026-07-28).** Seller trust ratings were a
+  delivered M2 milestone (backend, API, and this unlinked `/sellers/[id]` route), then
+  withdrawn by owner decision: bluntly.ph is an affiliate-review platform, not a
+  seller directory. The route, its form component, and the backend surface behind it
+  are deleted (`cf7afbc`, `8936dda`, `9366a5b`); the `seller_reviews` table drop is
+  migration `0021_drop_seller_reviews` (written, not yet applied). See
+  `docs/MILESTONES.md` for the full withdrawal note.
 - **Recent Reads / Bookmarks** — reader conveniences, not yet built (bookmarks need a
   backend surface).
 - **Real review photos** — cards/detail show a branded placeholder; enabling remote
