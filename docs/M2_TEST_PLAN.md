@@ -7,6 +7,12 @@ split, token economy, Honesty Fund + PII retention jobs. A tester can execute th
 end-to-end against a running backend without the dev team. Fill in the **Result**
 column (PASS / FAIL) and Notes.
 
+> **Withdrawn 2026-07-28 (owner decision).** Seller reviews / seller trust ratings
+> (Group C, rows C4–C8 below) were built and verified in M2, then removed:
+> bluntly.ph is an affiliate-review platform, not a seller directory. **Product**
+> trust ratings + visibility thresholds (rows C9–C11) are unaffected and still
+> executable. See the note under Group C for citations.
+
 - **Tester:** ______________  **Date:** __________  **Build/commit:** __________
 - **Run this plan against BOTH environments** (tick each when complete):
   ☐ **Local** (`http://localhost:8000`)  ☐ **Supabase-backed** (see M1 plan §0b — **required**)
@@ -58,19 +64,32 @@ curl -s -X POST $BASE/api/v1/admin/reviews/$RID/publish -H "$MODAUTH"
 
 ## Group C — Seller reviews, trust ratings, thresholds (slice 4)
 
+*(rows C4–C8: seller reviews / seller trust ratings — **withdrawn 2026-07-28**, see note below the table)*
+
 | # | Step | Expect | Result | Notes |
 |---|---|---|---|---|
 | C1 | `PATCH /api/v1/users/<uid>/role {"role":"seller"}` as user | 403 | | |
 | C2 | Same as moderator | 200, role seller; `moderation_logs` gets an `override` row | | |
 | C3 | Same with `{"role":"moderator"}` | 422 `role_not_grantable` | | |
-| C4 | `POST /api/v1/sellers/<seller-id>/reviews` (body: accuracy, order_completeness, customer_service 1-5, packaging_quality 1-5, overall_rating 1-5, would_recommend) | 201; visible immediately in `GET /sellers/<id>/reviews` | | |
-| C5 | Repeat C4 same reviewer | 409 `seller_review_exists` | | |
-| C6 | Review **yourself** as a seller | 409 | | |
-| C7 | Review a non-seller user | 404 `seller_not_found` | | |
-| C8 | `GET /api/v1/sellers/<seller-id>` | 200; seller_trust_score set; accuracy_pct/completeness_pct/customer_service_avg/packaging_avg/recommend_pct match the submitted reviews | | |
+| C4 | `POST /api/v1/sellers/<seller-id>/reviews` (body: accuracy, order_completeness, customer_service 1-5, packaging_quality 1-5, overall_rating 1-5, would_recommend) | 201; visible immediately in `GET /sellers/<id>/reviews` | **N/A — withdrawn** | **Withdrawn 2026-07-28** (owner decision) — route removed; passed when originally run. See note below. |
+| C5 | Repeat C4 same reviewer | 409 `seller_review_exists` | **N/A — withdrawn** | **Withdrawn 2026-07-28** (owner decision) — route removed; passed when originally run. See note below. |
+| C6 | Review **yourself** as a seller | 409 | **N/A — withdrawn** | **Withdrawn 2026-07-28** (owner decision) — route removed; passed when originally run. See note below. |
+| C7 | Review a non-seller user | 404 `seller_not_found` | **N/A — withdrawn** | **Withdrawn 2026-07-28** (owner decision) — route removed; passed when originally run. See note below. |
+| C8 | `GET /api/v1/sellers/<seller-id>` | 200; seller_trust_score set; accuracy_pct/completeness_pct/customer_service_avg/packaging_avg/recommend_pct match the submitted reviews | **N/A — withdrawn** | **Withdrawn 2026-07-28** (owner decision) — route removed; passed when originally run. See note below. |
 | C9 | `GET /api/v1/products/$PID` | carries `trust_score` (>0 after a ≥4★ published review) and `low_trust:false` | | |
 | C10 | Set `PRODUCT_TRUST_VISIBILITY_THRESHOLD=0.5`, `PRODUCT_TRUST_MIN_REVIEWS=1`, restart; list products | a product whose only published review is ≤3★ disappears from `GET /products`, still 200 by id with `low_trust:true`; `?include_low_trust=true` shows it | | |
 | C11 | Reset thresholds to 0 | listing shows everything again | | |
+
+> **Withdrawn 2026-07-28 (owner decision).** Rows C4–C8 tested seller reviews and
+> seller trust ratings (`POST/GET /api/v1/sellers/...`), which were built and
+> verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
+> seller directory. The frontend, API, model and table were removed;
+> `0021_drop_seller_reviews` drops the data (written, not yet applied). These rows
+> passed when originally run and are kept here as capstone evidence, not deleted.
+> Rows C1–C3 (role promotion) and C9–C11 (product trust ratings + visibility
+> thresholds) are unaffected and remain executable — product trust survives, only
+> seller trust was withdrawn. Frontend removal: `cf7afbc`; backend removal:
+> `8936dda`; verification-script update: `b0f8ba0`.
 
 ## Group D — Fraud signals (slice 5; ADVISORY ONLY)
 
