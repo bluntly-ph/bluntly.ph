@@ -138,26 +138,62 @@ git commit -m "refactor(api): remove seller ratings surface (owner decision)"
 
 ---
 
-### Task 3: Regenerate frontend API types
+### Task 3: Regenerate frontend API types and sweep the seller remnants
 
 **Files:**
 - Modify: `lib/api-types.d.ts` (generated from `docs/openapi.json`)
+- Modify: `backend/app/core/config.py` — remove `seller_trust_visibility_threshold`
+- Modify: `backend/app/schemas/user.py` — remove `SellerProfileOut`
+- Modify: `backend/app/main.py:35` — stale description prose
+- Modify: `backend/app/models/moderation.py:7` — stale docstring example
 
-- [ ] **Step 1: Regenerate**
+- [ ] **Step 1: Regenerate the types**
 
-Run: `npx openapi-typescript docs/openapi.json -o lib/api-types.d.ts`
-Expected: `/api/v1/sellers/...` paths (currently at `lib/api-types.d.ts:575,593`) are gone.
+Run: `npm run gen:api`
 
-- [ ] **Step 2: Typecheck**
+Use the package script, not a raw `npx` invocation — the script is the project's canonical command (`package.json:11`).
+Expected: `/api/v1/sellers/...` paths (previously at `lib/api-types.d.ts:575,593`) are gone.
+
+- [ ] **Step 2: Remove the dead seller config and schema**
+
+Task 2 left these deliberately, as they were out of its brief's scope. The owner's decision is that sellers are gone entirely, so they go now.
+
+- `backend/app/core/config.py` — delete the `seller_trust_visibility_threshold` setting. Grep for it first: if anything still reads it, resolve that too.
+- `backend/app/schemas/user.py` — delete the `SellerProfileOut` class. Grep for it first; it should have no importers now that `routes/sellers.py` is gone.
+
+- [ ] **Step 3: Fix the two stale prose references**
+
+- `backend/app/main.py:35` reads "Verified product & seller review platform..." — drop "& seller".
+- `backend/app/models/moderation.py:7` lists `seller_reviews` as a moderation-target example — replace it with a target that still exists.
+
+These are cosmetic, but the FastAPI description at `main.py:35` is published in the OpenAPI schema and visible to anyone reading the API docs.
+
+- [ ] **Step 4: Verify**
 
 Run: `npx tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+Run: `cd backend && .venv/Scripts/python.exe -c "from app.main import app; print(len(app.routes))"`
+Expected: a route count, no ImportError.
+
+Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/test_openapi_contract.py -q`
+Expected: PASS.
+
+- [ ] **Step 5: Regenerate the schema once more**
+
+`main.py:35` feeds the OpenAPI description, so `docs/openapi.json` must be regenerated after editing it:
 
 ```bash
-git add lib/api-types.d.ts
-git commit -m "chore(types): regenerate API types after seller removal"
+cd backend && .venv/Scripts/python.exe -c "import json;from app.main import app;json.dump(app.openapi(),open('../docs/openapi.json','w'),indent=2)"
+```
+
+Then re-run `npm run gen:api` so the committed types match the committed schema.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add lib/api-types.d.ts backend/app docs/openapi.json
+git commit -m "chore: regenerate API types and sweep seller remnants"
 ```
 
 ---
