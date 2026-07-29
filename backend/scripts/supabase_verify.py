@@ -23,6 +23,7 @@ import argparse
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -41,7 +42,26 @@ from app.main import app  # noqa: E402
 _RESULTS: list[tuple[bool, str, str]] = []
 PW = "password123"
 
-HEAD_REVISION = "0014_schema_parity"
+def _alembic_head() -> str:
+    """The head revision, read from the migration scripts themselves.
+
+    This was a hand-typed constant and it drifted — pinned at 0014 while the
+    database legitimately advanced to 0019, so the check reported a failure on
+    every run and taught the reader to ignore it. Deriving it means the check
+    asserts what it claims to: that the DB is at the head this checkout defines.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    heads = ScriptDirectory.from_config(
+        Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    ).get_heads()
+    if len(heads) != 1:
+        raise RuntimeError(f"expected a single alembic head, found {heads}")
+    return heads[0]
+
+
+HEAD_REVISION = _alembic_head()
 
 # Every path that moves users.wallet_balance. Keep this in step with the code —
 # an invariant that ignores a money path is worse than no invariant.

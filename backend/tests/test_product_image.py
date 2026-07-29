@@ -9,11 +9,10 @@ genuinely untrusted.
 
 from __future__ import annotations
 
-import uuid
 import pytest
 
 from app.core.errors import AppError
-from app.services.storage import validate_product_image, MAX_PRODUCT_IMAGE_BYTES
+from app.services.storage import MAX_PRODUCT_IMAGE_BYTES, validate_product_image
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 

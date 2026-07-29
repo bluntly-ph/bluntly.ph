@@ -22,7 +22,7 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from html.parser import HTMLParser
 
@@ -192,7 +192,7 @@ def main() -> None:
             else:
                 product.image_url = upload_product_image(product.id, data)
                 product.image_source = ImageSource.seeded
-                product.image_fetched_at = datetime.now(timezone.utc)
+                product.image_fetched_at = datetime.now(UTC)
                 db.commit()
                 hits += 1
                 print(f"  -> {product.image_url}")

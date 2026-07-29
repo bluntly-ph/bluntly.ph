@@ -9,7 +9,7 @@ trust system; here we set the flags and award the badges.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -117,7 +117,8 @@ def list_questions(
     return [
         QuestionOut(
             id=q.id, question_id=q.question_id, product_id=q.product_id,
-            product_name=(products[q.product_id].canonical_name if q.product_id in products else None),
+            product_name=(products[q.product_id].canonical_name
+                          if q.product_id in products else None),
             body=q.body, directed_to=q.directed_to, best_answer_id=q.best_answer_id,
             answer_count=counts.get(q.id, 0), created_at=q.created_at,
             asker=_author(askers.get(q.asker_id)),
@@ -161,7 +162,7 @@ def create_answer(
     prior = db.scalar(
         select(func.count(Answer.id)).where(Answer.question_id == question.id)
     )
-    age = datetime.now(timezone.utc) - question.created_at
+    age = datetime.now(UTC) - question.created_at
     is_first = prior == 0 and age <= FIRST_RESPONDER_WINDOW
 
     answer = Answer(

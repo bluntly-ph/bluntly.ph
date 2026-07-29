@@ -68,6 +68,9 @@ ignore = ["B008", "UP042"]
 [tool.ruff.lint.per-file-ignores]
 # Manual smoke-test tool: a linear assertion checklist where long lines read fine.
 "scripts/api_smoke.py" = ["E501"]
+# Seed data: the long lines are review/answer prose inside SQL literals. Wrapping
+# them would split sentences mid-clause to satisfy a limit meant for code.
+"scripts/reset_and_seed.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -18,7 +18,7 @@ Run: python -m scripts.seed_showcase
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.db.session import SessionLocal
@@ -36,7 +36,7 @@ from app.models.enums import (
 from app.models.product import ProductPlatform
 from app.models.review import ReferralLink, Review
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 def _u(n: int) -> uuid.UUID:
