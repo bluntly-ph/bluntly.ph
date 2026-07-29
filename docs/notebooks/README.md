@@ -31,21 +31,23 @@ cell and run it first.
 ```python
 # --- Colab bootstrap: fetch the code the notebook documents -------------------
 !git clone --depth 1 https://github.com/bluntly-ph/bluntly.ph.git
-%cd bluntly.ph
-!pip install -q ./backend
+!pip install -q ./bluntly.ph/backend
 ```
 
-Three details, each of which breaks the run if skipped:
+No `%cd` needed. The setup cell searches upwards from `Path.cwd()` for
+`backend/app/services/ranking.py` and then one level downwards, because a hosted runtime
+starts the kernel outside the checkout: Colab opens in `/content` and the clone lands in
+`/content/bluntly.ph`, which is below the working directory, never above it. Both layouts
+resolve.
 
-1. **`%cd bluntly.ph` is required.** The setup cell finds the repository by walking *up*
-   from `Path.cwd()` looking for `backend/app/services/ranking.py`. Colab starts in
-   `/content`; the clone lands in `/content/bluntly.ph`, which is *down*, not up. Without
-   the `%cd` the cell raises `RuntimeError: repository root not found`.
-2. **`pip install ./backend` uses the real manifest** (`backend/pyproject.toml`), so the
-   dependency set cannot drift from what the backend actually declares. It pulls more than
-   the notebook strictly needs — psycopg, celery, redis, supabase — and takes a minute or
-   two. That is the price of not maintaining a second, forkable list.
-3. **Restart the runtime if Colab asks.** `pip install` may upgrade a package Colab
+Two details that still matter:
+
+1. **`pip install ./bluntly.ph/backend` uses the real manifest**
+   (`backend/pyproject.toml`), so the dependency set cannot drift from what the backend
+   actually declares. It pulls more than the notebook strictly needs — psycopg, celery,
+   redis, supabase — and takes a minute or two. That is the price of not maintaining a
+   second, forkable list.
+2. **Restart the runtime if Colab asks.** `pip install` may upgrade a package Colab
    preloaded; the imports are only safe after the restart.
 
 Colab already ships matplotlib, so the plotting cell needs nothing.
