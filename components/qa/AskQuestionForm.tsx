@@ -19,13 +19,11 @@ export function AskQuestionForm() {
   const [directedTo, setDirectedTo] = useState<"buyers" | "seller">("buyers");
   const [error, setError] = useState<string | null>(null);
 
+  const query = q.trim();
+  const searching = !product && query.length >= 2;
+
   useEffect(() => {
-    if (product) return;
-    const query = q.trim();
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!searching) return;
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
@@ -37,7 +35,12 @@ export function AskQuestionForm() {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [q, product]);
+  }, [query, searching]);
+
+  // Derived, not stored: results from a previous query must not survive into a
+  // query that no longer qualifies. Clearing via setState inside the effect body
+  // would trigger a cascading render (react-hooks/set-state-in-effect).
+  const visibleResults = searching ? results : [];
 
   async function createProduct() {
     if (!q.trim() || creating) return;
@@ -122,7 +125,7 @@ export function AskQuestionForm() {
               />
             </div>
             <ul className="mt-3 flex flex-col gap-2">
-              {results.map((p) => (
+              {visibleResults.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
@@ -136,7 +139,7 @@ export function AskQuestionForm() {
                   </button>
                 </li>
               ))}
-              {q.trim().length >= 2 ? (
+              {query.length >= 2 ? (
                 <li>
                   <button
                     type="button"

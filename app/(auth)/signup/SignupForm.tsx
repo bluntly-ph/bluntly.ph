@@ -19,11 +19,18 @@ const EMPTY: FormState = {};
  * corrected rather than shipping a promise the product does not keep
  * (docs/DEVIATIONS.md #59).
  */
-export function SignupForm({ purpose }: { purpose: "signup" | "login" }) {
+export function SignupForm({
+  purpose,
+  next,
+}: {
+  purpose: "signup" | "login";
+  /** Destination to return to after sign-in, from `?next=` (see proxy.ts). */
+  next?: string;
+}) {
   const [sendState, sendAction, sending] = useActionState(requestOtp, EMPTY);
 
   return sendState.emailSent ? (
-    <CodeStep email={sendState.emailSent} purpose={purpose} />
+    <CodeStep email={sendState.emailSent} purpose={purpose} next={next} />
   ) : (
     <form action={sendAction} className="contents">
       <AuthSheet
@@ -74,9 +81,11 @@ export function SignupForm({ purpose }: { purpose: "signup" | "login" }) {
 function CodeStep({
   email,
   purpose,
+  next,
 }: {
   email: string;
   purpose: "signup" | "login";
+  next?: string;
 }) {
   const [verifyState, verifyAction, verifying] = useActionState(verifyOtp, EMPTY);
   const [resendState, resendAction, resending] = useActionState(requestOtp, EMPTY);
@@ -99,6 +108,9 @@ function CodeStep({
         <input type="hidden" name="email" value={email} />
         {/* Read by the resend action, which shares this form. */}
         <input type="hidden" name="purpose" value={purpose} />
+        {/* Survives the OTP round-trip so verifyOtp can return the user to
+            wherever the auth guard interrupted them. */}
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <h1 className="text-[20px] font-medium text-[var(--text-primary)]">
           Enter the code
         </h1>

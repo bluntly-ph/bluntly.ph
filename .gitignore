@@ -53,3 +53,12 @@ backend/.ruff_cache/
 
 .vercel
 .env*
+
+# playwright mcp — screenshots, traces, downloads from verification runs
+.playwright-mcp/
+
+# playwright test runner
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

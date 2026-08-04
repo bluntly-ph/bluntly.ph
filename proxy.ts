@@ -17,8 +17,27 @@ import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME ?? "bluntly_session";
 
-/** Routes that require a session. */
-const PROTECTED = ["/dashboard", "/profile", "/settings", "/admin"];
+/**
+ * Routes that require a session.
+ *
+ * Every route guarded by `requireUser`/`requireRole` belongs here. Those guards
+ * redirect to a bare `/login` because a Server Component cannot see its own
+ * pathname — so a route missing from this list still ends up at the login page,
+ * just without the `?next=` that brings the user back. Someone who clicks
+ * "Write a review" while signed out should land on the review form after
+ * signing in, not on the homepage.
+ */
+const PROTECTED = [
+  "/dashboard",
+  "/profile",
+  "/settings",
+  "/admin",
+  "/moderate",
+  "/onboarding",
+  "/reviews/new",
+  "/questions/new",
+  "/requests/new",
+];
 
 /** Routes that make no sense while already signed in. */
 const AUTH_ONLY = ["/login", "/signup", "/welcome"];

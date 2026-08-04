@@ -7,6 +7,22 @@
     "claude_design": {
       "type": "http",
       "url": "https://api.anthropic.com/v1/design/mcp"
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated",
+        "--browser",
+        "chrome",
+        "--viewport-size",
+        "1280,900",
+        "--output-dir",
+        ".playwright-mcp"
+      ]
     }
   }
 }

@@ -118,6 +118,10 @@ export async function verifyOtp(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  // Where the user was headed before the guard bounced them to /login. Passed
+  // through both OTP steps as a hidden field; `safeNext` rejects anything that
+  // is not an internal path.
+  const next = safeNext(formData.get("next"));
   let onboarded = false;
   try {
     const token = await apiFetch<TokenResponse>("/api/v1/auth/otp/verify", {
@@ -133,7 +137,7 @@ export async function verifyOtp(
     // `purpose` alone — a signup that abandoned onboarding and later returns via
     // /login is still unfinished. The reliable signal is whether they have
     // picked interests, which only completeOnboarding sets. Returning members
-    // land on the home page; genuinely new accounts go through onboarding.
+    // land where they were headed; genuinely new accounts go through onboarding.
     const me = await apiFetch<{ interests: string[] | null }>(
       "/api/v1/auth/me",
       { token: token.access_token },
@@ -142,7 +146,9 @@ export async function verifyOtp(
   } catch (error) {
     return toFormState(error);
   }
-  redirect(onboarded ? "/" : "/onboarding");
+  // Onboarding wins over `next`: an unfinished account has to finish setup
+  // before it can do anything useful at the destination anyway.
+  redirect(onboarded ? next : "/onboarding");
 }
 
 export async function logout(): Promise<void> {

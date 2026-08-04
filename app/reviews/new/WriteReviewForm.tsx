@@ -56,12 +56,11 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  const query = q.trim();
+  const searching = query.length >= 2;
+
   useEffect(() => {
-    const query = q.trim();
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!searching) return;
     const t = setTimeout(async () => {
       setBusy(true);
       try {
@@ -76,7 +75,12 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [query, searching]);
+
+  // Derived, not stored: results from a previous query must not survive into a
+  // query that no longer qualifies. Clearing via setState inside the effect body
+  // would trigger a cascading render (react-hooks/set-state-in-effect).
+  const visibleResults = searching ? results : [];
 
   async function createAndPick() {
     if (!q.trim() || creating) return;
@@ -117,7 +121,7 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
       </div>
 
       <ul className="mt-4 flex flex-col gap-2">
-        {results.map((p) => (
+        {visibleResults.map((p) => (
           <li key={p.id}>
             <button
               type="button"
@@ -136,7 +140,7 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
             </button>
           </li>
         ))}
-        {q.trim().length >= 2 && !busy ? (
+        {searching && !busy ? (
           <li>
             <button
               type="button"
