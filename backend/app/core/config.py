@@ -156,6 +156,29 @@ class Settings(BaseSettings):
     paypal_secret: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
+    # --- Lazada affiliate integration (M3 slice 12) ---
+    # Postback: Lazada's macro set carries NO request signature, so the only thing
+    # standing between the endpoint and forged conversions is this shared secret.
+    # It must be long and random, and it is why postbacks never create money —
+    # see app/services/postback_service.py.
+    lazada_postback_secret: str = ""
+    # Open API (signed) — the trustworthy source, used to reconcile into commissions.
+    lazada_app_key: str = ""
+    lazada_app_secret: str = ""
+    lazada_user_token: str = ""
+    lazada_api_base: str = "https://api.lazada.com.ph/rest"
+    # Conversions older than this are not re-pulled on a routine sync.
+    lazada_sync_lookback_days: int = 7
+
+    @property
+    def lazada_postback_enabled(self) -> bool:
+        return bool(self.lazada_postback_secret)
+
+    @property
+    def lazada_api_enabled(self) -> bool:
+        return bool(self.lazada_app_key and self.lazada_app_secret
+                    and self.lazada_user_token)
+
     # --- Email + OTP (Slice 1 Phase A) ---
     email_provider: str = "console"      # console | resend
     resend_api_key: str = ""
@@ -289,6 +312,11 @@ class Settings(BaseSettings):
                 self.paypal_client_id and self.paypal_secret):
             issues.append("PAYOUT_PROVIDER=paypal_live requires PAYPAL_CLIENT_ID "
                           "and PAYPAL_SECRET.")
+        # The postback URL is public and Lazada signs nothing, so a short or absent
+        # secret means anyone who guesses the path can fabricate conversion rows.
+        if self.lazada_postback_secret and len(self.lazada_postback_secret) < 32:
+            issues.append("LAZADA_POSTBACK_SECRET must be >= 32 chars; it is the only "
+                          "thing authenticating a public, unsigned postback endpoint.")
         if self.payout_provider == "paypal_live" and "sandbox" in self.paypal_base_url:
             issues.append("PAYOUT_PROVIDER=paypal_live but PAYPAL_BASE_URL still "
                           "points at the sandbox.")

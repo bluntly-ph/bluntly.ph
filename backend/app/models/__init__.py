@@ -11,6 +11,7 @@ from app.models.membership import MembershipTierConfig  # noqa: F401
 from app.models.moderation import ModerationLog  # noqa: F401
 from app.models.otp import EmailOtp  # noqa: F401
 from app.models.payout import Payout  # noqa: F401
+from app.models.postback import AffiliatePostback  # noqa: F401
 from app.models.product import PriceHistory, Product, ProductPlatform  # noqa: F401
 from app.models.qa import Answer, Question  # noqa: F401
 from app.models.request_board import RequestUpvote, ReviewRequest  # noqa: F401
@@ -27,4 +28,5 @@ __all__ = [
     "Session", "Commission", "HonestyFundDistribution",
     "ModerationLog", "EarnEligibleVote", "ReviewVote", "TokenTransaction",
     "ReviewRequest", "RequestUpvote", "ReviewContract", "Payout", "EmailOtp",
+    "AffiliatePostback",
 ]

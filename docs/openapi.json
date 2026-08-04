@@ -3906,6 +3906,29 @@
           }
         }
       }
+    },
+    "/api/v1/postback/lazada": {
+      "get": {
+        "tags": [
+          "postback"
+        ],
+        "summary": "Lazada order postback (public, shared-secret auth)",
+        "operationId": "lazada_postback_api_v1_postback_lazada_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Lazada Postback Api V1 Postback Lazada Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

@@ -12,6 +12,7 @@ from app.api.v1.routes import (
     contracts,
     membership,
     payouts,
+    postback,
     products,
     qa,
     requests,
@@ -34,3 +35,4 @@ api_v1_router.include_router(tokens.router)
 api_v1_router.include_router(requests.router)
 api_v1_router.include_router(contracts.router)
 api_v1_router.include_router(payouts.router)
+api_v1_router.include_router(postback.router)

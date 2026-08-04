@@ -38,6 +38,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.services.trust import helpfulness_score  # noqa: E402
 
 _RESULTS: list[tuple[bool, str, str]] = []
 PW = "password123"
@@ -93,6 +94,8 @@ EXPECTED_TABLES = {
     "membership_tiers", "review_votes", "token_transactions", "alembic_version",
     # M3 slices 9 / 10 / 11
     "review_requests", "request_upvotes", "review_contracts", "payouts",
+    # M3 slice 12 — marketplace conversion postbacks (Lazada)
+    "affiliate_postbacks",
 }
 
 EXPECTED_TOKEN_KINDS = {
@@ -366,9 +369,13 @@ def verify_flow(db, client: TestClient, keep: bool) -> None:
     urow = q(db, """SELECT trust_stage, trust_level_name, verified_review_count,
                            helpfulness_ratio FROM users WHERE id = :uid""",
              uid=author_id).first()
-    check("DB: author trust recomputed (stage 2 'Verified Buyer', 100% helpful)",
+    # ADR-014: a single up-vote scores its Wilson lower bound (20.65), not 100 —
+    # the raw proportion this used to assert is the defect that ADR fixed.
+    expected_helpfulness = helpfulness_score(1, 0)
+    check(f"DB: author trust recomputed (stage 2 'Verified Buyer', "
+          f"{expected_helpfulness}% helpful)",
           urow is not None and urow[0] == 2 and urow[1] == "Verified Buyer"
-          and urow[2] == 1 and float(urow[3]) == 100.0, str(urow))
+          and urow[2] == 1 and float(urow[3]) == expected_helpfulness, str(urow))
     brow = q(db, """SELECT count(*) FROM user_badges ub JOIN badges b ON b.id = ub.badge_id
                     WHERE ub.user_id = :uid AND b.badge_id = 'verified_buyer'""",
              uid=author_id).scalar()

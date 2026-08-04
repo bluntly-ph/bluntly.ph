@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -232,6 +232,39 @@ def unpublish(db: Session, review: Review, moderator_id: uuid.UUID,
 
 
 # --- Click attribution (§3 GET /r/{id}) ---
+
+# Marketplaces that echo custom sub-IDs back to us on conversion. Lazada does so
+# through its postback macros and its /marketing/conversion/report API; Shopee's
+# programme has no equivalent, so its links are passed through untouched and
+# reconciled from the monthly CSV.
+_SUB_ID_PLATFORMS = {Platform.lazada}
+
+
+def decorate_affiliate_url(url: str, platform: Platform, sub_id: str | None,
+                           click_ref: str) -> str:
+    """Append our attribution keys to an outbound affiliate URL.
+
+    `sub_id1` carries the review, `sub_id2` the individual click. Without
+    `sub_id2` a conversion can only be traced to the review — which is what the
+    monthly CSV already gives us — so this is what buys per-click attribution.
+
+    Existing parameters win: if the moderator already typed a `sub_id1` into the
+    dashboard when generating the link, theirs is what Lazada has on file and
+    overwriting it here would break their reporting. Lazada's own guidance also
+    reserves `sub_aff_id` for sub-affiliate channels, so it is never used as a
+    click id (their troubleshooting note #4).
+    """
+    if platform not in _SUB_ID_PLATFORMS:
+        return url
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if sub_id and not query.get("sub_id1"):
+        query["sub_id1"] = sub_id
+    if not query.get("sub_id2"):
+        query["sub_id2"] = click_ref
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def record_click(db: Session, review: Review, link: ReferralLink,
                  user_id: uuid.UUID | None, user_agent: str | None,
                  ip_address: str | None) -> str:
@@ -239,17 +272,21 @@ def record_click(db: Session, review: Review, link: ReferralLink,
     destination affiliate URL to redirect to."""
     now = _now()
     deadlines = retention_deadlines(now)
+    click_ref = f"ref_{uuid.uuid4().hex[:12]}"
+    destination = decorate_affiliate_url(link.url, link.platform, link.sub_id, click_ref)
     db.add(ClickSession(
         session_id=f"clk_{uuid.uuid4().hex[:12]}",
         review_id=review.id, product_id=review.product_id, user_id=user_id,
-        destination_url=link.url, platform=link.platform,
-        click_ref=f"ref_{uuid.uuid4().hex[:12]}",
+        # Store where the user was actually sent, decoration included — otherwise
+        # a support question about a conversion cannot be answered from the row.
+        destination_url=destination, platform=link.platform,
+        click_ref=click_ref,
         clicked_at=now, user_agent=user_agent, ip_address=ip_address,
         ua_purge_at=deadlines["ua_purge_at"], ip_hash_at=deadlines["ip_hash_at"],
         ip_delete_at=deadlines["ip_delete_at"],
     ))
     db.commit()
-    return link.url
+    return destination
 
 
 # --- Moderator queue (§3 GET /admin/review-queue) ---
