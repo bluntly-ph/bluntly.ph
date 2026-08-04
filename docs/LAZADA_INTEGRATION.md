@@ -38,12 +38,22 @@ is refused by `settings.production_issues()`.
 - **PostBack URL:** one line, no spaces, `<SECRET>` from `.env`:
 
 ```
-https://bluntly.ph/api/v1/postback/lazada?t=<SECRET>&c={sub_id2}&r={sub_id1}&o={_p_transaction}&so={_p_sub_transaction}&s={_p_status}
+https://www.bluntly.ph/api/v1/postback/lazada?t=<SECRET>&c={sub_id2}&r={sub_id1}&o={_p_transaction}&so={_p_sub_transaction}&s={_p_status}
 ```
 
-Replace `bluntly.ph` with whatever domain the Vercel deployment answers on.
+**Use `www.`** — verified 2026-08-04, the apex `bluntly.ph` answers **308** and
+redirects to `www.bluntly.ph`. The query string does survive that redirect, so it
+works if Lazada's fetcher follows redirects; but nothing in their documentation
+promises it does, and a silently-unfollowed postback looks identical to no
+conversion at all. Point at the canonical host and the question never arises.
+
 `vercel.json` routes `/api/v1/*` to the FastAPI service, so this reaches the
 backend without any extra hosting.
+
+**`LAZADA_POSTBACK_SECRET` must be set in Vercel** (Production scope) before this
+works. Unset, the endpoint answers **503** rather than running unauthenticated —
+that is the fail-closed behaviour, not a bug, but Run Test will fail until the
+variable exists and the deployment has picked it up.
 
 ### Why the URL cannot just be `/postback/lazada`
 
