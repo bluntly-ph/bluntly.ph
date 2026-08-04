@@ -59,7 +59,7 @@ curl -s -X POST $BASE/api/v1/admin/reviews/$RID/publish -H "$MODAUTH"
 | B1 | `GET /api/v1/users/<author-id>/trust` (public, no auth) | 200; shape: trust_stage, trust_level_name, reputation_score, verified_review_count, helpfulness_ratio, badges[] | | |
 | B2 | After the seed publish (verified review) | `trust_stage: 2`, name "Verified Buyer", `verified_review_count: 1`, badge `verified_buyer` present exactly once | | |
 | B3 | Publish a 2nd verified review by the same author | still exactly one `verified_buyer` badge | | |
-| B4 | After A8's up-votes | `helpfulness_ratio: 100`; reputation_score rises (60 helpfulness pts + volume pts) | | |
+| B4 | After A8's up-votes | `helpfulness_ratio` = Wilson lower bound of the vote record, **not** 100 (ADR-014): 1 up-vote → `20.65`, 3 → `43.85`. reputation_score rises by `0.60 ×` that, plus volume pts | | |
 | B5 | Confirm there is **no** endpoint to set trust_stage directly (check `/docs`) | none exists | | |
 
 ## Group C — Seller reviews, trust ratings, thresholds (slice 4)

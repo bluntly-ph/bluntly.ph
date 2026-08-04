@@ -6,6 +6,7 @@ import uuid as _uuid
 
 from sqlalchemy import func, select
 
+from app.services.trust import helpfulness_score
 from tests.conftest import register_and_token, requires_db
 
 
@@ -69,10 +70,11 @@ def test_vote_upsert_delete_and_counters(client):
     assert float(up["wilson_score"]) > 0
 
     # Regression (autoflush=False): the author's helpfulness must reflect this
-    # FIRST vote in the same transaction, not lag one vote behind.
+    # FIRST vote in the same transaction, not lag one vote behind. Post-ADR-014
+    # a lone up-vote scores its Wilson lower bound (20.65), not 100.
     author_id = client.get("/api/v1/auth/me", headers=ah).json()["id"]
     trust = client.get(f"/api/v1/users/{author_id}/trust").json()
-    assert float(trust["helpfulness_ratio"]) == 100.0
+    assert float(trust["helpfulness_ratio"]) == helpfulness_score(1, 0)
 
     # Change direction — upsert, not a second row.
     down = client.post(f"/api/v1/reviews/{rid}/vote", headers=vh, json={"vote": "down"}).json()
@@ -126,6 +128,8 @@ def test_wilson_sort_and_author_helpfulness(client):
     ids = [r["id"] for r in listed]
     assert ids.index(popular) < ids.index(plain)
 
-    # Author helpfulness: 3 helpful / 0 unhelpful -> 100.
+    # Author helpfulness: 3 helpful / 0 unhelpful -> Wilson lower bound (ADR-014),
+    # which discounts the small sample rather than scoring it a perfect 100.
     trust = client.get(f"/api/v1/users/{author_id}/trust").json()
-    assert float(trust["helpfulness_ratio"]) == 100.0
+    assert float(trust["helpfulness_ratio"]) == helpfulness_score(3, 0)
+    assert float(trust["helpfulness_ratio"]) < 100.0

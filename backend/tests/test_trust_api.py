@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import uuid as _uuid
 
+from app.services.trust import W_HELPFULNESS, helpfulness_score
 from tests.conftest import register_and_token, requires_db
 from tests.test_votes_api import make_published_review
 
@@ -72,13 +73,18 @@ def test_reputation_score_matches_adr003_formula(client):
     trust = client.get(f"/api/v1/users/{uid}/trust").json()
     assert float(trust["reputation_score"]) == expected_no_votes
 
-    # Three up-votes -> helpfulness 100 -> +60 points.
+    # Three up-votes. Post-ADR-014 helpfulness is the Wilson lower bound of 3/3
+    # (43.85), not a raw 100 — so the helpfulness component is 0.60 x that, and a
+    # three-vote record no longer maxes the 60-point band.
     for _ in range(3):
         _, tok, _ = register_and_token(client)
         assert client.post(f"/api/v1/reviews/{rid}/vote", headers=_auth(tok),
                            json={"vote": "up"}).status_code == 200
     trust = client.get(f"/api/v1/users/{uid}/trust").json()
-    assert float(trust["reputation_score"]) == round(60.0 + expected_no_votes, 2)
+    expected_helpfulness = helpfulness_score(3, 0)
+    assert float(trust["helpfulness_ratio"]) == expected_helpfulness
+    assert float(trust["reputation_score"]) == round(
+        W_HELPFULNESS * expected_helpfulness + expected_no_votes, 2)
 
 
 @requires_db

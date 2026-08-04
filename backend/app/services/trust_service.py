@@ -20,7 +20,12 @@ from app.models.enums import VerificationStatus
 from app.models.review import Review
 from app.models.user import Badge, User, UserBadge
 from app.models.vote import ReviewVote
-from app.services.trust import determine_stage, reputation_score
+from app.services.trust import (
+    determine_stage,
+    evidence_capped_stage,
+    helpfulness_score,
+    reputation_score,
+)
 
 # trust_stage -> seeded badge_id awarded on reaching it (no removal on drop).
 STAGE_BADGES = {
@@ -76,7 +81,7 @@ def recompute_user_trust(db: Session, user_id: uuid.UUID) -> None:
         .where(Review.author_id == user_id, published)
     ).one()
     total_votes = helpful + unhelpful
-    helpfulness = round(100.0 * helpful / total_votes, 2) if total_votes else 0.0
+    helpfulness = helpfulness_score(helpful, unhelpful)
 
     created_at = user.created_at
     if created_at.tzinfo is None:
@@ -93,13 +98,16 @@ def recompute_user_trust(db: Session, user_id: uuid.UUID) -> None:
     ), 2)
 
     old_stage = user.trust_stage
-    new_stage = determine_stage(
-        review_count=review_count,
-        verified_review_count=verified_count,
-        helpfulness_ratio=helpfulness,
-        best_answer_count=user.best_answer_count,
-        strikes=user.strikes,
-        months_active=months_active,
+    new_stage = evidence_capped_stage(
+        determine_stage(
+            review_count=review_count,
+            verified_review_count=verified_count,
+            helpfulness_ratio=helpfulness,
+            best_answer_count=user.best_answer_count,
+            strikes=user.strikes,
+            months_active=months_active,
+        ),
+        total_votes=total_votes,
     )
     user.trust_stage = new_stage
     if new_stage > old_stage:

@@ -36,6 +36,44 @@ def test_stage_4_blocked_by_strike():
     assert T.determine_stage(20, 15, 85, 3, 1, 2) == 3  # a strike drops below Stage 4
 
 
+def test_helpfulness_discounts_small_samples():
+    """ADR-014: a lone up-vote must not score as a perfect record."""
+    assert T.helpfulness_score(0, 0) == 0.0
+    assert T.helpfulness_score(1, 0) == 20.65
+    assert T.helpfulness_score(3, 0) == 43.85
+    # Confidence grows with evidence at a constant success rate.
+    assert (T.helpfulness_score(1, 0) < T.helpfulness_score(10, 0)
+            < T.helpfulness_score(100, 0) < 100.0)
+    # And a large good record beats a tiny perfect one — the ordering the raw
+    # proportion got backwards.
+    assert T.helpfulness_score(85, 15) > T.helpfulness_score(5, 0)
+
+
+def test_evidence_gate_blocks_the_small_sample_exploit():
+    """ADR-014: five arranged up-votes must not reach Stage 3.
+
+    The score alone cannot stop this — 5/5 legitimately out-scores the lowered
+    Stage-3 threshold — so the vote-volume gate is what has to hold.
+    """
+    gamer = T.determine_stage(5, 5, T.helpfulness_score(5, 0), 0, 0, 12)
+    assert gamer == 3, "score ladder alone still admits the 5-vote record"
+    assert T.evidence_capped_stage(gamer, total_votes=5) == 2
+
+    # An honest reviewer with real vote volume is unaffected.
+    honest = T.determine_stage(20, 20, T.helpfulness_score(85, 15), 0, 0, 12)
+    assert T.evidence_capped_stage(honest, total_votes=100) == honest
+
+
+def test_evidence_gate_steps_down_one_stage_at_a_time():
+    # Stage 5 needs 200 votes, Stage 4 needs 60, Stage 3 needs 20.
+    assert T.evidence_capped_stage(5, total_votes=200) == 5
+    assert T.evidence_capped_stage(5, total_votes=199) == 4
+    assert T.evidence_capped_stage(5, total_votes=59) == 3
+    assert T.evidence_capped_stage(5, total_votes=19) == 2
+    # Stages 0-2 gate on posting, not reception — never capped.
+    assert T.evidence_capped_stage(2, total_votes=0) == 2
+
+
 def test_gate_weight_probation_is_zero():
     assert T.gate_vote_weight(4, 90.0, 400, is_on_probation=True) == 0.0
 
