@@ -18,6 +18,7 @@ import { test, expect } from "@playwright/test";
 
 const GATED = [
   "/dashboard",
+  "/contracts",
   "/profile",
   "/moderate",
   "/onboarding",
@@ -33,6 +34,7 @@ const PUBLIC = [
   "/questions",
   "/requests",
   "/categories",
+  "/membership",
   "/how-it-works",
   "/faqs",
   "/terms",

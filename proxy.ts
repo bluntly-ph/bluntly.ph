@@ -29,6 +29,7 @@ const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME ?? "bluntly_session";
  */
 const PROTECTED = [
   "/dashboard",
+  "/contracts",
   "/profile",
   "/settings",
   "/admin",

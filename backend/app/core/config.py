@@ -126,6 +126,10 @@ class Settings(BaseSettings):
     # --- Community voting (M2 slice 2) — reuses the 60s fixed-window limiter ---
     vote_rate_limit_max: int = 30
 
+    # Reporting is rarer than voting and more abusable (one account carpet-
+    # reporting a reviewer), so the same window gets a much tighter ceiling.
+    report_rate_limit_max: int = 5
+
     # --- Trust visibility thresholds (M2 slice 4; defaults OFF for cold start) ---
     product_trust_visibility_threshold: float = 0.0
     product_trust_min_reviews: int = 5

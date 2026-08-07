@@ -37,6 +37,62 @@ export type QueueItem = {
   };
 };
 
+/** One filed report in the moderator queue (GET /admin/reports). */
+export type ReportItem = {
+  report: {
+    id: string;
+    log_id: string | null;
+    target_type: string | null;
+    target_ref: string | null;
+    reason: string | null;
+    notes: string | null;
+    evidence_url: string | null;
+    created_at: string;
+  };
+  reporter: {
+    id: string;
+    display_name: string | null;
+    username: string | null;
+    trust_stage: number;
+  } | null;
+  target: {
+    id: string;
+    title: string | null;
+    author_id: string | null;
+    is_published: boolean;
+  } | null;
+  target_report_count: number;
+};
+
+/** Reader-facing labels for the backend `ModerationReason` enum. */
+export const REPORT_REASON_LABELS: Record<string, string> = {
+  fake_proof: "Fake proof of purchase",
+  plagiarized: "Copied from elsewhere",
+  spam: "Spam",
+  harassment: "Harassment or abuse",
+  conflict_of_interest: "Undisclosed conflict of interest",
+  seller_posing_as_buyer: "Seller posing as a buyer",
+  other: "Something else",
+};
+
+/**
+ * Reports filed by the community, newest first. Defended like the review queue:
+ * a failing reports endpoint must not blank the whole moderation page.
+ */
+export async function getReports(): Promise<ReportItem[]> {
+  const token = await getSessionToken();
+  if (!token) return [];
+  try {
+    const res = await apiFetch<{ items: ReportItem[]; total: number }>(
+      "/api/v1/admin/reports?limit=50",
+      { token },
+    );
+    return res.items;
+  } catch {
+    return [];
+  }
+}
+
 export async function getQueue(): Promise<{
   pending: QueueItem[];
   edited: QueueItem[];

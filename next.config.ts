@@ -13,10 +13,18 @@ import type { NextConfig } from "next";
  * @font-face. Locking scripts down further needs per-request nonces, which
  * means moving CSP into proxy.ts — worth doing, but it is a change with its own
  * failure modes and belongs on its own.
+ *
+ * `unsafe-eval` is added in DEVELOPMENT ONLY. Turbopack's dev server ships its
+ * module runtime through `eval`, so without it Firefox and WebKit fill the
+ * console with CSP violations and the console-health E2E suite fails on every
+ * page — a false alarm that hides real errors. The production build emits no
+ * `eval`, so the shipped policy is unchanged and stays the strict one.
  */
+const isDev = process.env.NODE_ENV === "development";
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co",
   "font-src 'self' data:",

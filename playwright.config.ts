@@ -21,6 +21,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
 
+  // WebKit on Windows crashes its worker (STATUS_STACK_BUFFER_OVERRUN,
+  // 0xC0000409) under Playwright's default parallelism — the browser dies, not
+  // the app, and it takes ~20 unrelated tests down with it as "worker process
+  // exited unexpectedly". The same specs pass 37/37 serially. Capping workers on
+  // Windows keeps the matrix honest; other platforms keep the default (one
+  // worker per core).
+  workers: process.platform === "win32" ? 2 : undefined,
+
   use: {
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
@@ -29,7 +37,18 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
   },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Cross-browser + mobile matrix (M3). The three desktop engines cover the
+  // rendering families that matter — Blink, Gecko, WebKit — and the two mobile
+  // profiles pin the viewports the responsive layout is designed around: a
+  // small Android (393px) and iOS Safari (393px, but WebKit's viewport and
+  // safe-area behaviour differ enough to be worth its own run).
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    { name: "mobile-chrome", use: { ...devices["Pixel 7"] } },
+    { name: "mobile-safari", use: { ...devices["iPhone 14"] } },
+  ],
 
   webServer: {
     command: "npm run dev:all",

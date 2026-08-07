@@ -280,6 +280,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/{review_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report a published review to the moderators */
+        post: operations["report_review_api_v1_reviews__review_id__report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}/critique": {
         parameters: {
             query?: never;
@@ -428,6 +445,23 @@ export interface paths {
         put?: never;
         /** Run the Honesty Fund distribution for a cycle (idempotent) */
         post: operations["run_honesty_fund_api_v1_admin_honesty_fund_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Moderator queue: community content reports */
+        get: operations["report_queue_api_v1_admin_reports_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1416,6 +1450,16 @@ export interface components {
          * @enum {string}
          */
         MembershipTier: "special" | "founding" | "standard";
+        /**
+         * ModerationReason
+         * @enum {string}
+         */
+        ModerationReason: "fake_proof" | "plagiarized" | "spam" | "harassment" | "conflict_of_interest" | "seller_posing_as_buyer" | "other";
+        /**
+         * ModerationTargetType
+         * @enum {string}
+         */
+        ModerationTargetType: "review" | "answer" | "seller_review" | "question" | "user";
         /** OptionalReasonRequest */
         OptionalReasonRequest: {
             /** Reason */
@@ -1852,6 +1896,97 @@ export interface components {
             username?: string | null;
             /** @default en */
             language: components["schemas"]["Language"];
+        };
+        /** ReportCreate */
+        ReportCreate: {
+            reason: components["schemas"]["ModerationReason"];
+            /**
+             * Notes
+             * @description Optional context from the reporter.
+             */
+            notes?: string | null;
+            /**
+             * Evidence Url
+             * @description Optional link backing the report (e.g. the original listing). Must be http(s) — the moderator queue renders it as a clickable link.
+             */
+            evidence_url?: string | null;
+        };
+        /** ReportItem */
+        ReportItem: {
+            report: components["schemas"]["ReportOut"];
+            reporter?: components["schemas"]["ReportReporter"] | null;
+            target?: components["schemas"]["ReportTarget"] | null;
+            /**
+             * Target Report Count
+             * @default 1
+             */
+            target_report_count: number;
+        };
+        /** ReportOut */
+        ReportOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Log Id */
+            log_id?: string | null;
+            target_type?: components["schemas"]["ModerationTargetType"] | null;
+            /** Target Ref */
+            target_ref?: string | null;
+            /** Reporter Id */
+            reporter_id?: string | null;
+            reason?: components["schemas"]["ModerationReason"] | null;
+            /** Notes */
+            notes?: string | null;
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ReportQueueResponse */
+        ReportQueueResponse: {
+            /** Items */
+            items: components["schemas"]["ReportItem"][];
+            /** Total */
+            total: number;
+        };
+        /** ReportReporter */
+        ReportReporter: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Trust Stage */
+            trust_stage: number;
+        };
+        /**
+         * ReportTarget
+         * @description Enough of the reported item to triage without a second round-trip.
+         */
+        ReportTarget: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title?: string | null;
+            /** Author Id */
+            author_id?: string | null;
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
         };
         /** RequestCreate */
         RequestCreate: {
@@ -3076,6 +3211,41 @@ export interface operations {
             };
         };
     };
+    report_review_api_v1_reviews__review_id__report_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     critique_review_api_v1_reviews__review_id__critique_post: {
         parameters: {
             query?: never;
@@ -3394,6 +3564,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HonestyFundRunResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_queue_api_v1_admin_reports_get: {
+        parameters: {
+            query?: {
+                /** @description Filter to one content type. */
+                target_type?: components["schemas"]["ModerationTargetType"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportQueueResponse"];
                 };
             };
             /** @description Validation Error */

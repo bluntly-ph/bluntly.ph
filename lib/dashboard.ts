@@ -4,21 +4,18 @@ import { apiFetch } from "./api/client";
 import { getSessionToken } from "./session";
 
 /**
- * Reviewer earnings data, fetched server-side with the session token. Wallet and
- * token balances, the token ledger, and payouts. Each call is defended so one
- * failing endpoint doesn't blank the whole dashboard.
+ * Reviewer earnings data, fetched server-side with the session token: the PHP
+ * wallet balance and the payout history. Each call is defended so one failing
+ * endpoint doesn't blank the whole dashboard.
+ *
+ * The token ledger (`/tokens/transactions`) is deliberately NOT read here. Its
+ * `amount` is an integer token count, not pesos, and the token economy was
+ * retired in favour of the PHP revenue share — surfacing it next to peso figures
+ * read as money and wasn't. `/tokens/balance` is still the only source of
+ * `wallet_balance`, so it stays; only `token_balance` is ignored.
  */
 
 export type Balance = { token_balance: number; wallet_balance: string };
-
-export type Txn = {
-  id: string;
-  amount: number;
-  balance_after: number;
-  kind: string;
-  note: string | null;
-  created_at: string;
-};
 
 export type Payout = {
   id: string;
@@ -35,18 +32,16 @@ export const PAYOUT_MIN_PHP = 300;
 
 export async function getDashboard(): Promise<{
   balance: Balance | null;
-  transactions: Txn[];
   payouts: Payout[];
 }> {
   const token = await getSessionToken();
-  if (!token) return { balance: null, transactions: [], payouts: [] };
+  if (!token) return { balance: null, payouts: [] };
 
-  const [balance, transactions, payouts] = await Promise.all([
+  const [balance, payouts] = await Promise.all([
     apiFetch<Balance>("/api/v1/tokens/balance", { token }).catch(() => null),
-    apiFetch<Txn[]>("/api/v1/tokens/transactions?limit=12", { token }).catch(() => []),
     apiFetch<Payout[]>("/api/v1/payouts", { token }).catch(() => []),
   ]);
-  return { balance, transactions, payouts };
+  return { balance, payouts };
 }
 
 /** ₱ with two decimals, from a string-decimal amount (never parse for math). */

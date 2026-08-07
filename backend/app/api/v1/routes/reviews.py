@@ -19,11 +19,12 @@ from app.core.errors import ForbiddenError, NotFoundError
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
-from app.models.enums import MemberRole
+from app.models.enums import MemberRole, ModerationTargetType
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
 from app.schemas.ai import CritiqueResponse
+from app.schemas.report import ReportCreate, ReportOut
 from app.schemas.review import (
     FeedAuthor,
     FeedItemOut,
@@ -34,7 +35,7 @@ from app.schemas.review import (
     ReviewVersionOut,
     VoteIn,
 )
-from app.services import review_service, vote_service
+from app.services import report_service, review_service, vote_service
 from app.services.ai_critique import get_provider
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -180,6 +181,33 @@ def unvote_review(review_id: uuid.UUID, db: Session = Depends(get_db),
     review = review_service.get_review_or_404(db, review_id)
     review = vote_service.remove_vote(db, review, user.id)
     return ReviewOut.model_validate(review)
+
+
+@router.post("/{review_id}/report", response_model=ReportOut, status_code=201,
+             summary="Report a published review to the moderators")
+def report_review(review_id: uuid.UUID, payload: ReportCreate, request: Request,
+                  db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)) -> ReportOut:
+    # Same 60s bucket shape as voting: reporting is a community action and the
+    # limiter is what stops one account from carpet-reporting a reviewer.
+    enforce_rate_limit(request, "report", max_requests=settings.report_rate_limit_max)
+    review = review_service.get_review_or_404(db, review_id)
+    # Only reportable once visible — an unpublished draft is already in the
+    # moderator queue, and 404ing keeps drafts unenumerable by non-authors.
+    _visible_or_404(review, user)
+    log, _created = report_service.file_report(
+        db,
+        reporter_id=user.id,
+        author_id=review.author_id,
+        target_type=ModerationTargetType.review,
+        target_ref=review.id,
+        reason=payload.reason,
+        notes=payload.notes,
+        evidence_url=payload.evidence_url,
+    )
+    # A repeat report returns 201 with the original row: the reporter's intent is
+    # satisfied either way, and telling them "already reported" leaks nothing.
+    return ReportOut.model_validate(log)
 
 
 @router.post("/{review_id}/critique", response_model=CritiqueResponse,

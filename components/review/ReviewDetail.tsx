@@ -13,6 +13,7 @@ import {
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { ReportDialog } from "@/components/review/ReportDialog";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
 import { ageLabel, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
 
@@ -37,9 +38,12 @@ const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof 
 export function ReviewDetail({
   data,
   canVote,
+  isOwnReview = false,
 }: {
   data: ReviewFull;
   canVote: boolean;
+  /** The author can't report their own review — the API rejects self-reports. */
+  isOwnReview?: boolean;
 }) {
   const { review, author, product } = data;
   const verdict = VERDICT[review.verdict] ?? VERDICT.it_depends;
@@ -209,13 +213,19 @@ export function ReviewDetail({
           </span>
         )}
 
-        <button
-          type="button"
-          className="ml-auto inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
-        >
-          <ShareNetwork size={16} />
-          Share
-        </button>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
+          >
+            <ShareNetwork size={16} />
+            Share
+          </button>
+
+          {!isOwnReview ? (
+            <ReportDialog reviewId={review.id} canReport={canVote} />
+          ) : null}
+        </div>
       </div>
     </article>
   );

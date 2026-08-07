@@ -22,12 +22,14 @@ export default async function ReviewPage({
 
   let user: HeaderUser = null;
   let canVote = false;
+  let isOwnReview = false;
   try {
     const me = await getUser();
     if (me) {
       user = { username: me.username, avatarUrl: me.avatar_url };
+      isOwnReview = me.id === data.author?.id;
       // You may vote on any published review except your own.
-      canVote = me.id !== data.author?.id;
+      canVote = !isOwnReview;
     }
   } catch {
     user = null;
@@ -37,7 +39,7 @@ export default async function ReviewPage({
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={user} />
       <main className="flex-1">
-        <ReviewDetail data={data} canVote={canVote} />
+        <ReviewDetail data={data} canVote={canVote} isOwnReview={isOwnReview} />
       </main>
       <SiteFooter />
     </div>

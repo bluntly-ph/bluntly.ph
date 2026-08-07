@@ -51,27 +51,43 @@ The create/participate surfaces.
 
 **As built:** `/reviews/new` — a two-step write flow (find/create the product from a
 purchase link → structured review form → submit for moderation) · interactive
-up/down voting (`ReviewVoteBar` client + BFF) · Q&A: `/questions`, `/questions/[id]`
+up/down voting (`ReviewVoteBar` client + BFF) · reporting (`ReportDialog` client +
+`POST /reviews/{id}/report`, reasons pinned to the backend `ModerationReason` enum) ·
+Q&A: `/questions`, `/questions/[id]`
 (answers, answer form, award best answer), `/questions/new` (product picker +
 directed-to) · Review requests / bounties: `/requests` (board + up-vote), `/requests/new`.
 
 **Acceptance:**
 - Submitting a review returns it as **awaiting moderation** (never auto-published).
 - A vote persists and updates counts; self-voting and double-voting are rejected.
+- Reporting a review reaches the moderator queue; self-reports are refused and a
+  repeat report from the same person does not inflate the count.
 - Ask a question, answer one, mark a best answer; post and up-vote a request.
 
 ## FE-M4 — Earnings, profile & moderation
 Money, identity, and the admin surface.
 
-**As built:** `/dashboard` — reviewer earnings (wallet in ₱, token balance, payouts,
-PayPal payout-account form) · `/profile` — the signed-in user's stats + their reviews ·
-`/moderate` — the moderator review queue (publish / reject / attach affiliate link),
-role-gated via `requireRole`.
+**As built:** `/dashboard` — reviewer earnings (wallet in ₱, membership tier + revenue
+share, payment history, PayPal payout-account form) · `/contracts` — the revenue-share
+contract per monetized review, with auto-renew and buyout accept/reject ·
+`/membership` — the public tier table (ADR-012) · `/profile` — the signed-in user's
+stats + their reviews · `/moderate` — the moderator review queue (publish / reject /
+attach affiliate link) **plus the community report queue**, role-gated via `requireRole`.
 
 **Acceptance:**
-- Dashboard shows wallet + tokens + payout history for the signed-in reviewer.
-- A moderator can action the queue; a non-moderator is refused (`/moderate` gated).
+- Dashboard shows wallet, tier, and payment history for the signed-in reviewer.
+- A moderator can action the queue and see reported reviews grouped by target,
+  most-reported first; a non-moderator is refused (`/moderate` gated).
 - Payout-account (PayPal email) validates before saving.
+- `/membership` reads as a benefits table, never a pricing page — tiers are assigned,
+  not purchased, and there is no checkout anywhere in the flow.
+
+**Deliberately not built:** there is no "request payout" control. Payouts are
+scheduler-driven (`payout_service` sweeps everyone at or above `PAYOUT_MINIMUM_PHP`
+with a payout account set, in tier-priority order), so a button would imply a control
+the reviewer does not have. The token balance and token ledger were also dropped from
+this surface — `token_transactions.amount` is an integer token count, not pesos, and
+the token economy was superseded by the PHP revenue share.
 
 ## FE-M5 — Content, polish & deploy
 The pages that make it a real site, responsiveness, motion, and production.
@@ -84,9 +100,18 @@ responsive everywhere (mobile-first; desktop nav switches at `md`, fixing the
 (`template.tsx`, reduced-motion aware) · branded favicon (`app/icon.svg`) · deployed
 to production on Vercel (auto-deploy on `main`).
 
+**Cross-browser + mobile:** `playwright.config.ts` runs five projects — `chromium`,
+`firefox`, `webkit` (the three rendering engines) and `mobile-chrome` (Pixel 7) /
+`mobile-safari` (iPhone 14). `e2e/responsive.spec.ts` asserts what must hold on all
+five rather than pinning pixel values: no horizontal overflow on the public pages, a
+reachable primary CTA, and a visible header home link at every width. Run everything
+with `npm run test:e2e`, or one engine with `npx playwright test --project=webkit`.
+First run on a new machine needs `npx playwright install firefox webkit`.
+
 **Acceptance:**
 - Every header, nav, and footer link resolves (no 404s); curl-verified 200 in prod.
 - Layout holds at mobile / tablet / desktop widths.
+- The public pages do not scroll horizontally on any of the five projects.
 - The browser tab shows the bluntly mark; navigation feels smooth.
 
 ---
