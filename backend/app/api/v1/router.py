@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     admin_reports,
     ai,
     auth,
+    comments,
     contracts,
     membership,
     payouts,
@@ -26,6 +27,10 @@ api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(products.router)
 api_v1_router.include_router(reviews.router)
+# After reviews: its paths are literal ("/reviews/{id}/comments") rather than a
+# prefix, so registration order decides nothing, but reading order should follow
+# the resource they hang off.
+api_v1_router.include_router(comments.router)
 api_v1_router.include_router(admin_referral.router)
 api_v1_router.include_router(admin_earnings.router)
 api_v1_router.include_router(admin_reports.router)

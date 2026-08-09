@@ -9,11 +9,13 @@ import {
 import { Logo } from "@/components/ui/Logo";
 import { FOOTER_LINKS } from "@/lib/landing-data";
 
+// bluntly's own profiles. These were network homepages until BUG-002 — a
+// "Follow us" icon that drops you on reddit.com follows nobody.
 const SOCIALS = [
-  { label: "Reddit", href: "https://reddit.com", Icon: RedditLogo },
-  { label: "Instagram", href: "https://instagram.com", Icon: InstagramLogo },
-  { label: "Facebook", href: "https://facebook.com", Icon: FacebookLogo },
-  { label: "TikTok", href: "https://tiktok.com", Icon: TiktokLogo },
+  { label: "Reddit", href: "https://www.reddit.com/r/bluntlyph", Icon: RedditLogo },
+  { label: "Instagram", href: "https://www.instagram.com/bluntlyph", Icon: InstagramLogo },
+  { label: "Facebook", href: "https://www.facebook.com/bluntlyph", Icon: FacebookLogo },
+  { label: "TikTok", href: "https://www.tiktok.com/@bluntlyph", Icon: TiktokLogo },
 ];
 
 /** The site footer — brand, link columns, socials, copyright. */

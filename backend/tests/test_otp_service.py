@@ -120,12 +120,15 @@ def test_reissue_invalidates_the_previous_code(monkeypatch):
 
 @requires_db
 def test_login_purpose_for_unknown_address_issues_nothing(monkeypatch):
-    """No row, no email — but the caller cannot tell, so no enumeration."""
+    """Unknown-login addresses get a sign-up signal and no OTP side effects."""
+    from app.core.errors import AccountNotFoundError
+
     monkeypatch.setattr(otp_service, "send_otp_email", lambda to, code: None)
     email = _fresh_email()
     db = SessionLocal()
     try:
-        otp_service.issue_otp(db, email, OtpPurpose.login)
+        with pytest.raises(AccountNotFoundError):
+            otp_service.issue_otp(db, email, OtpPurpose.login)
         assert _live_row(db, email) is None
     finally:
         db.close()

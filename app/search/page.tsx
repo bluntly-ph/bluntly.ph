@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
 import { ReviewCard } from "@/components/review/ReviewCard";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -16,11 +16,16 @@ export const metadata: Metadata = {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; from?: string }>;
 }) {
-  const { q = "", category } = await searchParams;
+  const { q = "", category, from } = await searchParams;
   const activeCategory = CATEGORIES.find((c) => c.slug === category);
   const searching = Boolean(q.trim() || category);
+  // Arrived by tapping a tile on /categories. That makes /categories the
+  // meaningful "up" destination — both for the back link and for "All", which
+  // otherwise dead-ends on /search with no route back (BUG-011).
+  const fromCategories = from === "categories";
+  const categoryQuery = fromCategories ? "&from=categories" : "";
 
   let user: HeaderUser = null;
   try {
@@ -41,7 +46,19 @@ export default async function SearchPage({
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={user} />
-      <main className="mx-auto w-full max-w-[72rem] flex-1 px-6 py-8 lg:px-10 lg:py-10">
+      {/* `flex flex-col` so the empty state below can claim the leftover height.
+          Without it a no-results page leaves a tall blank band and the footer
+          reads as having "ridden up" into the middle of the screen (BUG-005). */}
+      <main className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col px-6 py-8 lg:px-10 lg:py-10">
+        {fromCategories ? (
+          <Link
+            href="/categories"
+            className="mb-5 inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            <CaretLeft size={16} /> All categories
+          </Link>
+        ) : null}
+
         <form action="/search" role="search" className="relative max-w-[40rem]">
           <MagnifyingGlass
             size={20}
@@ -62,7 +79,7 @@ export default async function SearchPage({
           <ul className="flex w-max gap-2">
             <li>
               <Link
-                href="/search"
+                href={fromCategories ? "/categories" : "/search"}
                 className={chip(!category && !q)}
               >
                 All
@@ -70,7 +87,10 @@ export default async function SearchPage({
             </li>
             {CATEGORIES.filter((c) => c.slug !== "trending").map((c) => (
               <li key={c.slug}>
-                <Link href={`/search?category=${c.slug}`} className={chip(category === c.slug)}>
+                <Link
+                  href={`/search?category=${c.slug}${categoryQuery}`}
+                  className={chip(category === c.slug)}
+                >
                   {c.label}
                 </Link>
               </li>
@@ -89,7 +109,7 @@ export default async function SearchPage({
             ))}
           </div>
         ) : (
-          <div className="mt-16 flex flex-col items-center text-center">
+          <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
             <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
             <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
               {searching ? "No reviews found" : "Find the product you bought"}

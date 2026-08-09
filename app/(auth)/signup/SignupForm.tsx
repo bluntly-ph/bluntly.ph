@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,23 @@ import { TextField } from "@/components/ui/TextField";
 import { requestOtp, verifyOtp, type FormState } from "@/app/actions/auth";
 
 const EMPTY: FormState = {};
+
+/**
+ * Gap enforced between resends (BUG-016).
+ *
+ * The backend allows 5 sends per address per 15 minutes. Five impatient clicks
+ * therefore burn the whole quota in seconds and lock the address out for the
+ * rest of the window — which is exactly how QA got stranded. Spacing the button
+ * out means the allowance lasts long enough to actually receive an email.
+ */
+const RESEND_COOLDOWN_SECONDS = 60;
+
+/** 886 -> "14:46". */
+function countdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 /**
  * Email signup — the "Let's get started!" and "Enter the code" frames.
@@ -62,7 +79,7 @@ export function SignupForm({
           />
         </div>
 
-        <FormError state={sendState} />
+        <FormError state={sendState} next={next} />
 
         <p className="mt-6 text-[12px] text-[var(--text-secondary)]">
           {purpose === "signup" ? "Already have an account? " : "New here? "}
@@ -90,6 +107,33 @@ function CodeStep({
   const [verifyState, verifyAction, verifying] = useActionState(verifyOtp, EMPTY);
   const [resendState, resendAction, resending] = useActionState(requestOtp, EMPTY);
   const [code, setCode] = useState("");
+  // Reaching this step means a code was just sent, so the gap starts here — not
+  // on the first resend. Otherwise the quota is one impatient click closer to
+  // gone before the first email has even landed.
+  const [waitSeconds, setWaitSeconds] = useState(RESEND_COOLDOWN_SECONDS);
+  // useActionState hands back a fresh object per submit, so identity is what
+  // separates "a new result arrived" from an unrelated re-render. Adjusting
+  // state during render is React's sanctioned answer here — doing it in an
+  // effect trips react-hooks/set-state-in-effect and costs an extra commit.
+  const [handled, setHandled] = useState<FormState>(EMPTY);
+  if (resendState !== handled) {
+    setHandled(resendState);
+    if (resendState.ok) {
+      setWaitSeconds(RESEND_COOLDOWN_SECONDS);
+    } else if (resendState.retryAfterSeconds) {
+      // Honour what the server actually said rather than guessing; being told
+      // "14:46" is the difference between waiting and giving up.
+      setWaitSeconds(resendState.retryAfterSeconds);
+    }
+  }
+
+  useEffect(() => {
+    if (waitSeconds <= 0) return;
+    const timer = setTimeout(() => setWaitSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [waitSeconds]);
+
+  const waiting = waitSeconds > 0;
 
   return (
     <form action={verifyAction} className="contents">
@@ -128,14 +172,33 @@ function CodeStep({
           type="submit"
           formAction={resendAction}
           formNoValidate
-          disabled={resending}
-          className="mt-3 self-start text-[12px] text-[var(--accent-primary)] underline-offset-2 hover:underline disabled:opacity-60"
+          disabled={resending || waiting}
+          className="mt-3 self-start text-[12px] text-[var(--accent-primary)] underline-offset-2 hover:underline disabled:no-underline disabled:opacity-60"
         >
-          {resending ? "Sending…" : "Resend code"}
+          {resending
+            ? "Sending…"
+            : waiting
+              ? `Resend code in ${countdown(waitSeconds)}`
+              : "Resend code"}
         </button>
-        {resendState.ok ? (
+
+        {/* Every one of these was previously invisible: the step rendered only
+            the success line, so a 429 — or any failure — looked like nothing had
+            happened at all, and the user kept clicking a spent allowance. */}
+        {resendState.error ? (
+          <p
+            role="alert"
+            className="mt-2 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-3 py-2 text-[12px] text-[var(--accent-danger)]"
+          >
+            {resendState.error}
+            {resendState.code === "rate_limited" && waiting
+              ? ` You can request another in ${countdown(waitSeconds)}.`
+              : null}
+          </p>
+        ) : resendState.ok ? (
           <p role="status" className="mt-2 text-[12px] text-[var(--text-secondary)]">
-            A new code is on its way.
+            A new code is on its way. The code in any earlier email has stopped
+            working — use the newest one.
           </p>
         ) : null}
       </AuthSheet>
@@ -143,14 +206,28 @@ function CodeStep({
   );
 }
 
-function FormError({ state }: { state: FormState }) {
+function FormError({ state, next }: { state: FormState; next?: string }) {
   if (!state.error || state.fieldErrors) return null;
+  const signupHref = next ? `/signup?next=${encodeURIComponent(next)}` : "/signup";
   return (
     <p
       role="alert"
       className="mt-4 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[12px] text-[var(--accent-danger)]"
     >
-      {state.error}
+      {state.code === "account_not_found" ? (
+        <>
+          Looks like you don&apos;t have an account yet.{" "}
+          <Link
+            href={signupHref}
+            className="font-semibold underline underline-offset-2"
+          >
+            Create an account
+          </Link>{" "}
+          to get started.
+        </>
+      ) : (
+        state.error
+      )}
     </p>
   );
 }

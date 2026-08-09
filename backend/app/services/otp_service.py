@@ -26,6 +26,7 @@ from app.adapters.email import (
 )
 from app.core.config import settings
 from app.core.errors import (
+    AccountNotFoundError,
     EmailDeliveryError,
     OtpAttemptsExceededError,
     OtpExpiredError,
@@ -62,9 +63,12 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
     user_exists = db.scalar(select(User.id).where(User.email == email)) is not None
 
     if purpose is OtpPurpose.login and not user_exists:
-        # No account: send nothing, store nothing, but return normally so the
-        # response is indistinguishable from the success case.
-        return
+        # Product decision: make this explicit instead of sending a visitor to
+        # a code screen that can never succeed. This does reveal account
+        # existence, so keep it specific to the interactive login flow.
+        raise AccountNotFoundError(
+            "Looks like you don't have an account yet. Sign up to get started."
+        )
     if purpose is OtpPurpose.signup and user_exists:
         # Already registered: quietly downgrade to a login code rather than
         # leaking that the address is taken.
@@ -90,8 +94,12 @@ def issue_otp(db: Session, email: str, purpose: OtpPurpose) -> None:
             retry_after = max(int(settings.otp_send_window_seconds - elapsed), 1)
         log.info("OTP send throttled", extra={
             "extra_fields": {"to": email, "sends_in_window": recent}})
+        # "Shortly" was a lie: the window is 15 minutes, so a user who burned the
+        # allowance in five clicks was told to wait a moment and then met a dead
+        # button for a quarter of an hour (BUG-016). The caller renders the exact
+        # wait from `retry_after_seconds`.
         raise RateLimitError(
-            "Too many codes requested for this address. Try again shortly.",
+            "You've requested too many codes for this address.",
             extra={"retry_after_seconds": retry_after})
 
     # Requesting a new code invalidates any outstanding one.

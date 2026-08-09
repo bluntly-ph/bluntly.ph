@@ -30,6 +30,14 @@ export type FormState = {
   /** Set by requestOtp so the UI can advance to the code step. */
   emailSent?: string;
   ok?: boolean;
+  /** Stable problem code — branch on this, never on `error` prose. */
+  code?: string;
+  /**
+   * From a 429's `retry_after_seconds`. The OTP send cap is 5 per 15 minutes,
+   * so this is minutes, not seconds — the UI has to show it or the user is left
+   * clicking a dead button with no idea why (BUG-016).
+   */
+  retryAfterSeconds?: number;
 };
 
 /** A safe internal destination — never redirect to an attacker-supplied host. */
@@ -41,9 +49,12 @@ function safeNext(raw: FormDataEntryValue | null): string {
 function toFormState(error: unknown): FormState {
   if (error instanceof ApiError) {
     const fieldErrors = error.fieldErrors();
+    const retryAfter = error.problem.retry_after_seconds;
     return {
       error: error.problem.detail,
       fieldErrors: Object.keys(fieldErrors).length ? fieldErrors : undefined,
+      code: error.code,
+      retryAfterSeconds: typeof retryAfter === "number" ? retryAfter : undefined,
     };
   }
   throw error;

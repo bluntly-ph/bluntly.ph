@@ -25,7 +25,12 @@ from app.services.otp_service import issue_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-_PROBLEM = {401: {"model": Problem}, 409: {"model": Problem}, 429: {"model": Problem}}
+_PROBLEM = {
+    401: {"model": Problem},
+    404: {"model": Problem},
+    409: {"model": Problem},
+    429: {"model": Problem},
+}
 
 
 def _token_response(user: User) -> TokenResponse:
@@ -61,8 +66,8 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
              summary="Request a one-time login/signup code by email")
 def otp_request(payload: OtpRequestIn, db: Session = Depends(get_db),
                 _: None = Depends(auth_rate_limiter("otp_request"))) -> dict[str, str]:
-    # Always 202, whether or not the address has an account — anything else turns
-    # this endpoint into a user-enumeration oracle.
+    # Signup remains non-enumerating. Login intentionally returns a 404 for an
+    # unknown email so the UI can route a new visitor to account creation.
     issue_otp(db, payload.email, payload.purpose)
     return {"status": "sent"}
 

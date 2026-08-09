@@ -4,7 +4,6 @@ import {
   Check,
   ImageSquare,
   SealCheck,
-  ShareNetwork,
   ShieldCheck,
   ShoppingBag,
   Star,
@@ -15,6 +14,7 @@ import {
 
 import { ReportDialog } from "@/components/review/ReportDialog";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
+import { ShareButton } from "@/components/review/ShareButton";
 import { ageLabel, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
 
 const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof ThumbsUp }> = {
@@ -214,13 +214,7 @@ export function ReviewDetail({
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
-          >
-            <ShareNetwork size={16} />
-            Share
-          </button>
+          <ShareButton title={review.title} />
 
           {!isOwnReview ? (
             <ReportDialog reviewId={review.id} canReport={canVote} />

@@ -1,4 +1,4 @@
-"""OTP endpoints — contract and non-enumeration."""
+"""OTP endpoints — contract, signup privacy, and login onboarding handoff."""
 
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ def _fresh_email() -> str:
 
 
 @requires_db
-def test_request_returns_202_for_unknown_address(client):
+def test_login_unknown_address_returns_signup_prompt_problem(client):
     r = client.post(f"{BASE}/otp/request",
                     json={"email": _fresh_email(), "purpose": "login"})
-    assert r.status_code == 202
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("application/problem+json")
+    assert r.json()["code"] == "account_not_found"
 
 
 @requires_db

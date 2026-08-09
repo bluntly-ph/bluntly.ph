@@ -130,6 +130,11 @@ class Settings(BaseSettings):
     # reporting a reviewer), so the same window gets a much tighter ceiling.
     report_rate_limit_max: int = 5
 
+    # Posting is cheaper to abuse than voting but noisier than reporting: this is
+    # what stops one account flooding a thread. Votes on comments ride the `vote`
+    # bucket instead, since they cost the same as a review vote.
+    comment_rate_limit_max: int = 10
+
     # --- Trust visibility thresholds (M2 slice 4; defaults OFF for cold start) ---
     product_trust_visibility_threshold: float = 0.0
     product_trust_min_reviews: int = 5

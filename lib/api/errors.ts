@@ -11,6 +11,7 @@ export type ProblemCode =
   | "unauthorized"
   | "token_expired"
   | "invalid_credentials"
+  | "account_not_found"
   | "account_suspended"
   | "forbidden"
   | "role_forbidden"

@@ -82,3 +82,19 @@ test("unknown paths 404", async ({ page }) => {
   const response = await page.goto("/no-such-page-should-404");
   expect(response?.status()).toBe(404);
 });
+
+test("an unknown login email is sent to sign up instead of a dead OTP step", async ({ page }) => {
+  await page.goto("/login");
+  // A unique, syntactically deliverable address. The login endpoint returns
+  // before issuing an OTP when it is absent, so this neither sends mail nor
+  // creates a row in the database.
+  await page.getByPlaceholder("Email address").fill("otp-login-missing-0019a47a@example.com");
+  await page.getByRole("button", { name: /^send code$/i }).click();
+
+  await expect(page.getByRole("alert")).toContainText(/don.t have an account yet/i);
+  await expect(page.getByRole("link", { name: /create an account/i })).toHaveAttribute(
+    "href",
+    "/signup",
+  );
+  await expect(page.getByRole("heading", { name: /enter the code/i })).toHaveCount(0);
+});

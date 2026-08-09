@@ -4,6 +4,7 @@ Importing this package registers every model on `Base.metadata`, which Alembic's
 env.py uses as the migration target.
 """
 
+from app.models.comment import ReviewComment, ReviewCommentVote  # noqa: F401
 from app.models.commission import Commission  # noqa: F401
 from app.models.contract import ReviewContract  # noqa: F401
 from app.models.honesty_fund import HonestyFundDistribution  # noqa: F401
@@ -28,5 +29,5 @@ __all__ = [
     "Session", "Commission", "HonestyFundDistribution",
     "ModerationLog", "EarnEligibleVote", "ReviewVote", "TokenTransaction",
     "ReviewRequest", "RequestUpvote", "ReviewContract", "Payout", "EmailOtp",
-    "AffiliatePostback",
+    "AffiliatePostback", "ReviewComment", "ReviewCommentVote",
 ]

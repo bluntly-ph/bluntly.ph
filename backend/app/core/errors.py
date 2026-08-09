@@ -50,6 +50,19 @@ class AuthError(AppError):
     title = "Authentication required or invalid"
 
 
+class AccountNotFoundError(AppError):
+    """The requested passwordless-login account does not exist.
+
+    This deliberately makes account existence visible at the product owner's
+    request so the login screen can send a new visitor to sign up instead of
+    pretending a verification email was sent.
+    """
+
+    status_code = status.HTTP_404_NOT_FOUND
+    code = "account_not_found"
+    title = "Account not found"
+
+
 class ForbiddenError(AppError):
     status_code = status.HTTP_403_FORBIDDEN
     code = "forbidden"

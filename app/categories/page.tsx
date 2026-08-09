@@ -36,7 +36,10 @@ export default async function CategoriesPage() {
             return (
               <li key={c.slug}>
                 <Link
-                  href={`/search?category=${c.slug}`}
+                  // `from=categories` marks where the visitor came in from, so
+                  // /search can offer a way back here instead of stranding them
+                  // in search with no route to the index (BUG-011).
+                  href={`/search?category=${c.slug}&from=categories`}
                   className="flex h-[104px] flex-col justify-between rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-card)] outline outline-1 outline-transparent transition-[outline-color] hover:outline-[var(--accent-primary)]"
                 >
                   <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-[color-mix(in_srgb,var(--accent-primary)_10%,transparent)] text-[var(--accent-primary)]">
