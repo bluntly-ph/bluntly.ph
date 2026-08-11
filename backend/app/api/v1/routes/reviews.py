@@ -12,7 +12,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -20,6 +20,7 @@ from app.core.errors import ForbiddenError, NotFoundError
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
+from app.models.comment import ReviewComment
 from app.models.enums import MemberRole, ModerationTargetType, VoteDirection
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
@@ -83,6 +84,26 @@ def _out(review: Review, my_vote: VoteDirection | None = None) -> ReviewOut:
     return out
 
 
+def _comment_counts(db: Session, review_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """Live comment totals for a set of reviews, in one grouped query (BUG-006).
+
+    Removed comments are excluded: the card's count should match what a reader
+    finds when they open the thread, and a soft-deleted comment renders as
+    "[removed]" rather than as a contribution.
+    """
+    if not review_ids:
+        return {}
+    rows = db.execute(
+        select(ReviewComment.review_id, func.count(ReviewComment.id))
+        .where(
+            ReviewComment.review_id.in_(review_ids),
+            ReviewComment.is_removed.is_(False),
+        )
+        .group_by(ReviewComment.review_id)
+    ).all()
+    return {review_id: total for review_id, total in rows}
+
+
 @router.post("", response_model=ReviewOut, status_code=201, summary="Submit a review")
 def create_review(payload: ReviewCreate, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> ReviewOut:
@@ -144,12 +165,15 @@ def review_feed(db: Session = Depends(get_db), limit: int = 8,
                 user: User | None = Depends(get_optional_user)) -> list[FeedItemOut]:
     items = review_service.list_feed(db, limit=min(limit, 100), product_id=product_id,
                                      author_id=author_id, category=category, q=q, sort=sort)
-    mine = _my_votes(db, user, [r.id for r, _, _ in items])
+    review_ids = [r.id for r, _, _ in items]
+    mine = _my_votes(db, user, review_ids)
+    comments = _comment_counts(db, review_ids)
     return [
         FeedItemOut(
             review=_out(r, mine.get(r.id)),
             author=FeedAuthor.model_validate(a) if a is not None else None,
             product=FeedProduct.model_validate(p) if p is not None else None,
+            comment_count=comments.get(r.id, 0),
         )
         for r, a, p in items
     ]
@@ -173,6 +197,7 @@ def get_review_full(review_id: uuid.UUID, db: Session = Depends(get_db),
         review=_out(review, _my_votes(db, user, [review.id]).get(review.id)),
         author=FeedAuthor.model_validate(author) if author is not None else None,
         product=FeedProduct.model_validate(product) if product is not None else None,
+        comment_count=_comment_counts(db, [review.id]).get(review.id, 0),
     )
 
 

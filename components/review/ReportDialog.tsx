@@ -118,6 +118,10 @@ export function ReportDialog({
       <button
         type="button"
         onClick={open}
+        // Addressable so the overflow menu in the top nav can open this same
+        // dialog (BUG-012) instead of there being a second report path with its
+        // own copy of the reasons and the self-report rule.
+        id={`report-trigger-${reviewId}`}
         className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--line-hairline-10)] hover:text-[var(--accent-danger)]"
       >
         <Flag size={16} />

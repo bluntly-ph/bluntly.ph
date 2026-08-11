@@ -57,7 +57,11 @@ type FeedItem = {
     canonical_name: string | null;
     category: string | null;
     avg_rating: string | null;
+    /** The product listing image, behind the reviewer's own photo (BUG-009). */
+    image_url: string | null;
   } | null;
+  /** Live count of non-removed comments, for the card's stats row (BUG-006). */
+  comment_count: number;
 };
 
 export type ReviewFull = FeedItem;
@@ -125,7 +129,7 @@ function authorName(item: FeedItem): string {
 }
 
 /** A submitted photo we can actually render — not the synthetic seed placeholder. */
-export function usablePhoto(url: string | null): string | null {
+export function usablePhoto(url: string | null | undefined): string | null {
   if (!url || url.includes("example.com")) return null;
   return url.startsWith("http") ? url : null;
 }
@@ -146,11 +150,18 @@ function toCard(item: FeedItem): ReviewCardData {
     author,
     authorHue: hueOf(author),
     ageLabel: ageLabel(item.review.created_at),
+    product: item.product?.canonical_name ?? null,
     title: cardTitle(item),
     upvotes: compact(item.review.helpful_votes),
-    comments: "",
+    // Real, from the feed's grouped count (BUG-006). Hardcoded empty before,
+    // which is why the comment stat never once appeared on a card.
+    comments: item.comment_count ? compact(item.comment_count) : "0",
     imageHue: hueOf(item.review.id),
-    imageUrl: usablePhoto(item.review.photo_url),
+    // The reviewer's own photo first — it is evidence they actually held the
+    // thing. The product listing image is the fallback (BUG-009); the hue
+    // placeholder is the last resort, not the default it had become.
+    imageUrl:
+      usablePhoto(item.review.photo_url) ?? usablePhoto(item.product?.image_url),
   };
 }
 

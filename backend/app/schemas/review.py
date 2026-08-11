@@ -130,6 +130,11 @@ class FeedProduct(BaseModel):
     category: str | None = None
     avg_rating: Decimal = Decimal("0")
     review_count: int = 0
+    # The listing image (BUG-009). The column and its seeding script have existed
+    # since the product-image work, but nothing ever put it on the wire, so every
+    # card fell through to the placeholder no matter how well-populated the
+    # database was. Distinct from a review's own photo, which takes precedence.
+    image_url: str | None = None
 
 
 class FeedItemOut(BaseModel):
@@ -143,6 +148,10 @@ class FeedItemOut(BaseModel):
     review: ReviewOut
     author: FeedAuthor | None = None
     product: FeedProduct | None = None
+    # Populated by the route (BUG-006). The card draws an upvote count beside a
+    # comment count; the comment half had no source on the wire at all, so the
+    # frontend hardcoded it empty and the stat silently never appeared.
+    comment_count: int = 0
 
 
 class ReviewVersionOut(BaseModel):

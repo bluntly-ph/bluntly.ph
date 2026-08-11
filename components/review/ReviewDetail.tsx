@@ -3,16 +3,19 @@ import {
   CaretLeft,
   Check,
   ImageSquare,
+  MagnifyingGlass,
   SealCheck,
   ShieldCheck,
   ShoppingBag,
   Star,
   ThumbsDown,
   ThumbsUp,
+  UserCircle,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReportDialog } from "@/components/review/ReportDialog";
+import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
 import { ShareButton } from "@/components/review/ShareButton";
 import { ageLabel, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
@@ -53,12 +56,54 @@ export function ReviewDetail({
 
   return (
     <article className="mx-auto w-full max-w-[44rem] px-6 py-6 lg:py-10">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      >
-        <CaretLeft size={16} /> Back
-      </Link>
+      {/* Top nav (BUG-012). The frame draws five controls here; only Back was
+          rendered, so from a review there was no way to search, reach the
+          listing, or get to your own profile without going home first. The
+          overflow menu carries report and share, which also live in the action
+          row below — this bar is the reach-anywhere copy, not a second home
+          for them. */}
+      <nav aria-label="Review" className="flex items-center justify-between">
+        <Link
+          href="/"
+          aria-label="Back"
+          className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
+          <CaretLeft size={18} /> Back
+        </Link>
+
+        <div className="flex items-center gap-1">
+          <Link
+            href="/search"
+            aria-label="Search reviews"
+            className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+          >
+            <MagnifyingGlass size={18} />
+          </Link>
+          {review.referral_redirect_url ? (
+            <a
+              href={review.referral_redirect_url}
+              target="_blank"
+              rel="nofollow sponsored noopener noreferrer"
+              aria-label="Buy this product"
+              className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+            >
+              <ShoppingBag size={18} />
+            </a>
+          ) : null}
+          <ReviewOverflowMenu
+            title={review.title}
+            reviewId={review.id}
+            canReport={!isOwnReview}
+          />
+          <Link
+            href="/profile"
+            aria-label="Your profile"
+            className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+          >
+            <UserCircle size={22} />
+          </Link>
+        </div>
+      </nav>
 
       {/* Product context */}
       {product ? (

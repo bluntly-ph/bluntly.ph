@@ -69,25 +69,32 @@ export function ReviewCard({
       </div>
 
       <div className="flex flex-1 flex-col p-3">
-        <h3 className="line-clamp-3 text-[14px] font-semibold leading-snug text-[var(--text-primary)]">
+        {/* Product bold, then the reviewer's conclusion in normal weight
+            (BUG-006) — one undifferentiated block gave no way to tell what was
+            reviewed from what was concluded about it. */}
+        {review.product ? (
+          <p className="line-clamp-1 text-[13px] font-semibold leading-snug text-[var(--text-primary)]">
+            {review.product}
+          </p>
+        ) : null}
+        <h3
+          className={[
+            "line-clamp-3 text-[13px] leading-snug text-[var(--text-secondary)]",
+            review.product ? "mt-0.5 font-normal" : "text-[14px] font-semibold text-[var(--text-primary)]",
+          ].join(" ")}
+        >
           {review.title}
         </h3>
-        <div className="mt-3 flex items-center gap-2 text-[12px] text-[var(--text-secondary)]">
+        {/* Count then icon, both stats always present, as drawn. */}
+        <div className="mt-3 flex items-center gap-3 text-[12px] text-[var(--text-secondary)]">
           <span className="inline-flex items-center gap-1">
-            <ArrowFatUp size={14} weight="fill" className="text-[var(--accent-success)]" />
             {review.upvotes}
+            <ArrowFatUp size={14} weight="fill" className="text-[var(--accent-success)]" />
           </span>
-          {review.comments ? (
-            <>
-              <span aria-hidden="true" className="text-[var(--text-muted)]">
-                ·
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <ChatCircle size={14} />
-                {review.comments}
-              </span>
-            </>
-          ) : null}
+          <span className="inline-flex items-center gap-1">
+            {review.comments || "0"}
+            <ChatCircle size={14} />
+          </span>
         </div>
       </div>
     </Link>

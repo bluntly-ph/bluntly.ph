@@ -61,6 +61,12 @@ export type ReviewCardData = {
   /** A hue for the placeholder avatar until real avatars are wired. */
   authorHue: number;
   ageLabel: string;
+  /**
+   * The product this review is about, rendered bold above the title (BUG-006).
+   * The two used to arrive as one undifferentiated string, so a card gave no
+   * way to tell what was being reviewed from what the reviewer concluded.
+   */
+  product?: string | null;
   title: string;
   upvotes: string;
   comments: string;

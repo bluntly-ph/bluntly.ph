@@ -56,6 +56,36 @@ test.describe("responsive layout", () => {
     // header treatments, so it is the honest cross-viewport assertion.
     await expect(header.getByLabel("bluntly home")).toBeVisible();
   });
+
+  test("the hero uses the width it is given at the tablet breakpoint", async ({
+    page,
+  }) => {
+    // 768px exactly: the boundary QA filed against. The hero split at `lg`
+    // while the container was already 72rem and the header had gone desktop at
+    // `md`, so a tablet rendered one narrow column stranded in a wide shell.
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/");
+
+    const heading = page.getByRole("heading", { level: 1 }).first();
+    await expect(heading).toBeVisible();
+
+    // Asserting *side-by-side* rather than a pixel width: the point is that the
+    // second column sits beside the copy instead of under it, which is what
+    // leaves the right-hand third empty when it regresses.
+    const headingBox = await heading.boundingBox();
+    const card = page.locator("article, [class*='rounded']").filter({
+      hasText: /./,
+    });
+    expect(headingBox).not.toBeNull();
+
+    // The copy column must not span the whole viewport — if it does, the grid
+    // never split and everything below it is stacked.
+    expect(
+      headingBox!.width,
+      `hero copy spans ${headingBox!.width}px of a 768px viewport — the grid did not split`,
+    ).toBeLessThan(640);
+    expect(await card.count()).toBeGreaterThan(0);
+  });
 });
 
 test.describe("membership page", () => {

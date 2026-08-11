@@ -51,6 +51,8 @@ class ProductOut(BaseModel):
     status: ProductStatus
     avg_rating: Decimal
     review_count: int
+    # See FeedProduct.image_url (BUG-009).
+    image_url: str | None = None
     # Trust rating + computed visibility flag (M2 slice 4).
     trust_score: Decimal = Decimal("0")
     low_trust: bool = False
