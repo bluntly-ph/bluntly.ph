@@ -20,21 +20,20 @@ export default async function QuestionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const question = await getQuestionDetail(id);
+  // Parallel: the question and the viewer are independent (see app/page.tsx).
+  const [question, me] = await Promise.all([
+    getQuestionDetail(id),
+    getUser().catch(() => null),
+  ]);
   if (!question) notFound();
 
   let user: HeaderUser = null;
   let isAsker = false;
   let canAnswer = false;
-  try {
-    const me = await getUser();
-    if (me) {
-      user = { username: me.username, avatarUrl: me.avatar_url };
-      canAnswer = true;
-      isAsker = me.id === question.asker?.id;
-    }
-  } catch {
-    user = null;
+  if (me) {
+    user = { username: me.username, avatarUrl: me.avatar_url };
+    canAnswer = true;
+    isAsker = me.id === question.asker?.id;
   }
 
   return (

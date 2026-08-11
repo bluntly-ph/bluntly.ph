@@ -13,14 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default async function QuestionsPage() {
-  let user: HeaderUser = null;
-  try {
-    const me = await getUser();
-    user = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
-  } catch {
-    user = null;
-  }
-  const questions = await getQuestions();
+  // Parallel: the viewer and the list are independent (see app/page.tsx).
+  const [me, questions] = await Promise.all([
+    getUser().catch(() => null),
+    getQuestions(),
+  ]);
+  const user: HeaderUser = me
+    ? { username: me.username, avatarUrl: me.avatar_url }
+    : null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">

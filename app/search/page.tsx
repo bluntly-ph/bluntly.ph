@@ -27,15 +27,14 @@ export default async function SearchPage({
   const fromCategories = from === "categories";
   const categoryQuery = fromCategories ? "&from=categories" : "";
 
-  let user: HeaderUser = null;
-  try {
-    const me = await getUser();
-    user = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
-  } catch {
-    user = null;
-  }
-
-  const results = await searchReviews({ q, category, limit: 24 });
+  // Parallel: the viewer and the results are independent (see app/page.tsx).
+  const [me, results] = await Promise.all([
+    getUser().catch(() => null),
+    searchReviews({ q, category, limit: 24 }),
+  ]);
+  const user: HeaderUser = me
+    ? { username: me.username, avatarUrl: me.avatar_url }
+    : null;
 
   const heading = q
     ? `Results for “${q}”`

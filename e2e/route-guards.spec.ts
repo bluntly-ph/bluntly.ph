@@ -91,7 +91,12 @@ test("an unknown login email is sent to sign up instead of a dead OTP step", asy
   await page.getByPlaceholder("Email address").fill("otp-login-missing-0019a47a@example.com");
   await page.getByRole("button", { name: /^send code$/i }).click();
 
-  await expect(page.getByRole("alert")).toContainText(/don.t have an account yet/i);
+  // Scoped to the form: Next renders its own empty `role="alert"` route
+  // announcer on every page, so a bare getByRole("alert") either resolves to
+  // that empty div or trips strict mode once the real error appears.
+  await expect(page.locator("form").getByRole("alert")).toContainText(
+    /don.t have an account yet/i,
+  );
   await expect(page.getByRole("link", { name: /create an account/i })).toHaveAttribute(
     "href",
     "/signup",

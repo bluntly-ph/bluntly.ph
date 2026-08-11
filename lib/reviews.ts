@@ -59,7 +59,9 @@ export type ReviewFull = FeedItem;
 /** A single review with its author and product, or null if not found/visible. */
 export async function getReviewFull(id: string): Promise<ReviewFull | null> {
   try {
-    return await apiFetch<FeedItem>(`/api/v1/reviews/${id}/full`);
+    return await apiFetch<FeedItem>(`/api/v1/reviews/${id}/full`, {
+      revalidate: 60,
+    });
   } catch {
     return null;
   }
@@ -172,7 +174,9 @@ export async function searchReviews(opts: {
   if (opts.category) params.set("category", opts.category);
   if (opts.author_id) params.set("author_id", opts.author_id);
   try {
-    const items = await apiFetch<FeedItem[]>(`/api/v1/reviews/feed?${params}`);
+    const items = await apiFetch<FeedItem[]>(`/api/v1/reviews/feed?${params}`, {
+      revalidate: 60,
+    });
     return items.map(toCard);
   } catch {
     return [];
@@ -201,6 +205,7 @@ export async function getAuthorProfile(authorId: string): Promise<{
   try {
     const items = await apiFetch<FeedItem[]>(
       `/api/v1/reviews/feed?author_id=${encodeURIComponent(authorId)}&sort=newest&limit=48`,
+      { revalidate: 60 },
     );
     const a = items?.[0]?.author;
     if (!a) return null;
@@ -227,6 +232,7 @@ export async function getLandingReviews(): Promise<{
   try {
     const items = await apiFetch<FeedItem[]>(
       "/api/v1/reviews/feed?sort=wilson&limit=6",
+      { revalidate: 60 },
     );
     if (items?.length) {
       return { featured: toFeatured(items[0]), cards: items.map(toCard) };

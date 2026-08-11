@@ -14,18 +14,15 @@ export const metadata: Metadata = {
 };
 
 export default async function RequestsPage() {
-  let user: HeaderUser = null;
-  let canVote = false;
-  try {
-    const me = await getUser();
-    if (me) {
-      user = { username: me.username, avatarUrl: me.avatar_url };
-      canVote = true;
-    }
-  } catch {
-    user = null;
-  }
-  const requests = await getRequests("reward");
+  // Parallel: the viewer and the board are independent (see app/page.tsx).
+  const [me, requests] = await Promise.all([
+    getUser().catch(() => null),
+    getRequests("reward"),
+  ]);
+  const user: HeaderUser = me
+    ? { username: me.username, avatarUrl: me.avatar_url }
+    : null;
+  const canVote = me !== null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">

@@ -183,7 +183,18 @@ function DetailsStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ready = title.trim() && discussion.trim() && verdict && rating > 0;
+  // Named, in the order they appear on the page, so the hint below can say what
+  // is actually outstanding. A disabled button with no explanation is
+  // indistinguishable from a broken one — which is precisely how the tracker's
+  // example row describes it, and its steps omit the verdict, the field easiest
+  // to miss because it is a choice rather than something you type into.
+  const missing = [
+    !title.trim() && "a title",
+    rating <= 0 && "a star rating",
+    !verdict && "a verdict",
+    !discussion.trim() && "the review itself",
+  ].filter((v): v is string => typeof v === "string");
+  const ready = missing.length === 0;
 
   async function submit() {
     if (!ready || busy) return;
@@ -333,9 +344,20 @@ function DetailsStep({
           <Button type="button" onClick={submit} disabled={!ready || busy}>
             {busy ? "Submitting…" : "Submit for review"}
           </Button>
-          <p className="text-[12px] text-[var(--text-muted)]">
-            A moderator checks every review before it goes live.
-          </p>
+          {ready ? (
+            <p className="text-[12px] text-[var(--text-muted)]">
+              A moderator checks every review before it goes live.
+            </p>
+          ) : (
+            <p role="status" className="text-[12px] text-[var(--text-secondary)]">
+              Still needed:{" "}
+              {new Intl.ListFormat("en", {
+                style: "long",
+                type: "conjunction",
+              }).format(missing)}
+              .
+            </p>
+          )}
         </div>
       </div>
     </div>

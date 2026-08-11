@@ -6,7 +6,7 @@ import { PayoutAccountForm } from "@/components/dashboard/PayoutAccountForm";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
-import { requireUser } from "@/lib/dal";
+import { requireOnboardedUser } from "@/lib/dal";
 import { getDashboard, PAYOUT_MIN_PHP, peso } from "@/lib/dashboard";
 import { bpsToPercent, getTiers } from "@/lib/membership";
 
@@ -32,7 +32,7 @@ const STATUS_NOTE: Record<string, string> = {
 };
 
 export default async function DashboardPage() {
-  const me = await requireUser();
+  const me = await requireOnboardedUser();
   const [{ balance, payouts }, tiers] = await Promise.all([
     getDashboard(),
     getTiers(),

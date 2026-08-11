@@ -46,6 +46,11 @@ export async function getComments(
   try {
     return await apiFetch<Comment[]>(`/api/v1/reviews/${reviewId}/comments`, {
       token,
+      // Only takes effect for signed-out readers: apiFetch drops `revalidate`
+      // whenever a token is present, so a signed-in thread — which carries that
+      // viewer's own `my_vote` — is never shared. Signed-out responses have
+      // `my_vote: null` throughout and are identical for everyone.
+      revalidate: 30,
     });
   } catch {
     return [];

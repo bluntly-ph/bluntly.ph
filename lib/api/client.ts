@@ -23,6 +23,17 @@ export type RequestOptions = {
   headers?: Record<string, string>;
   /** Defaults to "no-store": auth-shaped data must never be cached. */
   cache?: RequestCache;
+  /**
+   * Seconds to keep this response in Next's Data Cache. Opt-in, and **ignored
+   * whenever `token` is set** — a per-user response in a shared cache is how one
+   * reader ends up seeing another's session. Only pass this for genuinely public
+   * reads (the feed, a published review, the question list).
+   *
+   * Worth having because the pages stay dynamically rendered — they read the
+   * session cookie, so the Full Route Cache never applies — but the Data Cache
+   * is independent of that, so the backend round trip can still be skipped.
+   */
+  revalidate?: number;
   signal?: AbortSignal;
 };
 
@@ -45,13 +56,24 @@ function buildInit(options: RequestOptions): RequestInit {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  return {
+  const init: RequestInit = {
     method: options.method ?? "GET",
     headers,
     body,
-    cache: options.cache ?? "no-store",
     signal: options.signal,
   };
+
+  // `cache` and `next.revalidate` are mutually exclusive, so this is either/or.
+  // The `!options.token` guard is the load-bearing half: it makes caching a
+  // credentialed response impossible by construction rather than by remembering.
+  if (options.revalidate !== undefined && !options.token) {
+    (init as RequestInit & { next?: { revalidate: number } }).next = {
+      revalidate: options.revalidate,
+    };
+  } else {
+    init.cache = options.cache ?? "no-store";
+  }
+  return init;
 }
 
 /** A transport failure still has to reach callers as an ApiError. */

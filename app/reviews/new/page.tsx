@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { SiteHeader } from "@/components/site/SiteHeader";
-import { requireUser } from "@/lib/dal";
+import { requireOnboardedUser } from "@/lib/dal";
 
 import { WriteReviewForm } from "./WriteReviewForm";
 
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default async function NewReviewPage() {
   // Writing requires an account; requireUser redirects to /login otherwise.
-  const me = await requireUser();
+  const me = await requireOnboardedUser();
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />

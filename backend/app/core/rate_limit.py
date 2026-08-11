@@ -26,7 +26,19 @@ _redis: redis.Redis | None = None
 def get_redis() -> redis.Redis:
     global _redis
     if _redis is None:
-        _redis = redis.from_url(settings.redis_url, decode_responses=True)
+        # Timeouts are load-bearing, not tuning. Failing open is the design, but
+        # the *default* client waits ~4s before deciding it cannot connect, and
+        # that wait lands on every rate-limited request: voting, reporting,
+        # commenting, and every auth call including OTP. Measured 2026-08-10 with
+        # no Redis listening: 4.045s per call. A dead limiter must cost
+        # milliseconds, otherwise a Redis outage silently becomes a site-wide
+        # four-second tax on exactly the endpoints users feel most.
+        _redis = redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=0.25,
+            socket_timeout=0.25,
+        )
     return _redis
 
 

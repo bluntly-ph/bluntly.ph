@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 
 import { AskQuestionForm } from "@/components/qa/AskQuestionForm";
 import { SiteHeader } from "@/components/site/SiteHeader";
-import { requireUser } from "@/lib/dal";
+import { requireOnboardedUser } from "@/lib/dal";
 
 export const metadata: Metadata = {
   title: "Ask a question — bluntly",
 };
 
 export default async function NewQuestionPage() {
-  const me = await requireUser();
+  const me = await requireOnboardedUser();
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />

@@ -191,8 +191,14 @@ function CodeStep({
             className="mt-2 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-3 py-2 text-[12px] text-[var(--accent-danger)]"
           >
             {resendState.error}
-            {resendState.code === "rate_limited" && waiting
-              ? ` You can request another in ${countdown(waitSeconds)}.`
+            {/* Gated only on the server having sent a wait, not additionally on
+                the local ticker being live: QA saw the message land without the
+                time, and two conditions meant either one silently swallowed it.
+                Falls back to the server's figure if the ticker hasn't started. */}
+            {resendState.retryAfterSeconds
+              ? ` You can request another in ${countdown(
+                  waiting ? waitSeconds : resendState.retryAfterSeconds,
+                )}.`
               : null}
           </p>
         ) : resendState.ok ? (

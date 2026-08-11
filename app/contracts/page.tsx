@@ -6,7 +6,7 @@ import { ContractActions } from "@/components/dashboard/ContractActions";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { getContracts, daysUntil, hasOpenBuyout } from "@/lib/contracts";
-import { requireUser } from "@/lib/dal";
+import { requireOnboardedUser } from "@/lib/dal";
 
 export const metadata: Metadata = {
   title: "Contracts — bluntly",
@@ -25,7 +25,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default async function ContractsPage() {
-  const me = await requireUser();
+  const me = await requireOnboardedUser();
   const contracts = await getContracts();
 
   return (

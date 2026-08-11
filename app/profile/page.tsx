@@ -8,7 +8,7 @@ import { ReviewCard } from "@/components/review/ReviewCard";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
-import { requireUser } from "@/lib/dal";
+import { requireOnboardedUser } from "@/lib/dal";
 import { INTERESTS } from "@/lib/interests";
 import { searchReviews } from "@/lib/reviews";
 
@@ -20,7 +20,7 @@ const interestLabel = (slug: string) =>
   INTERESTS.find((i) => i.slug === slug)?.label ?? slug;
 
 export default async function ProfilePage() {
-  const me = await requireUser();
+  const me = await requireOnboardedUser();
   const reviews = await searchReviews({
     author_id: me.id,
     sort: "newest",

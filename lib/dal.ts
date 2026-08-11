@@ -66,6 +66,36 @@ export const requireUser = cache(async (): Promise<SessionUser> => {
   return user;
 });
 
+/**
+ * True once the account has been through the wizard.
+ *
+ * Interests are the reliable signal: the wizard's step 2 will not advance
+ * without them, and nothing else writes the field, so their presence means the
+ * whole flow ran. Username alone is not usable — OTP signup derives one
+ * automatically, so every account has one from the moment it exists.
+ */
+export function isOnboarded(user: SessionUser): boolean {
+  return Array.isArray(user.interests) && user.interests.length > 0;
+}
+
+/**
+ * For pages an unfinished account has no business reaching.
+ *
+ * Signing up redirects to /onboarding, but that is a redirect, not a gate — a
+ * new account could simply navigate away and use the site while the profile
+ * data we asked for was never collected. This sends them back until it is.
+ *
+ * Reading stays open: the site is public, and bouncing someone out of a review
+ * they were part-way through is worse than a late profile. It is *acting* —
+ * writing a review, asking, requesting, banking earnings — that requires it.
+ * Never call this from /onboarding itself; that redirects to itself forever.
+ */
+export const requireOnboardedUser = cache(async (): Promise<SessionUser> => {
+  const user = await requireUser();
+  if (!isOnboarded(user)) redirect("/onboarding");
+  return user;
+});
+
 /** For pages that require a specific role. */
 export async function requireRole(
   ...roles: SessionUser["role"][]

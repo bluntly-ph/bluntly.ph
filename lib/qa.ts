@@ -38,7 +38,7 @@ export type QuestionDetail = Question & { answers: Answer[] };
 export async function getQuestions(productId?: string): Promise<Question[]> {
   try {
     const qs = productId ? `?product_id=${productId}&limit=30` : "?limit=30";
-    return await apiFetch<Question[]>(`/api/v1/questions${qs}`);
+    return await apiFetch<Question[]>(`/api/v1/questions${qs}`, { revalidate: 60 });
   } catch {
     return [];
   }
@@ -46,7 +46,9 @@ export async function getQuestions(productId?: string): Promise<Question[]> {
 
 export async function getQuestionDetail(id: string): Promise<QuestionDetail | null> {
   try {
-    return await apiFetch<QuestionDetail>(`/api/v1/questions/${id}`);
+    return await apiFetch<QuestionDetail>(`/api/v1/questions/${id}`, {
+      revalidate: 60,
+    });
   } catch {
     return null;
   }

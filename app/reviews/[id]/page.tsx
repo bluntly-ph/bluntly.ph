@@ -20,29 +20,34 @@ export default async function ReviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getReviewFull(id);
+
+  // The cookie read is local, so the token is free before the network work.
+  const token = await getSessionToken();
+  // One parallel round instead of three sequential ones. These calls are
+  // independent, and awaiting them in series cost a full backend round trip
+  // each — the page measured 2.9s against a database whose queries run in
+  // single-digit milliseconds. `getUser` keeps its own catch so a backend
+  // wobble degrades to "signed out" rather than rejecting the whole batch.
+  const [data, me, comments] = await Promise.all([
+    getReviewFull(id),
+    getUser().catch(() => null),
+    // Sent with the viewer's token so the thread comes back carrying their own
+    // votes; signed-out readers get the same thread with `my_vote` null.
+    getComments(id, token),
+  ]);
   if (!data) notFound();
 
   let user: HeaderUser = null;
   let canVote = false;
   let isOwnReview = false;
   let viewerId: string | null = null;
-  try {
-    const me = await getUser();
-    if (me) {
-      user = { username: me.username, avatarUrl: me.avatar_url };
-      viewerId = me.id;
-      isOwnReview = me.id === data.author?.id;
-      // You may vote on any published review except your own.
-      canVote = !isOwnReview;
-    }
-  } catch {
-    user = null;
+  if (me) {
+    user = { username: me.username, avatarUrl: me.avatar_url };
+    viewerId = me.id;
+    isOwnReview = me.id === data.author?.id;
+    // You may vote on any published review except your own.
+    canVote = !isOwnReview;
   }
-
-  // Sent with the viewer's token so the thread comes back carrying their own
-  // votes; signed-out readers get the same thread with `my_vote` null.
-  const comments = await getComments(id, await getSessionToken());
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">

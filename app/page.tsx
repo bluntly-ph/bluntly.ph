@@ -23,15 +23,16 @@ export const metadata: Metadata = {
  * marketing page down, so a failure to resolve the user just means "signed out".
  */
 export default async function Home() {
-  let user: HeaderUser = null;
-  try {
-    const me = await getUser();
-    user = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
-  } catch {
-    user = null;
-  }
-
-  const { featured, cards } = await getLandingReviews();
+  // Parallel, not sequential: the viewer and the feed are independent, and
+  // awaiting them in turn added a whole backend round trip to every visit.
+  const [me, landing] = await Promise.all([
+    getUser().catch(() => null),
+    getLandingReviews(),
+  ]);
+  const user: HeaderUser = me
+    ? { username: me.username, avatarUrl: me.avatar_url }
+    : null;
+  const { featured, cards } = landing;
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
