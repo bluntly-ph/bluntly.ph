@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Request, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import AppError, NotFoundError
-from app.core.security import get_current_user, require_role
+from app.core.rate_limit import enforce_rate_limit
+from app.core.security import get_current_user, get_optional_user, require_role
 from app.db.session import get_db
 from app.models.enums import MemberRole, ModerationAction, ModerationTargetType
 from app.models.moderation import ModerationLog
@@ -18,6 +20,7 @@ from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
 from app.services.storage import delete_avatar_object, upload_avatar
+from app.services.username import MAX_LENGTH, MIN_LENGTH, is_valid_username
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -32,8 +35,57 @@ def _user_or_404(db: Session, user_id: uuid.UUID) -> User:
     return user
 
 
-# Registered before the `/{user_id}/...` routes so the literal `me` segment is
-# never considered as a UUID path parameter.
+class UsernameAvailability(BaseModel):
+    username: str
+    available: bool
+    reason: str | None = None
+
+
+# Registered before the `/{user_id}/...` routes so the literal segment is never
+# considered as a UUID path parameter.
+@router.get("/username-available", response_model=UsernameAvailability,
+            summary="Whether a username is free to claim")
+def username_available(request: Request, username: str,
+                       db: Session = Depends(get_db),
+                       user: User | None = Depends(get_optional_user),
+                       ) -> UsernameAvailability:
+    """Check a username *before* the signup wizard is finished (BUG-018).
+
+    Availability was only ever discovered on submit, so someone could pick a
+    handle, choose interests, read two more screens, and only then be told to
+    start over with a different name.
+
+    No enumeration concern: usernames are public handles, printed on every
+    review and profile. Rate-limited anyway, because a cheap endpoint that
+    answers questions about accounts should not be free to hammer.
+    """
+    enforce_rate_limit(request, "username-check", max_requests=60)
+    candidate = (username or "").strip()
+    # Same rule the write path enforces (services/username.py, mirrored in SQL by
+    # migration 0016) rather than a second copy that could drift from it.
+    if len(candidate) < MIN_LENGTH:
+        return UsernameAvailability(
+            username=candidate, available=False,
+            reason=f"Usernames need at least {MIN_LENGTH} characters.")
+    if len(candidate) > MAX_LENGTH:
+        return UsernameAvailability(
+            username=candidate, available=False,
+            reason=f"Usernames are {MAX_LENGTH} characters at most.")
+    if not is_valid_username(candidate):
+        return UsernameAvailability(
+            username=candidate, available=False,
+            reason="Lowercase letters, numbers, and underscores only.")
+    stmt = select(User.id).where(func.lower(User.username) == candidate.lower())
+    # Your own current handle is "available" to you — otherwise the wizard would
+    # flag the auto-generated name it prefilled for you as taken.
+    if user is not None:
+        stmt = stmt.where(User.id != user.id)
+    if db.scalar(stmt) is not None:
+        return UsernameAvailability(username=candidate, available=False,
+                                    reason="That username is already taken.")
+    return UsernameAvailability(username=candidate, available=True)
+
+
 @router.patch("/me", response_model=UserOut,
               responses={401: {"model": Problem}, 409: {"model": Problem}},
               summary="Update the current user's profile")

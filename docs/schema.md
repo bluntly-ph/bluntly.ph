@@ -124,6 +124,23 @@ collision; the SQL slug mirrors `app/services/username.py`.
 **`users.avatar_url`** Text NULL (0017) — public URL of an object in the
 Supabase Storage `avatars` bucket.
 
+### Storage buckets
+
+Buckets are created in the Supabase dashboard, not by a migration, so a new one
+is a deploy step rather than something `alembic upgrade` picks up.
+
+| Bucket | Public | Max object | Written by |
+|---|---|---|---|
+| `avatars` | yes | 5 MB | `POST /users/me/avatar` |
+| `product-images` | yes | 5 MB | `scripts/seed_product_images.py`, admin upload |
+| `review-photos` | yes | 8 MB | `POST /reviews/photo` (BUG-023) |
+
+**`review-photos` must be created before review photo upload works** — the code
+is in `services/storage.py::upload_review_photo`, but the bucket itself does not
+exist yet. Objects are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
+because a receipt photographed on a phone routinely clears 5 MB, and rejecting a
+valid proof of purchase is worse than storing a few extra megabytes.
+
 ## Row-Level Security
 All 15 tables have RLS enabled (31 policies). Owner-write tables key on
 `auth.uid()`; public-read on content/reference tables; admin-only tables

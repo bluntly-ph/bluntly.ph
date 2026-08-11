@@ -1,8 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState, useRef, useState } from "react";
-import { ChatCircle, Confetti, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  CaretLeft,
+  ChatCircle,
+  Confetti,
+  MagnifyingGlass,
+} from "@phosphor-icons/react/dist/ssr";
 
 import { completeOnboarding, type ProfileState } from "@/app/actions/profile";
 import { StepBar } from "@/components/auth/StepBar";
@@ -11,6 +16,76 @@ import { TextField } from "@/components/ui/TextField";
 import { INTERESTS, REQUIRED_INTERESTS } from "@/lib/interests";
 
 const EMPTY: ProfileState = {};
+
+type Availability =
+  | { state: "idle" | "checking" }
+  | { state: "free" }
+  | { state: "taken"; reason: string };
+
+/**
+ * Live username availability (BUG-018).
+ *
+ * The clash used to surface only when the whole wizard was submitted — four
+ * steps after the name was chosen — forcing a full restart with a new one.
+ *
+ * Debounced because this fires per keystroke, and each response is matched to
+ * the query that asked for it: replies can arrive out of order, and a stale
+ * "taken" landing after a newer "free" would condemn a perfectly good name.
+ */
+function useUsernameAvailability(
+  username: string,
+  ownUsername: string,
+): Availability {
+  // Only the *answer* is state. Everything derivable from the current input is
+  // computed during render, which keeps the effect free of synchronous setState
+  // and its cascading re-render (react-hooks/set-state-in-effect).
+  const [resolved, setResolved] = useState<{
+    name: string;
+    available: boolean;
+    reason?: string;
+  } | null>(null);
+
+  const candidate = username.trim();
+  // The prefilled handle is already this user's own — nothing to check.
+  const checkable =
+    Boolean(candidate) && candidate !== ownUsername && candidate.length >= 3;
+
+  useEffect(() => {
+    if (!checkable) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/bff/api/v1/users/username-available?username=${encodeURIComponent(candidate)}`,
+        );
+        if (cancelled || !res.ok) return;
+        const body = (await res.json()) as { available: boolean; reason?: string };
+        if (cancelled) return;
+        // Stamped with the name it answered about: replies can land out of
+        // order, and a stale "taken" arriving after a newer "free" would
+        // condemn a perfectly good name.
+        setResolved({ name: candidate, available: body.available, reason: body.reason });
+      } catch {
+        // A failed check must not block the flow — the server re-checks on
+        // submit regardless, so silence is the safe answer here.
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [candidate, checkable]);
+
+  if (!candidate || candidate === ownUsername) return { state: "idle" };
+  if (candidate.length < 3) {
+    return { state: "taken", reason: "Usernames need at least 3 characters." };
+  }
+  if (resolved?.name !== candidate) return { state: "checking" };
+  return resolved.available
+    ? { state: "free" }
+    : { state: "taken", reason: resolved.reason ?? "That username is taken." };
+}
 
 export type OnboardingUser = {
   username: string;
@@ -36,6 +111,7 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
   const [preview, setPreview] = useState<string | null>(user.avatarUrl);
   const [state, formAction, pending] = useActionState(completeOnboarding, EMPTY);
   const fileRef = useRef<HTMLInputElement>(null);
+  const availability = useUsernameAvailability(username, user.username);
 
   function toggleInterest(slug: string) {
     setInterests((current) =>
@@ -94,6 +170,7 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
             setPreview(file ? URL.createObjectURL(file) : null);
           }}
           error={state.fieldErrors?.username}
+          availability={availability}
         />
       ) : null}
 
@@ -116,13 +193,14 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
 
       {/* A single action stretched across the full card width reads as a
           banner rather than a button, so it keeps the column width on desktop. */}
-      <div className="mt-8 shrink-0 lg:mx-auto lg:w-full lg:max-w-[24rem]">
+      <div className="mt-8 flex shrink-0 flex-col gap-3 lg:mx-auto lg:w-full lg:max-w-[24rem]">
         {step < 4 ? (
           <Button
             type="button"
             fullWidth
             disabled={
-              (step === 1 && username.trim().length < 3) ||
+              (step === 1 &&
+                (username.trim().length < 3 || availability.state === "taken")) ||
               (step === 2 && interests.length < REQUIRED_INTERESTS)
             }
             onClick={() => {
@@ -143,6 +221,19 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
             {pending ? "Setting up…" : "Explore bluntly"}
           </Button>
         )}
+
+        {/* Back (BUG-018). Without it, changing an answer from step 1 meant
+            abandoning the wizard and starting the whole thing again. Nothing is
+            submitted until the end, so stepping back is free. */}
+        {step > 1 ? (
+          <button
+            type="button"
+            onClick={() => setStep(step - 1)}
+            className="inline-flex items-center justify-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            <CaretLeft size={16} /> Back
+          </button>
+        ) : null}
       </div>
     </form>
   );
@@ -157,6 +248,7 @@ function StepIdentity({
   fileRef,
   onPick,
   error,
+  availability,
 }: {
   username: string;
   setUsername: (v: string) => void;
@@ -166,6 +258,7 @@ function StepIdentity({
   fileRef: React.RefObject<HTMLInputElement | null>;
   onPick: (file: File | null) => void;
   error?: string;
+  availability: Availability;
 }) {
   return (
     <div className="flex flex-1 flex-col lg:mx-auto lg:w-full lg:max-w-[24rem]">
@@ -211,16 +304,28 @@ function StepIdentity({
       </div>
 
       <div className="mt-8 flex flex-col gap-5">
-        <TextField
-          label="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value.toLowerCase())}
-          adornment="@"
-          pattern="[a-z0-9_]{3,32}"
-          autoComplete="username"
-          placeholder="violewashere"
-          error={error}
-        />
+        <div className="flex flex-col gap-1">
+          <TextField
+            label="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+            adornment="@"
+            pattern="[a-z0-9_]{3,32}"
+            autoComplete="username"
+            placeholder="violewashere"
+            // The server's verdict on submit still wins; this is the earlier,
+            // friendlier warning (BUG-018).
+            error={error ?? (availability.state === "taken" ? availability.reason : undefined)}
+          />
+          {!error && availability.state === "free" ? (
+            <p className="text-[12px] text-[var(--accent-success)]">
+              @{username} is available.
+            </p>
+          ) : null}
+          {!error && availability.state === "checking" ? (
+            <p className="text-[12px] text-[var(--text-muted)]">Checking…</p>
+          ) : null}
+        </div>
         <TextField
           label="Display name"
           value={displayName}

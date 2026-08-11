@@ -15,7 +15,30 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     category: str | None = None
     brand: str | None = None
-    source_url: str | None = None
+    # Required in practice for reviewer submissions (BUG-020) — the route
+    # enforces it by role, because a moderator adding a product directly has no
+    # marketplace listing to point at.
+    source_url: str | None = Field(default=None, max_length=2048)
+
+
+class ProductCanonicalize(BaseModel):
+    """A moderator's canonical naming of a pending submission (BUG-020).
+
+    The four parts the naming convention asks for are separate fields rather
+    than one free-text box, because that is what keeps two people naming the
+    same product the same way — which is the entire point of consolidating
+    reviews under one entry.
+    """
+
+    brand: str = Field(min_length=1, max_length=120)
+    product_line: str = Field(min_length=1, max_length=160)
+    key_spec: str | None = Field(default=None, max_length=120)
+    descriptor: str | None = Field(default=None, max_length=120)
+    category: str | None = None
+
+    def canonical_name(self) -> str:
+        parts = [self.brand, self.product_line, self.key_spec, self.descriptor]
+        return " ".join(p.strip() for p in parts if p and p.strip())
 
 
 class ProductOut(BaseModel):

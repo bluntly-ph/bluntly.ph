@@ -10,7 +10,8 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,7 @@ from app.schemas.review import (
 )
 from app.services import report_service, review_service, vote_service
 from app.services.ai_critique import get_provider
+from app.services.storage import upload_review_photo
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -86,6 +88,24 @@ def create_review(payload: ReviewCreate, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> ReviewOut:
     review = review_service.create_review(db, user.id, payload)
     return ReviewOut.model_validate(review)
+
+
+class PhotoUploaded(BaseModel):
+    url: str
+
+
+@router.post("/photo", response_model=PhotoUploaded,
+             summary="Upload a review photo or proof of purchase; returns its URL")
+def upload_photo(file: UploadFile,
+                 user: User = Depends(get_current_user)) -> PhotoUploaded:
+    """Store an image and hand back its URL for `photo_url` / `receipt_url`.
+
+    Separate from review creation because the photo is picked while the review
+    is still being written — there is no review id to attach it to yet, and
+    making the author upload only to have submission fail validation would lose
+    the file. Declared above `/{review_id}` so the literal path wins the match.
+    """
+    return PhotoUploaded(url=upload_review_photo(user.id, file.file.read()))
 
 
 @router.get("", response_model=list[ReviewOut],

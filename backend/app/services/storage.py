@@ -114,3 +114,47 @@ def upload_product_image(product_id: uuid.UUID, data: bytes) -> str:
     client.storage.from_(PRODUCT_BUCKET).upload(
         path, data, {"content-type": mime, "upsert": "true"})
     return client.storage.from_(PRODUCT_BUCKET).get_public_url(path)
+
+
+REVIEW_BUCKET = "review-photos"
+MAX_REVIEW_PHOTO_BYTES = 8 * 1024 * 1024
+
+
+def validate_review_photo(data: bytes) -> str:
+    """Return the sniffed MIME type, or raise an AppError (BUG-023).
+
+    The allowance is larger than an avatar's because this is evidence, not
+    decoration: a receipt photographed on a modern phone routinely clears 5 MB,
+    and rejecting a *valid* proof of purchase is worse than storing a few extra
+    megabytes. Same magic-byte discipline as everywhere else in this module —
+    the browser's Content-Type is attacker-controlled.
+
+    Note HEIC is deliberately absent. iOS Safari transcodes to JPEG on upload,
+    and accepting a format nothing in the pipeline can render would trade a
+    clear rejection at the door for a broken image on the published review.
+    """
+    if len(data) > MAX_REVIEW_PHOTO_BYTES:
+        raise AppError("Photo must be 8 MB or smaller.", code="file_too_large",
+                       status_code=413, title="File too large")
+    mime = sniff_image_type(data)
+    if mime is None:
+        raise AppError("Photo must be a PNG, JPEG, or WebP image.",
+                       code="unsupported_media_type", status_code=415,
+                       title="Unsupported media type")
+    return mime
+
+
+def upload_review_photo(user_id: uuid.UUID, data: bytes) -> str:
+    """Store a review photo and return its public URL.
+
+    Keyed by uploader rather than by review: the photo is chosen while the
+    review is still being written and has no id yet. Binding it to the author
+    keeps the path attributable, which is what matters when a proof-of-purchase
+    image is later disputed.
+    """
+    mime = validate_review_photo(data)
+    path = f"{user_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
+    client = get_service_client()
+    client.storage.from_(REVIEW_BUCKET).upload(
+        path, data, {"content-type": mime, "upsert": "false"})
+    return client.storage.from_(REVIEW_BUCKET).get_public_url(path)

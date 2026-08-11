@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   CaretLeft,
   CheckCircle,
+  Image as ImageIcon,
   MagnifyingGlass,
-  Plus,
+  Link as LinkIcon,
   Star,
+  Trash,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
@@ -15,46 +24,271 @@ import { Button } from "@/components/ui/Button";
 type Product = { id: string; canonical_name: string | null; category: string | null };
 type Verdict = "yes_absolutely" | "it_depends" | "hard_pass";
 
-const VERDICTS: { value: Verdict; label: string; ring: string }[] = [
-  { value: "yes_absolutely", label: "Yes, absolutely", ring: "var(--accent-success)" },
-  { value: "it_depends", label: "It depends", ring: "var(--accent-star)" },
-  { value: "hard_pass", label: "Hard pass", ring: "var(--accent-danger)" },
+const VERDICTS: { value: Verdict; label: string; hint: string; ring: string }[] = [
+  {
+    value: "yes_absolutely",
+    label: "Yes, absolutely",
+    hint: "You'd tell a friend to buy it.",
+    ring: "var(--accent-success)",
+  },
+  {
+    value: "it_depends",
+    label: "It depends",
+    hint: "Right for some people, wrong for others.",
+    ring: "var(--accent-star)",
+  },
+  {
+    value: "hard_pass",
+    label: "Hard pass",
+    hint: "You'd tell a friend to save their money.",
+    ring: "var(--accent-danger)",
+  },
 ];
+
+/** Enforced in the API too (MAX_DISCUSSION_CHARS) — BUG-022. */
+const MAX_DISCUSSION = 5000;
+const MAX_TITLE = 200;
 
 const lines = (s: string) =>
   s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
 
+/* ------------------------------------------------------------------ draft */
+
+/**
+ * The draft (BUG-024).
+ *
+ * Everything typed lives in one object so saving is a single write and
+ * restoring is a single read. Version the key rather than migrating: a stale
+ * shape from an older build should be ignored, not half-applied to a form whose
+ * fields have moved.
+ */
+const DRAFT_KEY = "bluntly:review-draft:v1";
+
+type Draft = {
+  step: number;
+  product: Product | null;
+  title: string;
+  discussion: string;
+  verdict: Verdict | null;
+  rating: number;
+  pros: string;
+  cons: string;
+  target: string;
+  anti: string;
+  photoUrl: string | null;
+  receiptUrl: string | null;
+  price: string;
+  savedAt: number;
+};
+
+const EMPTY_DRAFT: Draft = {
+  step: 0,
+  product: null,
+  title: "",
+  discussion: "",
+  verdict: null,
+  rating: 0,
+  pros: "",
+  cons: "",
+  target: "",
+  anti: "",
+  photoUrl: null,
+  receiptUrl: null,
+  price: "",
+  savedAt: 0,
+};
+
+function readDraft(): Draft | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Draft>;
+    // A draft with nothing in it is noise — don't offer to resume it.
+    if (!parsed.product && !parsed.discussion?.trim() && !parsed.title?.trim()) {
+      return null;
+    }
+    return { ...EMPTY_DRAFT, ...parsed };
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* private mode, quota — losing a draft must never break submission */
+  }
+}
+
+/**
+ * Whether we are past hydration.
+ *
+ * The saved draft cannot be read while rendering on the server, and reading it
+ * during the first client render would produce a tree that disagrees with the
+ * server's. useSyncExternalStore is the sanctioned way to say "these two
+ * renders legitimately differ" — and unlike setting state in an effect, it does
+ * not schedule a cascading render (react-hooks/set-state-in-effect).
+ */
+const NO_OP_SUBSCRIBE = () => () => {};
+
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    NO_OP_SUBSCRIBE,
+    () => true,
+    () => false,
+  );
+}
+
+/* ------------------------------------------------------------------- steps */
+
+/**
+ * The seven steps from the spec, in order, after the product is chosen
+ * (BUG-019). One question per screen: the whole form used to arrive at once,
+ * which is why a reviewer could reach the button with the verdict unset and no
+ * idea which field was missing.
+ */
+const STEPS = [
+  "Your experience",
+  "Your verdict",
+  "Star rating",
+  "Pros and cons",
+  "Who it's not for",
+  "Proof of purchase",
+  "Title",
+] as const;
+
 export function WriteReviewForm() {
-  const [step, setStep] = useState<"product" | "details" | "done">("product");
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [product, setProduct] = useState<Product | null>(null);
+  const [phase, setPhase] = useState<"product" | "steps" | "done">("product");
+  const [dismissed, setDismissed] = useState(false);
+
+  const hydrated = useHydrated();
+  // Captured once, at hydration: the autosave below rewrites the same key on
+  // every keystroke, and re-reading it would keep resurrecting the banner with
+  // the reviewer's own in-progress work.
+  const savedDraft = useMemo(() => (hydrated ? readDraft() : null), [hydrated]);
+  const resumable = dismissed ? null : savedDraft;
+
+  // Persist on every change, but only once there is something worth keeping.
+  // Writing to an external store is what effects are for; no state is set here.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!product && !draft.discussion.trim() && !draft.title.trim()) return;
+    try {
+      window.localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ ...draft, product, savedAt: Date.now() }),
+      );
+    } catch {
+      /* see clearDraft */
+    }
+  }, [draft, product, hydrated]);
+
+  const patch = useCallback(
+    (changes: Partial<Draft>) => setDraft((d) => ({ ...d, ...changes })),
+    [],
+  );
+
+  function resume() {
+    const saved = resumable;
+    if (!saved) return;
+    setDraft(saved);
+    setProduct(saved.product);
+    setPhase(saved.product ? "steps" : "product");
+    setDismissed(true);
+  }
+
+  function discard() {
+    clearDraft();
+    setDismissed(true);
+  }
+
+  if (phase === "done") {
+    return (
+      <div className="mx-auto w-full max-w-[42rem] px-6 py-8 lg:py-10">
+        <DoneStep />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[42rem] px-6 py-8 lg:py-10">
-      {step === "product" && (
+      {resumable ? (
+        <ResumeBanner draft={resumable} onResume={resume} onDiscard={discard} />
+      ) : null}
+
+      {phase === "product" ? (
         <ProductStep
           onPick={(p) => {
             setProduct(p);
-            setStep("details");
+            patch({ step: 0 });
+            setPhase("steps");
           }}
         />
-      )}
-      {step === "details" && product && (
-        <DetailsStep
+      ) : product ? (
+        <StepsFlow
           product={product}
-          onBack={() => setStep("product")}
-          onDone={() => setStep("done")}
+          draft={draft}
+          patch={patch}
+          onChangeProduct={() => setPhase("product")}
+          onDone={() => {
+            clearDraft();
+            setPhase("done");
+          }}
         />
-      )}
-      {step === "done" && <DoneStep />}
+      ) : null}
     </div>
   );
 }
+
+function ResumeBanner({
+  draft,
+  onResume,
+  onDiscard,
+}: {
+  draft: Draft;
+  onResume: () => void;
+  onDiscard: () => void;
+}) {
+  const when = draft.savedAt
+    ? new Date(draft.savedAt).toLocaleString("en-PH", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+  return (
+    <div className="mb-6 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] p-4">
+      <p className="text-[14px] font-semibold text-[var(--text-primary)]">
+        You have an unfinished review
+        {draft.product?.canonical_name ? ` of ${draft.product.canonical_name}` : ""}.
+      </p>
+      {when ? (
+        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Saved {when}.</p>
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        <Button type="button" size="sm" onClick={onResume}>
+          Pick up where I left off
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={onDiscard}>
+          Start fresh
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- product */
 
 function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [busy, setBusy] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const query = q.trim();
   const searching = query.length >= 2;
@@ -77,23 +311,41 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
     return () => clearTimeout(t);
   }, [query, searching]);
 
-  // Derived, not stored: results from a previous query must not survive into a
-  // query that no longer qualifies. Clearing via setState inside the effect body
-  // would trigger a cascading render (react-hooks/set-state-in-effect).
   const visibleResults = searching ? results : [];
 
-  async function createAndPick() {
-    if (!q.trim() || creating) return;
-    setCreating(true);
+  /**
+   * Submit an unlisted product (BUG-020).
+   *
+   * A marketplace link, not a name the reviewer invents. The API stores the row
+   * `pending` for a moderator to name canonically — otherwise "Jisulife fan"
+   * and "JISULIFE Life 9" become separate products and their reviews never
+   * meet. The review can be written against it immediately either way.
+   */
+  async function submitByLink() {
+    const url = sourceUrl.trim();
+    if (!url || submitting) return;
+    if (!/^https?:\/\//i.test(url)) {
+      setError("Paste the full link, starting with https://");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
     try {
       const res = await fetch("/api/bff/api/v1/products", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: q.trim() }),
+        body: JSON.stringify({ name: query || url, source_url: url }),
       });
-      if (res.ok) onPick(await res.json());
+      if (!res.ok) {
+        const p = (await res.json().catch(() => ({}))) as { detail?: string };
+        setError(p.detail ?? "Couldn't submit that product.");
+        return;
+      }
+      onPick(await res.json());
+    } catch {
+      setError("Couldn't reach the server.");
     } finally {
-      setCreating(false);
+      setSubmitting(false);
     }
   }
 
@@ -140,64 +392,130 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
             </button>
           </li>
         ))}
-        {searching && !busy ? (
-          <li>
+      </ul>
+
+      {searching && !busy ? (
+        <div className="mt-4 rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] p-4">
+          {showSubmit ? (
+            <>
+              <p className="text-[13px] font-medium text-[var(--text-primary)]">
+                Paste the Shopee or Lazada link
+              </p>
+              <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                A moderator names it properly so every review of this product
+                ends up in one place. You can write your review right away.
+              </p>
+              <div className="relative mt-3">
+                <LinkIcon
+                  size={18}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+                />
+                <input
+                  value={sourceUrl}
+                  onChange={(e) => setSourceUrl(e.target.value)}
+                  placeholder="https://shopee.ph/…"
+                  inputMode="url"
+                  className={`${inputCls} pl-9`}
+                />
+              </div>
+              {error ? (
+                <p role="alert" className="mt-2 text-[12px] text-[var(--accent-danger)]">
+                  {error}
+                </p>
+              ) : null}
+              <div className="mt-3 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={submitByLink}
+                  disabled={!sourceUrl.trim() || submitting}
+                >
+                  {submitting ? "Submitting…" : "Use this product"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowSubmit(false)}
+                >
+                  Back to search
+                </Button>
+              </div>
+            </>
+          ) : (
             <button
               type="button"
-              onClick={createAndPick}
-              disabled={creating}
-              className="flex w-full items-center gap-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] p-3 text-left hover:border-[var(--accent-primary)] disabled:opacity-60"
+              onClick={() => setShowSubmit(true)}
+              className="text-left"
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-[color-mix(in_srgb,var(--accent-primary)_12%,transparent)] text-[var(--accent-primary)]">
-                <Plus size={18} weight="bold" />
-              </span>
               <span className="text-[14px] text-[var(--text-primary)]">
-                Add &ldquo;<span className="font-semibold">{q.trim()}</span>&rdquo; as a new product
+                Can&rsquo;t find &ldquo;
+                <span className="font-semibold">{query}</span>&rdquo;?
+              </span>
+              <span className="mt-0.5 block text-[12px] text-[var(--accent-primary)]">
+                Add it with a marketplace link
               </span>
             </button>
-          </li>
-        ) : null}
-      </ul>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function DetailsStep({
+/* ------------------------------------------------------------------- flow */
+
+function StepsFlow({
   product,
-  onBack,
+  draft,
+  patch,
+  onChangeProduct,
   onDone,
 }: {
   product: Product;
-  onBack: () => void;
+  draft: Draft;
+  patch: (c: Partial<Draft>) => void;
+  onChangeProduct: () => void;
   onDone: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [discussion, setDiscussion] = useState("");
-  const [verdict, setVerdict] = useState<Verdict | null>(null);
-  const [rating, setRating] = useState(0);
-  const [target, setTarget] = useState("");
-  const [anti, setAnti] = useState("");
-  const [pros, setPros] = useState("");
-  const [cons, setCons] = useState("");
-  const [price, setPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const step = Math.min(draft.step, STEPS.length - 1);
 
-  // Named, in the order they appear on the page, so the hint below can say what
-  // is actually outstanding. A disabled button with no explanation is
-  // indistinguishable from a broken one — which is precisely how the tracker's
-  // example row describes it, and its steps omit the verdict, the field easiest
-  // to miss because it is a choice rather than something you type into.
-  const missing = [
-    !title.trim() && "a title",
-    rating <= 0 && "a star rating",
-    !verdict && "a verdict",
-    !discussion.trim() && "the review itself",
-  ].filter((v): v is string => typeof v === "string");
-  const ready = missing.length === 0;
+  /**
+   * What each step still needs before it can advance.
+   *
+   * Named per step so the button can say the reason rather than just sitting
+   * there greyed out (BUG-001), and pros/cons is genuinely gating here rather
+   * than optional-in-practice (BUG-021).
+   */
+  const blocker = ((): string | null => {
+    switch (step) {
+      case 0:
+        return draft.discussion.trim().length < 40
+          ? "Write at least a couple of sentences about your experience."
+          : null;
+      case 1:
+        return draft.verdict ? null : "Pick a verdict.";
+      case 2:
+        return draft.rating > 0 ? null : "Give it a star rating.";
+      case 3:
+        return lines(draft.pros).length === 0 || lines(draft.cons).length === 0
+          ? "Give at least one pro and one con — both are required."
+          : null;
+      case 4:
+        return draft.anti.trim() ? null : "Say who should skip this one.";
+      case 6:
+        return draft.title.trim() ? null : "Give your review a title.";
+      default:
+        return null;
+    }
+  })();
+
+  const isLast = step === STEPS.length - 1;
 
   async function submit() {
-    if (!ready || busy) return;
+    if (blocker || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -206,15 +524,17 @@ function DetailsStep({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           product_id: product.id,
-          title: title.trim(),
-          discussion: discussion.trim(),
-          verdict,
-          star_rating: rating,
-          target_audience: target.trim() || null,
-          anti_target_audience: anti.trim() || null,
-          pros: lines(pros),
-          cons: lines(cons),
-          price_paid: price.trim() ? Number(price) : null,
+          title: draft.title.trim(),
+          discussion: draft.discussion.trim(),
+          verdict: draft.verdict,
+          star_rating: draft.rating,
+          target_audience: draft.target.trim() || null,
+          anti_target_audience: draft.anti.trim() || null,
+          pros: lines(draft.pros),
+          cons: lines(draft.cons),
+          photo_url: draft.photoUrl,
+          receipt_url: draft.receiptUrl,
+          price_paid: draft.price.trim() ? Number(draft.price) : null,
         }),
       });
       if (!res.ok) {
@@ -234,133 +554,358 @@ function DetailsStep({
     <div>
       <button
         type="button"
-        onClick={onBack}
+        onClick={step === 0 ? onChangeProduct : () => patch({ step: step - 1 })}
         className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
       >
-        <CaretLeft size={16} /> Change product
+        <CaretLeft size={16} /> {step === 0 ? "Change product" : STEPS[step - 1]}
       </button>
-      <h1 className="mt-4 text-[24px] font-bold text-[var(--text-primary)]">
+
+      <div className="mt-4 flex items-center gap-3">
+        <span className="text-[12px] font-medium text-[var(--text-muted)]">
+          Step {step + 1} of {STEPS.length}
+        </span>
+        <div
+          className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--base-gray-200)]"
+          role="progressbar"
+          aria-valuenow={step + 1}
+          aria-valuemin={1}
+          aria-valuemax={STEPS.length}
+          aria-label="Review progress"
+        >
+          <div
+            className="h-full rounded-full bg-[var(--accent-primary)] transition-[width]"
+            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      <h1 className="mt-4 text-[22px] font-bold text-[var(--text-primary)]">
+        {STEPS[step]}
+      </h1>
+      <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
         Reviewing{" "}
-        <span className="text-[var(--accent-primary)]">
+        <span className="font-medium text-[var(--accent-primary)]">
           {product.canonical_name ?? "your product"}
         </span>
-      </h1>
+      </p>
 
-      <div className="mt-6 flex flex-col gap-5">
-        <Field label="Review title">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={200}
-            placeholder="Worth the money, or just overhyped?"
-            className={inputCls}
-          />
-        </Field>
+      <div className="mt-6">
+        {step === 0 ? (
+          <Field label="Tell us what actually happened">
+            <textarea
+              value={draft.discussion}
+              onChange={(e) =>
+                patch({ discussion: e.target.value.slice(0, MAX_DISCUSSION) })
+              }
+              rows={9}
+              autoFocus
+              placeholder="How long have you used it? What surprised you? What would you tell a friend who was about to buy one?"
+              className={`${inputCls} resize-y py-3`}
+            />
+            <Counter value={draft.discussion.length} max={MAX_DISCUSSION} />
+          </Field>
+        ) : null}
 
-        <Field label="Your verdict">
-          <div className="flex flex-wrap gap-2">
+        {step === 1 ? (
+          <div className="flex flex-col gap-3">
             {VERDICTS.map((v) => (
               <button
                 key={v.value}
                 type="button"
-                onClick={() => setVerdict(v.value)}
-                className="rounded-[var(--radius-pill)] px-4 py-2 text-[13px] font-semibold transition-shadow"
+                onClick={() => patch({ verdict: v.value })}
+                aria-pressed={draft.verdict === v.value}
+                className="rounded-[var(--radius-sm)] p-4 text-left transition-shadow"
                 style={
-                  verdict === v.value
-                    ? { boxShadow: `inset 0 0 0 2px ${v.ring}`, color: v.ring }
-                    : { boxShadow: "inset 0 0 0 1px var(--line-hairline-30)", color: "var(--text-secondary)" }
+                  draft.verdict === v.value
+                    ? { boxShadow: `inset 0 0 0 2px ${v.ring}` }
+                    : { boxShadow: "inset 0 0 0 1px var(--line-hairline-30)" }
                 }
               >
-                {v.label}
+                <span
+                  className="block text-[15px] font-semibold"
+                  style={{
+                    color:
+                      draft.verdict === v.value ? v.ring : "var(--text-primary)",
+                  }}
+                >
+                  {v.label}
+                </span>
+                <span className="mt-0.5 block text-[13px] text-[var(--text-secondary)]">
+                  {v.hint}
+                </span>
               </button>
             ))}
           </div>
-        </Field>
+        ) : null}
 
-        <Field label="Star rating">
-          <div className="flex gap-1">
+        {step === 2 ? (
+          <div className="flex items-center gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 type="button"
-                onClick={() => setRating(n)}
+                onClick={() => patch({ rating: n })}
                 aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                aria-pressed={draft.rating === n}
               >
                 <Star
-                  size={28}
-                  weight={n <= rating ? "fill" : "regular"}
-                  className={n <= rating ? "text-[var(--accent-star)]" : "text-[var(--base-gray-300)]"}
+                  size={40}
+                  weight={n <= draft.rating ? "fill" : "regular"}
+                  className={
+                    n <= draft.rating
+                      ? "text-[var(--accent-star)]"
+                      : "text-[var(--base-gray-300)]"
+                  }
                 />
               </button>
             ))}
           </div>
-        </Field>
-
-        <Field label="The review">
-          <textarea
-            value={discussion}
-            onChange={(e) => setDiscussion(e.target.value)}
-            rows={5}
-            placeholder="Tell the community what your experience was really like."
-            className={`${inputCls} resize-y py-3`}
-          />
-        </Field>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Pros (one per line)">
-            <textarea value={pros} onChange={(e) => setPros(e.target.value)} rows={4} className={`${inputCls} resize-y py-3`} />
-          </Field>
-          <Field label="Cons (one per line)">
-            <textarea value={cons} onChange={(e) => setCons(e.target.value)} rows={4} className={`${inputCls} resize-y py-3`} />
-          </Field>
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Best for (optional)">
-            <input value={target} onChange={(e) => setTarget(e.target.value)} className={inputCls} placeholder="Who should buy this?" />
-          </Field>
-          <Field label="Not for (optional)">
-            <input value={anti} onChange={(e) => setAnti(e.target.value)} className={inputCls} placeholder="Who should skip it?" />
-          </Field>
-        </div>
-
-        <Field label="Price paid (optional, ₱)">
-          <input
-            value={price}
-            onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-            inputMode="decimal"
-            className={inputCls}
-            placeholder="899"
-          />
-        </Field>
-
-        {error ? (
-          <p role="alert" className="rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[13px] text-[var(--accent-danger)]">
-            {error}
-          </p>
         ) : null}
 
-        <div className="flex items-center gap-3">
-          <Button type="button" onClick={submit} disabled={!ready || busy}>
-            {busy ? "Submitting…" : "Submit for review"}
-          </Button>
-          {ready ? (
-            <p className="text-[12px] text-[var(--text-muted)]">
-              A moderator checks every review before it goes live.
-            </p>
-          ) : (
-            <p role="status" className="text-[12px] text-[var(--text-secondary)]">
-              Still needed:{" "}
-              {new Intl.ListFormat("en", {
-                style: "long",
-                type: "conjunction",
-              }).format(missing)}
-              .
-            </p>
-          )}
-        </div>
+        {step === 3 ? (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Pros (one per line)">
+              <textarea
+                value={draft.pros}
+                onChange={(e) => patch({ pros: e.target.value })}
+                rows={5}
+                autoFocus
+                placeholder={"Genuinely quiet\nBattery lasts a full day"}
+                className={`${inputCls} resize-y py-3`}
+              />
+            </Field>
+            <Field label="Cons (one per line)">
+              <textarea
+                value={draft.cons}
+                onChange={(e) => patch({ cons: e.target.value })}
+                rows={5}
+                placeholder={"Charging port feels flimsy\nNo case included"}
+                className={`${inputCls} resize-y py-3`}
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        {step === 4 ? (
+          <div className="flex flex-col gap-5">
+            <Field label="Who should skip this?">
+              <input
+                value={draft.anti}
+                onChange={(e) => patch({ anti: e.target.value })}
+                autoFocus
+                placeholder="Anyone who needs it to fit in a pocket"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Who is it right for? (optional)">
+              <input
+                value={draft.target}
+                onChange={(e) => patch({ target: e.target.value })}
+                placeholder="Commuters who want something light"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        {step === 5 ? (
+          <div className="flex flex-col gap-6">
+            <PhotoField
+              label="Proof of purchase"
+              hint="A receipt, order screenshot, or the confirmation email. Reviews with proof are marked verified."
+              url={draft.receiptUrl}
+              onChange={(url) => patch({ receiptUrl: url })}
+            />
+            <PhotoField
+              label="A photo of the product (optional)"
+              hint="Your own photo, not the seller's listing image."
+              url={draft.photoUrl}
+              onChange={(url) => patch({ photoUrl: url })}
+            />
+          </div>
+        ) : null}
+
+        {step === 6 ? (
+          <div className="flex flex-col gap-5">
+            <Field label="Review title">
+              <input
+                value={draft.title}
+                onChange={(e) => patch({ title: e.target.value.slice(0, MAX_TITLE) })}
+                autoFocus
+                placeholder="Worth the money, or just overhyped?"
+                className={inputCls}
+              />
+              <Counter value={draft.title.length} max={MAX_TITLE} />
+            </Field>
+            <Field label="What did you pay? (optional, ₱)">
+              <input
+                value={draft.price}
+                onChange={(e) =>
+                  patch({ price: e.target.value.replace(/[^0-9.]/g, "") })
+                }
+                inputMode="decimal"
+                className={`${inputCls} max-w-[12rem]`}
+                placeholder="899"
+              />
+            </Field>
+          </div>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p
+          role="alert"
+          className="mt-6 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[13px] text-[var(--accent-danger)]"
+        >
+          {error}
+        </p>
+      ) : null}
+
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          onClick={isLast ? submit : () => patch({ step: step + 1 })}
+          disabled={Boolean(blocker) || busy}
+        >
+          {busy ? "Submitting…" : isLast ? "Submit for review" : "Continue"}
+        </Button>
+        {blocker ? (
+          <p role="status" className="text-[12px] text-[var(--text-secondary)]">
+            {blocker}
+          </p>
+        ) : isLast ? (
+          <p className="text-[12px] text-[var(--text-muted)]">
+            A moderator checks every review before it goes live.
+          </p>
+        ) : (
+          <p className="text-[12px] text-[var(--text-muted)]">Saved as you type.</p>
+        )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ photos */
+
+/**
+ * One image, uploaded on selection (BUG-023).
+ *
+ * Uploading immediately rather than at submit means the reviewer sees straight
+ * away whether the file was accepted — a rejection discovered at the end, after
+ * seven steps, is the worst possible time to learn a photo was too large.
+ */
+function PhotoField({
+  label,
+  hint,
+  url,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  url: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pick(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/bff/api/v1/reviews/photo", {
+        method: "POST",
+        body,
+      });
+      if (!res.ok) {
+        const p = (await res.json().catch(() => ({}))) as { detail?: string };
+        setError(p.detail ?? "That image couldn't be uploaded.");
+        return;
+      }
+      const { url: uploaded } = (await res.json()) as { url: string };
+      onChange(uploaded);
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setBusy(false);
+      // Let the same file be re-picked after a failure.
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-medium text-[var(--text-primary)]">{label}</span>
+      <span className="text-[12px] text-[var(--text-secondary)]">{hint}</span>
+
+      {url ? (
+        <div className="mt-2 flex items-start gap-3">
+          {/* Plain img: the storage host isn't in the next/image allowlist, and
+              a preview doesn't warrant the config surface. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="Uploaded preview"
+            className="h-28 w-28 rounded-[var(--radius-sm)] object-cover shadow-[var(--shadow-hairline-inset)]"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-2 text-[13px] text-[var(--accent-danger)] hover:bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)]"
+          >
+            <Trash size={16} /> Remove
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          disabled={busy}
+          className="mt-2 inline-flex items-center gap-2 self-start rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] px-4 py-3 text-[13px] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] disabled:opacity-60"
+        >
+          <ImageIcon size={18} />
+          {busy ? "Uploading…" : "Choose an image"}
+        </button>
+      )}
+
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void pick(file);
+        }}
+      />
+
+      {error ? (
+        <p role="alert" className="text-[12px] text-[var(--accent-danger)]">
+          {error}
+        </p>
+      ) : (
+        <p className="text-[11px] text-[var(--text-muted)]">
+          PNG, JPEG, or WebP. Up to 8 MB.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ shared */
+
+function Counter({ value, max }: { value: number; max: number }) {
+  const near = value > max * 0.9;
+  return (
+    <span
+      className={`self-end text-[11px] ${
+        near ? "text-[var(--accent-danger)]" : "text-[var(--text-muted)]"
+      }`}
+    >
+      {value.toLocaleString("en-PH")} / {max.toLocaleString("en-PH")}
+    </span>
   );
 }
 

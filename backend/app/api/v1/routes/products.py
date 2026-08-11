@@ -15,12 +15,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import NotFoundError
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.db.session import get_db
-from app.models.enums import ProductStatus
+from app.models.enums import MemberRole, ProductStatus
 from app.models.product import Product
 from app.models.user import User
-from app.schemas.product import ProductCreate, ProductOut
+from app.schemas.product import ProductCanonicalize, ProductCreate, ProductOut
 from app.services.trust_rating_service import product_low_trust
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -39,15 +39,57 @@ def _product_out(product: Product) -> ProductOut:
 @router.post("", response_model=ProductOut, status_code=201, summary="Create a product")
 def create_product(payload: ProductCreate, db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)) -> ProductOut:
+    """Submit a product.
+
+    A reviewer submits a *marketplace link* and the row lands `pending`, which
+    is what ProductStatus.pending has always documented itself as meaning
+    ("submitted via source_url, awaiting canonicalization"). The route used to
+    shortcut straight to `canonicalized` with whatever name the reviewer typed
+    (BUG-020) — so "Jisulife fan", "jisulife life9" and "JISULIFE Life 9" became
+    three products, splitting the reviews that should consolidate under one.
+
+    The name a reviewer types is kept as a provisional label so the product is
+    recognisable in the meantime; a moderator replaces it via /canonicalize.
+    Moderators still create canonicalized rows directly — they are the ones
+    doing the naming, and they may be adding something with no listing at all.
+
+    `source_url` is deliberately *not* enforced here even though the write-review
+    form always sends one. Requiring it would be a breaking contract change for
+    every existing caller — seeds, scripts, and a dozen test fixtures create
+    products by name alone — to re-state a rule the only human-facing path
+    already applies. The status is what protects the catalogue: an unnamed
+    submission stays `pending` whether or not a link came with it.
+    """
+    is_moderator = user.role == MemberRole.moderator
     product = Product(
         canonical_name=payload.name, category=payload.category, brand=payload.brand,
         source_url=payload.source_url, submitted_by=user.id,
-        status=ProductStatus.canonicalized, product_id=f"prd_{uuid.uuid4().hex[:10]}",
+        status=ProductStatus.canonicalized if is_moderator else ProductStatus.pending,
+        product_id=f"prd_{uuid.uuid4().hex[:10]}",
     )
     db.add(product)
     db.commit()
     db.refresh(product)
     return ProductOut.model_validate(product)
+
+
+@router.post("/{product_id}/canonicalize", response_model=ProductOut,
+             summary="Set a pending product's canonical name (moderator)")
+def canonicalize_product(product_id: uuid.UUID, payload: ProductCanonicalize,
+                         db: Session = Depends(get_db),
+                         mod: User = Depends(require_role("moderator"))) -> ProductOut:
+    """Name a submission and admit it to the catalogue (BUG-020)."""
+    product = db.get(Product, product_id)
+    if product is None:
+        raise NotFoundError("Product not found.", code="product_not_found")
+    product.canonical_name = payload.canonical_name()
+    product.brand = payload.brand
+    if payload.category:
+        product.category = payload.category
+    product.status = ProductStatus.canonicalized
+    db.commit()
+    db.refresh(product)
+    return _product_out(product)
 
 
 @router.get("", response_model=list[ProductOut], summary="List products")

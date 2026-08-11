@@ -161,6 +161,18 @@ function CodeStep({
         <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
           Sent via your email address: {email}
         </p>
+        {/* BUG-018: signing up with an address that already has an account gets
+            a *login* code, and previously nothing said so — the reviewer was
+            left waiting for a signup that silently became something else.
+            Shown to everyone on this step rather than only when the address is
+            taken, because which one it is must stay unrevealed: the server
+            deliberately does not disclose account existence here. */}
+        {purpose === "signup" ? (
+          <p className="mt-2 text-[12px] text-[var(--text-muted)]">
+            Already have an account with this address? The code above signs you
+            in instead.
+          </p>
+        ) : null}
 
         <div className="mt-6">
           <OtpInput error={verifyState.error} onChangeValue={setCode} />

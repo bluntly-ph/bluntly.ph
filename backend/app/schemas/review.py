@@ -17,10 +17,17 @@ class VoteIn(BaseModel):
     vote: VoteDirection
 
 
+# Ceiling on the review body (BUG-022). QA submitted ~5,100 characters with no
+# limit, warning, or truncation. Roughly 800 words — generous for a product
+# review, and enforced here as well as in the form so the cap is a property of
+# the API rather than a courtesy of one client.
+MAX_DISCUSSION_CHARS = 5000
+
+
 class ReviewCreate(BaseModel):
     product_id: uuid.UUID
     title: str = Field(min_length=1, max_length=200)
-    discussion: str = Field(min_length=1)
+    discussion: str = Field(min_length=1, max_length=MAX_DISCUSSION_CHARS)
     verdict: Verdict
     verdict_explanation: str | None = None
     target_audience: str | None = None
