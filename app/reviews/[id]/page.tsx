@@ -29,7 +29,9 @@ export default async function ReviewPage({
   // single-digit milliseconds. `getUser` keeps its own catch so a backend
   // wobble degrades to "signed out" rather than rejecting the whole batch.
   const [data, me, comments] = await Promise.all([
-    getReviewFull(id),
+    // Token passed so the review arrives with the viewer's own vote (BUG-013).
+    // For signed-out readers this is undefined, which keeps the cached path.
+    getReviewFull(id, token),
     getUser().catch(() => null),
     // Sent with the viewer's token so the thread comes back carrying their own
     // votes; signed-out readers get the same thread with `my_vote` null.

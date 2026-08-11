@@ -19,10 +19,11 @@ from app.core.errors import ForbiddenError, NotFoundError
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
-from app.models.enums import MemberRole, ModerationTargetType
+from app.models.enums import MemberRole, ModerationTargetType, VoteDirection
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
+from app.models.vote import ReviewVote
 from app.schemas.ai import CritiqueResponse
 from app.schemas.report import ReportCreate, ReportOut
 from app.schemas.review import (
@@ -53,6 +54,31 @@ def _visible_or_404(review: Review, user: User | None) -> Review:
     if review.published_at is None and not _can_view_unpublished(review, user):
         raise NotFoundError("Review not found.", code="review_not_found")
     return review
+
+
+def _my_votes(db: Session, user: User | None,
+              review_ids: list[uuid.UUID]) -> dict[uuid.UUID, VoteDirection]:
+    """The viewer's own votes across a set of reviews, in one query (BUG-013).
+
+    Batched deliberately: the feed returns up to 100 rows, and asking per row
+    would turn one page render into 100 extra round trips against a database in
+    another region. Signed-out readers cost nothing — no viewer, no query.
+    """
+    if user is None or not review_ids:
+        return {}
+    rows = db.execute(
+        select(ReviewVote.review_id, ReviewVote.vote).where(
+            ReviewVote.voter_id == user.id,
+            ReviewVote.review_id.in_(review_ids),
+        )
+    ).all()
+    return {review_id: vote for review_id, vote in rows}
+
+
+def _out(review: Review, my_vote: VoteDirection | None = None) -> ReviewOut:
+    out = ReviewOut.model_validate(review)
+    out.my_vote = my_vote
+    return out
 
 
 @router.post("", response_model=ReviewOut, status_code=201, summary="Submit a review")
@@ -94,12 +120,14 @@ def review_feed(db: Session = Depends(get_db), limit: int = 8,
                 product_id: uuid.UUID | None = None,
                 author_id: uuid.UUID | None = None, category: str | None = None,
                 q: str | None = None,
-                sort: Literal["newest", "wilson"] = "wilson") -> list[FeedItemOut]:
+                sort: Literal["newest", "wilson"] = "wilson",
+                user: User | None = Depends(get_optional_user)) -> list[FeedItemOut]:
     items = review_service.list_feed(db, limit=min(limit, 100), product_id=product_id,
                                      author_id=author_id, category=category, q=q, sort=sort)
+    mine = _my_votes(db, user, [r.id for r, _, _ in items])
     return [
         FeedItemOut(
-            review=ReviewOut.model_validate(r),
+            review=_out(r, mine.get(r.id)),
             author=FeedAuthor.model_validate(a) if a is not None else None,
             product=FeedProduct.model_validate(p) if p is not None else None,
         )
@@ -111,7 +139,7 @@ def review_feed(db: Session = Depends(get_db), limit: int = 8,
 def get_review(review_id: uuid.UUID, db: Session = Depends(get_db),
                user: User | None = Depends(get_optional_user)) -> ReviewOut:
     review = _visible_or_404(review_service.get_review_or_404(db, review_id), user)
-    return ReviewOut.model_validate(review)
+    return _out(review, _my_votes(db, user, [review.id]).get(review.id))
 
 
 @router.get("/{review_id}/full", response_model=FeedItemOut,
@@ -122,7 +150,7 @@ def get_review_full(review_id: uuid.UUID, db: Session = Depends(get_db),
     author = db.get(User, review.author_id) if review.author_id is not None else None
     product = db.get(Product, review.product_id)
     return FeedItemOut(
-        review=ReviewOut.model_validate(review),
+        review=_out(review, _my_votes(db, user, [review.id]).get(review.id)),
         author=FeedAuthor.model_validate(author) if author is not None else None,
         product=FeedProduct.model_validate(product) if product is not None else None,
     )
@@ -171,7 +199,9 @@ def vote_review(review_id: uuid.UUID, payload: VoteIn, request: Request,
     enforce_rate_limit(request, "vote", max_requests=settings.vote_rate_limit_max)
     review = review_service.get_review_or_404(db, review_id)
     review = vote_service.cast_vote(db, review, user, payload.vote)
-    return ReviewOut.model_validate(review)
+    # Echo the vote just cast rather than re-reading it: the client uses this
+    # response to set its pressed state, so it must not come back empty.
+    return _out(review, payload.vote)
 
 
 @router.delete("/{review_id}/vote", response_model=ReviewOut,
@@ -180,7 +210,9 @@ def unvote_review(review_id: uuid.UUID, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> ReviewOut:
     review = review_service.get_review_or_404(db, review_id)
     review = vote_service.remove_vote(db, review, user.id)
-    return ReviewOut.model_validate(review)
+    # The vote is gone, so my_vote is None — the schema default, stated here so
+    # the symmetry with the POST above is visible rather than inferred.
+    return _out(review, None)
 
 
 @router.post("/{review_id}/report", response_model=ReportOut, status_code=201,

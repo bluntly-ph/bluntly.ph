@@ -191,6 +191,7 @@ export function ReviewDetail({
           helpful={review.helpful_votes}
           unhelpful={review.unhelpful_votes}
           canVote={canVote}
+          myVote={review.my_vote}
         />
 
         {review.referral_redirect_url ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowFatDown, ArrowFatUp } from "@phosphor-icons/react/dist/ssr";
 
@@ -21,21 +21,32 @@ export function ReviewVoteBar({
   helpful,
   unhelpful,
   canVote,
+  myVote = null,
 }: {
   reviewId: string;
   helpful: number;
   unhelpful: number;
   canVote: boolean;
+  /** The viewer's existing vote, from the server (BUG-013). */
+  myVote?: "up" | "down" | null;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [counts, setCounts] = useState({ helpful, unhelpful });
-  const [mine, setMine] = useState<"up" | "down" | null>(null);
+  // Seeded from the server rather than starting empty: this used to mount at
+  // null every time, so a refresh silently un-pressed a vote that was still
+  // recorded, and voting again POSTed a duplicate the API rejected.
+  const [mine, setMine] = useState<"up" | "down" | null>(myVote);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function vote(dir: "up" | "down") {
     if (!canVote) {
-      router.push("/login");
+      // Carry the return path (BUG-017). proxy.ts sets `?next=` for *route*
+      // guards, but this is an in-page action on a public route, so nothing
+      // upstream has set it — a bare /login drops the reader on the home page
+      // afterwards, away from the review they were voting on.
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
     if (pending) return;
@@ -53,12 +64,15 @@ export function ReviewVoteBar({
         setError(problem.detail ?? "Couldn't record your vote.");
         return;
       }
+      // Both facts come from the server's own reading, so the pressed state
+      // cannot drift from what was actually recorded.
       const review = (await res.json()) as {
         helpful_votes: number;
         unhelpful_votes: number;
+        my_vote: "up" | "down" | null;
       };
       setCounts({ helpful: review.helpful_votes, unhelpful: review.unhelpful_votes });
-      setMine(remove ? null : dir);
+      setMine(review.my_vote ?? (remove ? null : dir));
     } catch {
       setError("Couldn't reach the server.");
     } finally {

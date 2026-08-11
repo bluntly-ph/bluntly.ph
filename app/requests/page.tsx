@@ -8,16 +8,21 @@ import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
 import { getUser } from "@/lib/dal";
 import { getRequests } from "@/lib/requests";
+import { getSessionToken } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Requests — bluntly",
 };
 
 export default async function RequestsPage() {
+  // The cookie read is local, so the token costs nothing before the network work.
+  const token = await getSessionToken();
   // Parallel: the viewer and the board are independent (see app/page.tsx).
   const [me, requests] = await Promise.all([
     getUser().catch(() => null),
-    getRequests("reward"),
+    // Token passed so each row knows whether this viewer already up-voted it
+    // (BUG-026); anonymous readers get the same board with my_upvote false.
+    getRequests("reward", token),
   ]);
   const user: HeaderUser = me
     ? { username: me.username, avatarUrl: me.avatar_url }
@@ -51,7 +56,12 @@ export default async function RequestsPage() {
                 key={r.id}
                 className="flex gap-4 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-card)]"
               >
-                <RequestUpvote requestId={r.id} count={r.upvote_count} canVote={canVote} />
+                <RequestUpvote
+                  requestId={r.id}
+                  count={r.upvote_count}
+                  canVote={canVote}
+                  myUpvote={r.my_upvote}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">

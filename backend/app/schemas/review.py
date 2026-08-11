@@ -54,6 +54,13 @@ class ReviewUpdate(BaseModel):
 class ReviewOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # The requesting viewer's own vote, or None for signed-out readers and for
+    # anyone who hasn't voted (BUG-013). Not a column — the route fills it in
+    # after validation, because it is a fact about the *viewer*, not the review.
+    # Without it the vote buttons had no way to know they were already pressed,
+    # so the highlight vanished on every refresh and voting again looked broken.
+    my_vote: VoteDirection | None = None
+
     id: uuid.UUID
     review_id: str | None = None
     product_id: uuid.UUID

@@ -38,6 +38,12 @@ class RequestOut(BaseModel):
     fulfilled_by_review_id: uuid.UUID | None = None
     expires_at: datetime
     upvote_count: int = 0
+    # Whether the requesting viewer has up-voted this (BUG-026). Not a column —
+    # the route fills it in, because it is a fact about the viewer. Without it
+    # the count survived a refresh but the highlight did not, and clicking again
+    # sent a second POST that the unique constraint rejected, which read as the
+    # button hanging.
+    my_upvote: bool = False
     ai_validation: dict | None = None
     # bounty + capped up-vote top-up; what a reviewer actually earns.
     effective_reward: int = 0

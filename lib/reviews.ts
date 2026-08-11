@@ -35,6 +35,12 @@ type FeedItem = {
     verification_status: "verified" | "unverified";
     helpful_votes: number;
     unhelpful_votes: number;
+    /**
+     * The requesting viewer's own vote (BUG-013). Only ever populated when the
+     * call carries a token — an anonymous read has no viewer, so it is null for
+     * everyone and the response stays safely cacheable.
+     */
+    my_vote: "up" | "down" | null;
     created_at: string;
     referral_redirect_url: string | null;
   };
@@ -56,10 +62,21 @@ type FeedItem = {
 
 export type ReviewFull = FeedItem;
 
-/** A single review with its author and product, or null if not found/visible. */
-export async function getReviewFull(id: string): Promise<ReviewFull | null> {
+/**
+ * A single review with its author and product, or null if not found/visible.
+ *
+ * Pass the viewer's `token` to get `my_vote` populated (BUG-013). Doing so also
+ * suppresses the shared Data Cache — apiFetch drops `revalidate` whenever a
+ * token is present — which is the point: a response carrying one reader's vote
+ * must never be served to another. Signed-out readers keep the cached path.
+ */
+export async function getReviewFull(
+  id: string,
+  token?: string | null,
+): Promise<ReviewFull | null> {
   try {
     return await apiFetch<FeedItem>(`/api/v1/reviews/${id}/full`, {
+      token: token ?? undefined,
       revalidate: 60,
     });
   } catch {
