@@ -62,6 +62,33 @@ tokens** (must succeed), confirm no bounty or token field exists on
 The token **ledger is untouched**. `token_transactions` is append-only and every
 historical escrow, refund and reward is still there and still readable.
 
+## Deployed, and a data incident you should know about
+
+All of this is live on production as of 2026-08-12 (`ed1baa0`). Verified after
+deploy: 16 public routes 200, unknown paths 404, all 8 gated routes 307 to
+`/login?next=<path>`, and the request board reading correctly from the new API.
+
+Two things happened on the way there that are worth recording:
+
+**Test data was briefly public again.** This repo has one database and it is
+production — `backend/scripts/hide_test_content.py` says so in its own
+docstring. Running the backend test suite therefore writes real rows. It was run
+several times during this work, and for a period **38 test reviews were visible
+on the live site** alongside the 6 genuine ones, which is BUG-010 all over
+again. They are hidden now and the public feed is back to exactly the 6 real
+reviews. Anyone running `pytest` against this project needs to run
+`python -m scripts.hide_test_content --apply` afterwards.
+
+**The request board is genuinely empty now, not broken.** All 51 open requests
+were test fixtures and not one belonged to a real account, so the sweep took
+them all. `/requests` correctly shows its empty state. The script now covers
+requests as well as reviews, and is reversible either way.
+
+**Deploys had been failing silently.** `vercel.json` carried a `"//"` comment
+key, which fails Vercel's schema validation outright, so the git integration
+produced no build and the site simply stayed on the previous version. The
+rationale moved to `docs/DEPLOYMENT.md`; do not put comments back in that file.
+
 ## What is still open
 
 - Coverage Checklist rows 41–43 (Q&A), 47 (edit profile), 56–59 (cross-browser),
