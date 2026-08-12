@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,6 +35,8 @@ class QAAuthor(BaseModel):
     display_name: str | None = None
     trust_stage: int = 0
     trust_level_name: str | None = None
+    # See FeedAuthor.reputation_score — the badge reads the same everywhere.
+    reputation_score: Decimal = Decimal("0")
 
 
 class AnswerOut(BaseModel):

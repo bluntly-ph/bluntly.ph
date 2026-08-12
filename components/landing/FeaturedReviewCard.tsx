@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { DotsThree, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { DotsThree } from "@phosphor-icons/react/dist/ssr";
 
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { FeaturedData } from "@/lib/reviews";
 
 /**
@@ -58,14 +59,12 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
               <span className="truncate text-[14px] font-semibold text-[var(--text-primary)]">
                 {featured.username ? `@${featured.username}` : featured.author}
               </span>
-              <ShieldCheck
-                size={16}
-                weight="fill"
-                className="shrink-0 text-[var(--accent-trust)]"
+              <TrustBadge
+                levelName={featured.trust}
+                stage={featured.trustStage}
+                score={featured.trustScore}
+                plain
               />
-              <span className="shrink-0 text-[12px] font-medium text-[var(--accent-trust)]">
-                {featured.trust}
-              </span>
             </div>
             <span className="block text-[12px] text-[var(--text-muted)] sm:mt-0.5">
               {featured.ageLabel}

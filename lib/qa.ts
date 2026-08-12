@@ -8,6 +8,8 @@ export type QAAuthor = {
   display_name: string | null;
   trust_stage: number;
   trust_level_name: string | null;
+  /** 0..100 (ADR-003); shown beside the level name. See lib/trust.ts. */
+  reputation_score: string | null;
 };
 
 export type Answer = {

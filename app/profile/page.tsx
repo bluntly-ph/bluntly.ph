@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { PencilSimpleLine, SealCheck, ShieldCheck, Star } from "@phosphor-icons/react/dist/ssr";
+import { PencilSimpleLine, SealCheck, Star } from "@phosphor-icons/react/dist/ssr";
 
 import { logout } from "@/app/actions/auth";
 import { ReviewCard } from "@/components/review/ReviewCard";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import { requireOnboardedUser } from "@/lib/dal";
 import { INTERESTS } from "@/lib/interests";
 import { searchReviews } from "@/lib/reviews";
@@ -47,10 +48,11 @@ export default async function ProfilePage() {
               <p className="text-[14px] text-[var(--text-secondary)]">@{me.username}</p>
             ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-trust)]">
-                <ShieldCheck size={14} weight="fill" />
-                {me.trust_level_name ?? `Stage ${me.trust_stage}`}
-              </span>
+              <TrustBadge
+                levelName={me.trust_level_name}
+                stage={me.trust_stage}
+                score={me.reputation_score}
+              />
               <span className="rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-3 py-1 text-[12px] capitalize text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
                 {me.membership_tier} member
               </span>

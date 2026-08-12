@@ -118,6 +118,10 @@ class FeedAuthor(BaseModel):
     avatar_url: str | None = None
     trust_stage: int = 0
     trust_level_name: str | None = None
+    # 0..100 (ADR-003). The card shows the number beside the level name, because
+    # the level name alone is not a score — stage 2 is literally called
+    # "Verified Buyer", which is what BUG-004 was reading as a hardcoded label.
+    reputation_score: Decimal = Decimal("0")
 
 
 class FeedProduct(BaseModel):

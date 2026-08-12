@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReportDialog } from "@/components/review/ReportDialog";
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
 import { ShareButton } from "@/components/review/ShareButton";
@@ -139,10 +140,12 @@ export function ReviewDetail({
           </span>
         )}
         {author ? (
-          <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-trust)]">
-            <ShieldCheck size={15} weight="fill" />
-            {author.trust_level_name ?? `Stage ${author.trust_stage}`}
-          </span>
+          <TrustBadge
+            levelName={author.trust_level_name}
+            stage={author.trust_stage}
+            score={author.reputation_score}
+            plain
+          />
         ) : null}
         <span className="text-[12px] text-[var(--text-muted)]">
           · {ageLabel(review.created_at)}

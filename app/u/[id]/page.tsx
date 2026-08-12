@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 
 import { ReviewCard } from "@/components/review/ReviewCard";
 import { PageShell } from "@/components/site/PageShell";
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import { getAuthorProfile } from "@/lib/reviews";
 
 type Params = { params: Promise<{ id: string }> };
@@ -68,10 +68,11 @@ export default async function ReviewerProfilePage({ params }: Params) {
             </p>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-trust)]">
-              <ShieldCheck size={14} weight="fill" />
-              {author.trust}
-            </span>
+            <TrustBadge
+              levelName={author.trust}
+              stage={author.trustStage}
+              score={author.trustScore}
+            />
             <span className="rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-3 py-1 text-[12px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
               {cards.length} {cards.length === 1 ? "review" : "reviews"}
             </span>

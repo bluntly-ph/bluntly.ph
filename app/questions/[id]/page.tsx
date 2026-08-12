@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CaretLeft, Medal, SealCheck, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, Medal, SealCheck } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
 import { AnswerForm } from "@/components/qa/AnswerForm";
 import { BestAnswerButton } from "@/components/qa/BestAnswerButton";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import { getUser } from "@/lib/dal";
 import { getQuestionDetail } from "@/lib/qa";
 
@@ -84,10 +85,12 @@ export default async function QuestionPage({
                   {a.responder?.display_name ?? a.responder?.username ?? "someone"}
                 </span>
                 {a.responder ? (
-                  <span className="inline-flex items-center gap-1 text-[var(--accent-trust)]">
-                    <ShieldCheck size={13} weight="fill" />
-                    {a.responder.trust_level_name ?? `Stage ${a.responder.trust_stage}`}
-                  </span>
+                  <TrustBadge
+                    levelName={a.responder.trust_level_name}
+                    stage={a.responder.trust_stage}
+                    score={a.responder.reputation_score}
+                    plain
+                  />
                 ) : null}
                 {a.is_best_answer ? (
                   <span className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--accent-success)_14%,transparent)] px-2 py-0.5 font-medium text-[var(--accent-success)]">

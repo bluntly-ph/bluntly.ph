@@ -51,6 +51,8 @@ type FeedItem = {
     avatar_url: string | null;
     trust_stage: number;
     trust_level_name: string | null;
+    /** 0..100 (ADR-003); shown beside the level name. See lib/trust.ts. */
+    reputation_score: string | null;
   } | null;
   product: {
     id: string;
@@ -100,6 +102,9 @@ export type FeaturedData = {
   authorHue: number;
   trust: string;
   ageLabel: string;
+  /** Trust level name and its 0..100 score, rendered together by TrustBadge. */
+  trustStage: number;
+  trustScore: string | null;
   /** Bold half of the split headline — the product (BUG-004). */
   product: string | null;
   /** Italic half — what the reviewer concluded about it. */
@@ -204,6 +209,8 @@ function toFeatured(item: FeedItem): FeaturedData {
     avatarUrl: usablePhoto(item.author?.avatar_url),
     authorHue: hueOf(author),
     trust: item.author?.trust_level_name ?? `Stage ${item.author?.trust_stage ?? 0}`,
+    trustStage: item.author?.trust_stage ?? 0,
+    trustScore: item.author?.reputation_score ?? null,
     ageLabel: ageLabel(item.review.created_at),
     product,
     title: rest,
@@ -224,6 +231,11 @@ const SAMPLE_FEATURED: FeaturedData = {
   avatarUrl: null,
   authorHue: hueOf(FEATURED_REVIEW.author),
   trust: "Community Expert",
+  // No score on the sample: it stands in when the backend is unreachable, and a
+  // fabricated trust number is exactly the kind of thing this site exists to
+  // not do. TrustBadge renders the level name alone when the score is null.
+  trustStage: 3,
+  trustScore: null,
   ageLabel: FEATURED_REVIEW.ageLabel,
   product: SAMPLE_HEADLINE.product,
   title: SAMPLE_HEADLINE.rest,
@@ -262,6 +274,8 @@ export type AuthorProfile = {
   avatarUrl: string | null;
   trust: string;
   trustStage: number;
+  /** 0..100 (ADR-003), shown beside the level name. See lib/trust.ts. */
+  trustScore: string | null;
 };
 
 /**
@@ -289,6 +303,7 @@ export async function getAuthorProfile(authorId: string): Promise<{
         avatarUrl: a.avatar_url,
         trust: a.trust_level_name ?? `Stage ${a.trust_stage}`,
         trustStage: a.trust_stage,
+        trustScore: a.reputation_score ?? null,
       },
       cards: items.map(toCard),
     };
