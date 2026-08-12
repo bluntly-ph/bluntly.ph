@@ -14,19 +14,23 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
   return (
     <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
       <div className="mx-auto w-full max-w-[72rem] px-6 py-16 lg:px-10 lg:py-24">
+        {/* Blue here is --accent-trust, the existing token behind the trust
+            shield and verified badge (BUG-006) — not a new colour. Reusing it
+            keeps "this is navigation you can rely on" reading as the same blue
+            the rest of the site already means it with. */}
         <div className="flex items-center justify-between">
-          <span className="text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--text-muted)]">
+          <span className="text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--accent-trust)]">
             Discover
           </span>
           <Link
             href="/search"
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-trust)] hover:underline"
           >
             Browse all
             <ArrowRight size={14} />
           </Link>
         </div>
-        <h2 className="mt-1 text-[26px] font-bold text-[var(--text-primary)] lg:text-[32px]">
+        <h2 className="mt-1 text-[20px] font-medium text-[var(--text-primary)]">
           What people are reading
         </h2>
 
@@ -42,8 +46,9 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
                     href={active ? "/search" : `/search?category=${c.slug}`}
                     className={[
                       "inline-flex items-center gap-1.5 whitespace-nowrap text-[14px]",
+                      // Selected tab: orange, medium weight (BUG-006).
                       active
-                        ? "font-semibold text-[var(--accent-primary)]"
+                        ? "font-medium text-[var(--accent-primary)]"
                         : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
                     ].join(" ")}
                   >

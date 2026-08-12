@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Coins, PlusCircle } from "@phosphor-icons/react/dist/ssr";
+import { PlusCircle, Users } from "@phosphor-icons/react/dist/ssr";
 
 import { RequestUpvote } from "@/components/requests/RequestUpvote";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -22,7 +22,7 @@ export default async function RequestsPage() {
     getUser().catch(() => null),
     // Token passed so each row knows whether this viewer already up-voted it
     // (BUG-026); anonymous readers get the same board with my_upvote false.
-    getRequests("reward", token),
+    getRequests("demand", token),
   ]);
   const user: HeaderUser = me
     ? { username: me.username, avatarUrl: me.avatar_url }
@@ -39,7 +39,8 @@ export default async function RequestsPage() {
               Review requests
             </h1>
             <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
-              Can&rsquo;t find a review? Put up a bounty and the community will write one.
+              Can&rsquo;t find a review? Ask for one — up-votes push the most
+              wanted questions to the top.
             </p>
           </div>
           <Link href="/requests/new" className="contents">
@@ -67,10 +68,16 @@ export default async function RequestsPage() {
                     <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">
                       {r.title}
                     </h2>
-                    <span className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--accent-star)_18%,transparent)] px-2 py-0.5 text-[12px] font-semibold text-[var(--base-ink-700)]">
-                      <Coins size={13} weight="fill" className="text-[var(--accent-star)]" />
-                      {r.effective_reward}
-                    </span>
+                    {/* Demand, not a purse. The badge showed a token reward
+                        until that economy was retired; how many people are
+                        waiting on the answer is the useful signal for a
+                        reviewer deciding what to write next. */}
+                    {r.upvote_count > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--accent-primary)_12%,transparent)] px-2 py-0.5 text-[12px] font-medium text-[var(--accent-primary)]">
+                        <Users size={13} weight="fill" />
+                        {r.upvote_count} waiting
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 line-clamp-2 text-[13px] text-[var(--text-secondary)]">
                     {r.details}

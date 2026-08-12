@@ -93,11 +93,38 @@ export { ageLabel, compact };
 export type FeaturedData = {
   id: string;
   author: string;
+  /** The @handle, shown instead of a "Verified Buyer" label (BUG-004). */
+  username: string | null;
+  /** The reviewer's own photo, when they have one; else a hue placeholder. */
+  avatarUrl: string | null;
+  authorHue: number;
   trust: string;
   ageLabel: string;
+  /** Bold half of the split headline — the product (BUG-004). */
+  product: string | null;
+  /** Italic half — what the reviewer concluded about it. */
   title: string;
   excerpt: string;
 };
+
+/**
+ * Split a headline into "what it is" and "what they thought" (BUG-004).
+ *
+ * Reviewers overwhelmingly write titles that already name the product —
+ * "Akko 5075B Plus — the budget board that punches up" — which is why simply
+ * prefixing the canonical name produced "Akko 5075B Plus — Akko 5075B Plus — …".
+ * So prefer the reviewer's own dash if there is one, and fall back to the
+ * canonical name only when the title carries no product of its own.
+ */
+export function splitHeadline(
+  title: string,
+  productName: string | null | undefined,
+): { product: string | null; rest: string } {
+  const dash = title.match(/^(.{2,80}?)\s+[—–-]\s+(.+)$/);
+  if (dash) return { product: dash[1].trim(), rest: dash[2].trim() };
+  if (productName?.trim()) return { product: productName.trim(), rest: title.trim() };
+  return { product: null, rest: title.trim() };
+}
 
 /** Stable 0–359 hue from a string, for placeholder avatar/image tints. */
 function hueOf(seed: string): number {
@@ -166,23 +193,40 @@ function toCard(item: FeedItem): ReviewCardData {
 }
 
 function toFeatured(item: FeedItem): FeaturedData {
+  const author = authorName(item);
+  // The canonical name in full — the card used to shorten it, so "Jisulife
+  // Handheld Fan Life9" reached the reader as "Jisulife Life9" (BUG-004).
+  const { product, rest } = splitHeadline(cardTitle(item), item.product?.canonical_name);
   return {
     id: item.review.id,
-    author: authorName(item),
+    author,
+    username: item.author?.username ?? null,
+    avatarUrl: usablePhoto(item.author?.avatar_url),
+    authorHue: hueOf(author),
     trust: item.author?.trust_level_name ?? `Stage ${item.author?.trust_stage ?? 0}`,
     ageLabel: ageLabel(item.review.created_at),
-    title: cardTitle(item),
+    product,
+    title: rest,
     excerpt: item.review.discussion,
   };
 }
 
 /** The curated fallback featured card, from the static sample content. */
+const SAMPLE_HEADLINE = splitHeadline(FEATURED_REVIEW.title, null);
+
 const SAMPLE_FEATURED: FeaturedData = {
   id: "",
   author: FEATURED_REVIEW.author,
+  // No handle or photo for the sample: it stands in when the backend is
+  // unreachable, and inventing a plausible @handle for a person who does not
+  // exist is worse than showing the display name alone.
+  username: null,
+  avatarUrl: null,
+  authorHue: hueOf(FEATURED_REVIEW.author),
   trust: "Community Expert",
   ageLabel: FEATURED_REVIEW.ageLabel,
-  title: FEATURED_REVIEW.title,
+  product: SAMPLE_HEADLINE.product,
+  title: SAMPLE_HEADLINE.rest,
   excerpt: FEATURED_REVIEW.excerpt,
 };
 

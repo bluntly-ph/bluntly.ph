@@ -6,28 +6,23 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 /**
- * Post a review request. The bounty is escrowed from your token balance; the
- * backend AI-screens it (422 `request_invalid` returns `reasons[]`), and short
- * balances come back 409 `insufficient_tokens`.
+ * Post a review request. Free — the backend AI-screens it (422 `request_invalid`
+ * returns `reasons[]`) and that is the only way it can be rejected.
  *
- * `tokenBalance` is read on the server (BUG-025). Before it was passed in, that
- * 409 was the *first* time anyone learned they couldn't afford the request —
- * after writing the whole thing — and there was nowhere on the page to check.
- * Null means the balance couldn't be read, which must not be conflated with
- * zero: we show nothing and let the server be the judge, rather than blocking
- * someone who can actually afford it.
+ * There was a token bounty here, escrowed from a balance the page never showed,
+ * so the first anyone heard about affording it was a 409 after writing the whole
+ * thing (BUG-025). Tokens are retired; asking for a review costs nothing and
+ * up-votes are what tell reviewers which questions people actually want answered.
  */
-export function RequestForm({ tokenBalance }: { tokenBalance: number | null }) {
+export function RequestForm() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
-  const [bounty, setBounty] = useState(50);
   const [sourceUrl, setSourceUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const affordable = tokenBalance === null || bounty <= tokenBalance;
-  const ready = title.trim() && details.trim() && bounty > 0 && affordable;
+  const ready = title.trim() && details.trim();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +36,6 @@ export function RequestForm({ tokenBalance }: { tokenBalance: number | null }) {
         body: JSON.stringify({
           title: title.trim(),
           details: details.trim(),
-          bounty,
           source_url: sourceUrl.trim() || null,
         }),
       });
@@ -67,17 +61,9 @@ export function RequestForm({ tokenBalance }: { tokenBalance: number | null }) {
         Ask for a review
       </h1>
       <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
-        Put up a token bounty — a reviewer who answers with a published review earns it.
+        Ask and the community answers. The more people up-vote your request, the
+        further up the board it goes.
       </p>
-
-      {tokenBalance !== null ? (
-        <p className="mt-4 inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-4 py-2 text-[13px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-          You have{" "}
-          <span className="font-semibold text-[var(--text-primary)]">
-            {tokenBalance.toLocaleString("en-PH")} tokens
-          </span>
-        </p>
-      ) : null}
 
       <div className="mt-6 flex flex-col gap-5">
         <label className="flex flex-col gap-1.5">
@@ -112,24 +98,6 @@ export function RequestForm({ tokenBalance }: { tokenBalance: number | null }) {
           />
         </label>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium text-[var(--text-primary)]">Bounty (tokens)</span>
-          <input
-            type="number"
-            min={1}
-            value={bounty}
-            onChange={(e) => setBounty(Math.max(1, Number(e.target.value)))}
-            className={`${inputCls} max-w-[10rem]`}
-          />
-          {!affordable && tokenBalance !== null ? (
-            <span role="alert" className="text-[12px] text-[var(--accent-danger)]">
-              That&rsquo;s more than your {tokenBalance.toLocaleString("en-PH")}{" "}
-              tokens. Lower the bounty to {tokenBalance.toLocaleString("en-PH")} or
-              less.
-            </span>
-          ) : null}
-        </label>
-
         {errors.length > 0 ? (
           <ul role="alert" className="flex flex-col gap-1 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[13px] text-[var(--accent-danger)]">
             {errors.map((e, i) => (
@@ -140,7 +108,7 @@ export function RequestForm({ tokenBalance }: { tokenBalance: number | null }) {
 
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={!ready || busy}>
-            {busy ? "Posting…" : `Post request (${bounty} tokens)`}
+            {busy ? "Posting…" : "Post request"}
           </Button>
         </div>
       </div>

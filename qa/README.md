@@ -46,12 +46,24 @@ gets lost in a spreadsheet:
   was never exposed by any schema, which is fixed — but 0 of 562 products
   actually have one set. Run `backend/scripts/seed_product_images.py`.
 
+## BUG-025 was resolved by removing the feature
+
+Tokens were retired in favour of the PHP revenue share, and the request board
+was the last thing still spending them — which is what made "you can't see your
+balance before you spend it" possible in the first place. Migration **0022**
+drops `review_requests.bounty`. Posting is free, up-votes rank the board by
+demand rather than raising a purse, and fulfilling a request pays nothing
+directly; the reviewer earns from the review itself like any other.
+
+So retest BUG-025 differently: post a request from an account with **zero
+tokens** (must succeed), confirm no bounty or token field exists on
+`/requests/new`, and confirm the board reads "N waiting" rather than a reward.
+
+The token **ledger is untouched**. `token_transactions` is append-only and every
+historical escrow, refund and reward is still there and still readable.
+
 ## What is still open
 
-- **BUG-004** and **BUG-006** are *In Progress*, not fixed. The measurable parts
-  are done; the remaining items need the Figma frame to match exactly, and
-  BUG-006's "Discover / Browse all in blue" needs a colour decision because the
-  design system has no blue token.
 - Coverage Checklist rows 41–43 (Q&A), 47 (edit profile), 56–59 (cross-browser),
   60–65 (visual vs Figma), 66–75 (performance, accessibility, data integrity)
   were never started and are untouched here.

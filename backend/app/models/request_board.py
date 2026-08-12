@@ -1,10 +1,14 @@
 """review_requests + request_upvotes — the request board (M3 slice 9).
 
-A user posts a "please review this product" request and escrows a token bounty
-from their balance. The community up-votes it, which raises a platform-minted
-top-up. A reviewer claims it by linking their OWN review once that review is
-**published by the moderator** (the existing publication gate); bounty + top-up
-then pay out to the reviewer.
+A user posts a "please review this product" request. The community up-votes it,
+which is how demand is expressed and how the board is ranked. A reviewer claims
+it by linking their OWN review once that review is **published by the
+moderator** (the existing publication gate).
+
+Posting is free. It used to escrow a token bounty which paid out on fulfilment,
+but tokens were retired in favour of the PHP revenue share and the board was the
+last thing still spending them (migration 0022); a reviewer who fulfils a
+request now earns through the ordinary revenue share like any other review.
 
 `source_url` is a marketplace link the requester pastes. It is stored and shown
 to humans and **never fetched** — the no-scraping mandate applies here too.
@@ -53,7 +57,6 @@ class ReviewRequest(Base, UUIDPrimaryKey, Timestamps):
     details: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str | None] = mapped_column(Text)  # never fetched
 
-    bounty: Mapped[int] = mapped_column(Integer, nullable=False)  # tokens escrowed
     status: Mapped[RequestStatus] = mapped_column(
         Enum(RequestStatus, name="request_status"),
         default=RequestStatus.open, nullable=False,
@@ -69,7 +72,7 @@ class ReviewRequest(Base, UUIDPrimaryKey, Timestamps):
 
 
 class RequestUpvote(Base, UUIDPrimaryKey):
-    """One up-vote per user per request; raises the platform top-up."""
+    """One up-vote per user per request; ranks the board by demand."""
 
     __tablename__ = "request_upvotes"
     __table_args__ = (

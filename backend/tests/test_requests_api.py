@@ -47,7 +47,12 @@ def test_heuristic_validation_contract(title, details, src, valid):
 
 
 @requires_db
-def test_create_escrows_and_cancel_refunds(client):
+def test_create_and_cancel_cost_nothing(client):
+    """Posting is free (migration 0022 retired the bounty).
+
+    The balance assertions are the point: they used to prove the escrow moved,
+    and now prove nothing moves at all. A request must not touch the ledger.
+    """
     uid, token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
@@ -55,24 +60,23 @@ def test_create_escrows_and_cancel_refunds(client):
     before = _balance(client, h)
 
     r = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this handheld fan", "details": GOOD_DETAILS, "bounty": 25})
+        "title": "Review this handheld fan", "details": GOOD_DETAILS})
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["status"] == "open"
-    assert body["effective_reward"] == 25          # no up-votes yet
     assert body["ai_validation"]["valid"] is True
-    assert _balance(client, h) == before - 25      # escrowed
+    assert "bounty" not in body and "effective_reward" not in body
+    assert _balance(client, h) == before
 
     rid = body["id"]
     cancelled = client.delete(f"/api/v1/requests/{rid}", headers=h)
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
-    assert _balance(client, h) == before           # refunded exactly
+    assert _balance(client, h) == before
 
-    # Ledger shows the escrow and the refund, and nothing else.
-    kinds = [t["kind"] for t in client.get("/api/v1/tokens/transactions",
-                                           headers=h).json() if t["ref_id"] == rid]
-    assert sorted(kinds) == ["refund_request_escrow", "spend_request_escrow"]
+    # Nothing was written to the ledger against this request, in either direction.
+    assert [t for t in client.get("/api/v1/tokens/transactions",
+                                  headers=h).json() if t["ref_id"] == rid] == []
 
 
 @requires_db
@@ -81,38 +85,35 @@ def test_create_guards(client):
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
 
-    # AI screening rejects thin details with reasons.
+    # AI screening rejects thin details with reasons. This is now the *only*
+    # way a request can be refused — affordability is no longer a concept.
     r = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review it", "details": "pls", "bounty": 10})
+        "title": "Review it", "details": "pls"})
     assert r.status_code == 422
     assert r.json()["code"] == "request_invalid"
     assert r.json()["reasons"]
 
-    # Below the minimum bounty.
+    # A user with no tokens at all can still post, which was the whole of
+    # BUG-025 before the currency went away.
+    assert _balance(client, h) == 0
     r = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this fan", "details": GOOD_DETAILS,
-        "bounty": settings.request_min_bounty - 1})
-    assert r.status_code == 422 and r.json()["code"] == "bounty_below_minimum"
-
-    # Can't escrow what you don't have (user has 0 tokens).
-    r = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this fan", "details": GOOD_DETAILS, "bounty": 10_000})
-    assert r.status_code == 409 and r.json()["code"] == "insufficient_tokens"
+        "title": "Review this fan", "details": GOOD_DETAILS})
+    assert r.status_code == 201, r.text
 
     # Anonymous.
     assert client.post("/api/v1/requests", json={
-        "title": "x", "details": GOOD_DETAILS, "bounty": 10}).status_code == 401
+        "title": "x", "details": GOOD_DETAILS}).status_code == 401
     _fund(client, uid, mh, 50)  # keep the fixture usable
 
 
 @requires_db
-def test_upvotes_drive_reward_with_cap(client):
+def test_upvotes_count_once_per_user_and_persist(client):
+    """Up-votes are the demand signal now, not a multiplier on a purse."""
     uid, token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
-    _fund(client, uid, mh, 100)
     rid = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this blender", "details": GOOD_DETAILS, "bounty": 10}).json()["id"]
+        "title": "Review this blender", "details": GOOD_DETAILS}).json()["id"]
 
     # Self-upvote blocked.
     assert client.post(f"/api/v1/requests/{rid}/upvote",
@@ -122,40 +123,41 @@ def test_upvotes_drive_reward_with_cap(client):
     r = client.post(f"/api/v1/requests/{rid}/upvote", headers=_auth(v1))
     assert r.status_code == 200
     assert r.json()["upvote_count"] == 1
-    assert r.json()["effective_reward"] == 10 + settings.request_topup_per_upvote
+    assert r.json()["my_upvote"] is True
+
+    # BUG-026: the voter's own state survives a fresh read, and is not visible
+    # to anyone else.
+    assert client.get(f"/api/v1/requests/{rid}", headers=_auth(v1)).json()["my_upvote"] is True
+    assert client.get(f"/api/v1/requests/{rid}").json()["my_upvote"] is False
 
     # Same user twice -> 409.
     assert client.post(f"/api/v1/requests/{rid}/upvote",
                        headers=_auth(v1)).status_code == 409
     # Remove own upvote.
     r = client.delete(f"/api/v1/requests/{rid}/upvote", headers=_auth(v1))
-    assert r.json()["upvote_count"] == 0 and r.json()["effective_reward"] == 10
+    assert r.json()["upvote_count"] == 0 and r.json()["my_upvote"] is False
     assert client.delete(f"/api/v1/requests/{rid}/upvote",
                          headers=_auth(v1)).status_code == 404
 
-    # Top-up is capped no matter how many up-votes arrive.
-    needed = settings.request_topup_cap // settings.request_topup_per_upvote + 3
-    for _ in range(needed):
+    # Many voters simply accumulate — there is no ceiling to hit any more.
+    for _ in range(4):
         _, tok, _ = register_and_token(client)
         assert client.post(f"/api/v1/requests/{rid}/upvote",
                            headers=_auth(tok)).status_code == 200
-    final = client.get(f"/api/v1/requests/{rid}").json()
-    assert final["effective_reward"] == 10 + settings.request_topup_cap
+    assert client.get(f"/api/v1/requests/{rid}").json()["upvote_count"] == 4
 
 
 @requires_db
-def test_fulfill_guards_and_payout(client):
+def test_fulfill_guards(client):
     req_uid, req_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     rh, mh = _auth(req_token), _auth(mod_token)
-    _fund(client, req_uid, mh, 100)
 
     reviewer_uid, rev_token, _ = register_and_token(client)
     vh = _auth(rev_token)
 
     rid = client.post("/api/v1/requests", headers=rh, json={
-        "title": "Review this kettle", "details": GOOD_DETAILS, "bounty": 20}).json()["id"]
-    # One up-vote -> reward 20 + 2
+        "title": "Review this kettle", "details": GOOD_DETAILS}).json()["id"]
     _, v1, _ = register_and_token(client)
     client.post(f"/api/v1/requests/{rid}/upvote", headers=_auth(v1))
 
@@ -181,7 +183,9 @@ def test_fulfill_guards_and_payout(client):
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "fulfilled"
     assert r.json()["fulfilled_by_review_id"] == own_rid
-    assert _balance(client, vh) == before + 20 + settings.request_topup_per_upvote
+    # Fulfilment pays nothing: the reviewer earns from the review itself through
+    # the ordinary revenue share, exactly as they would have unprompted.
+    assert _balance(client, vh) == before
 
     # Fulfilled once only.
     assert client.post(f"/api/v1/requests/{rid}/fulfill", headers=vh,
@@ -203,7 +207,7 @@ def test_product_mismatch_blocks_fulfill(client):
                          json={"name": f"Wanted-{_uuid.uuid4().hex[:6]}"}).json()["id"]
     rid = client.post("/api/v1/requests", headers=h, json={
         "title": "Review this exact product", "details": GOOD_DETAILS,
-        "bounty": 10, "product_id": wanted}).json()["id"]
+        "product_id": wanted}).json()["id"]
     # Published review, but for a DIFFERENT product.
     other, _ = make_published_review(client, vh, mh, name=f"Wrong-{_uuid.uuid4().hex[:5]}")
     r = client.post(f"/api/v1/requests/{rid}/fulfill", headers=vh, json={"review_id": other})
@@ -211,15 +215,12 @@ def test_product_mismatch_blocks_fulfill(client):
 
 
 @requires_db
-def test_moderator_remove_refunds_and_rbac(client):
+def test_moderator_remove_and_rbac(client):
     uid, token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
-    _fund(client, uid, mh, 60)
-    before = _balance(client, h)
     rid = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this lamp", "details": GOOD_DETAILS, "bounty": 15}).json()["id"]
-    assert _balance(client, h) == before - 15
+        "title": "Review this lamp", "details": GOOD_DETAILS}).json()["id"]
 
     # Non-moderator cannot remove.
     assert client.post(f"/api/v1/admin/requests/{rid}/remove", headers=h,
@@ -227,14 +228,13 @@ def test_moderator_remove_refunds_and_rbac(client):
     r = client.post(f"/api/v1/admin/requests/{rid}/remove", headers=mh,
                     json={"reason": "spam"})
     assert r.status_code == 200 and r.json()["status"] == "removed"
-    assert _balance(client, h) == before          # requester made whole
     # Removed requests disappear from the board and 404 by id.
     assert client.get(f"/api/v1/requests/{rid}").status_code == 404
     assert rid not in [x["id"] for x in client.get("/api/v1/requests?limit=100").json()]
 
 
 @requires_db
-def test_expiry_refunds_escrow(client):
+def test_expiry_closes_open_requests(client):
     from datetime import UTC, datetime, timedelta
 
     from app.db.session import SessionLocal
@@ -244,11 +244,8 @@ def test_expiry_refunds_escrow(client):
     uid, token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
-    _fund(client, uid, mh, 40)
-    before = _balance(client, h)
     rid = client.post("/api/v1/requests", headers=h, json={
-        "title": "Review this mug", "details": GOOD_DETAILS, "bounty": 12}).json()["id"]
-    assert _balance(client, h) == before - 12
+        "title": "Review this mug", "details": GOOD_DETAILS}).json()["id"]
 
     db = SessionLocal()
     try:
@@ -259,18 +256,28 @@ def test_expiry_refunds_escrow(client):
         db.close()
 
     assert client.get(f"/api/v1/requests/{rid}").json()["status"] == "expired"
-    assert _balance(client, h) == before          # refunded on expiry
 
 
 @requires_db
-def test_list_sorting_by_reward(client):
+def test_list_sorting_by_demand(client):
+    """sort=demand puts the most-wanted request first.
+
+    This replaced sort=reward, which ordered by whoever escrowed the largest
+    bounty — a measure of one person's balance rather than of how many people
+    wanted the answer.
+    """
     uid, token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     h, mh = _auth(token), _auth(mod_token)
-    _fund(client, uid, mh, 200)
-    small = client.post("/api/v1/requests", headers=h, json={
-        "title": "Small bounty request", "details": GOOD_DETAILS, "bounty": 10}).json()["id"]
-    big = client.post("/api/v1/requests", headers=h, json={
-        "title": "Big bounty request", "details": GOOD_DETAILS, "bounty": 90}).json()["id"]
-    ids = [r["id"] for r in client.get("/api/v1/requests?sort=reward&limit=100").json()]
-    assert ids.index(big) < ids.index(small)
+    quiet = client.post("/api/v1/requests", headers=h, json={
+        "title": "Quietly wanted request", "details": GOOD_DETAILS}).json()["id"]
+    popular = client.post("/api/v1/requests", headers=h, json={
+        "title": "Widely wanted request", "details": GOOD_DETAILS}).json()["id"]
+
+    for _ in range(3):
+        _, voter, _ = register_and_token(client)
+        assert client.post(f"/api/v1/requests/{popular}/upvote",
+                           headers=_auth(voter)).status_code == 200
+
+    ids = [r["id"] for r in client.get("/api/v1/requests?sort=demand&limit=100").json()]
+    assert ids.index(popular) < ids.index(quiet)

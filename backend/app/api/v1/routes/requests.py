@@ -30,7 +30,6 @@ router = APIRouter(tags=["request board"])
 
 def _out(req, my_upvote: bool = False) -> RequestOut:
     out = RequestOut.model_validate(req)
-    out.effective_reward = request_service.effective_reward(req)
     out.my_upvote = my_upvote
     return out
 
@@ -53,7 +52,7 @@ def _my_upvotes(db: Session, user: User | None,
 
 
 @router.post("/requests", response_model=RequestOut, status_code=201,
-             summary="Post a review request (AI-screened; bounty escrowed)")
+             summary="Post a review request (AI-screened; free to post)")
 def create_request(payload: RequestCreate, db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)) -> RequestOut:
     return _out(request_service.create_request(db, user, payload))
@@ -62,7 +61,7 @@ def create_request(payload: RequestCreate, db: Session = Depends(get_db),
 @router.get("/requests", response_model=list[RequestOut], summary="List review requests")
 def list_requests(db: Session = Depends(get_db),
                   status: RequestStatus | None = None,
-                  sort: Literal["newest", "reward"] = "newest",
+                  sort: Literal["newest", "demand"] = "newest",
                   limit: int = Query(50, ge=1, le=100),
                   user: User | None = Depends(get_optional_user)) -> list[RequestOut]:
     rows = request_service.list_requests(db, status, sort, limit)
@@ -78,7 +77,7 @@ def get_request(request_id: uuid.UUID, db: Session = Depends(get_db),
 
 
 @router.post("/requests/{request_id}/upvote", response_model=RequestOut,
-             summary="Up-vote a request (raises the platform top-up)")
+             summary="Up-vote a request (says you want this reviewed too)")
 def upvote(request_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
            user: User = Depends(get_current_user)) -> RequestOut:
     enforce_rate_limit(request, "vote", max_requests=settings.vote_rate_limit_max)

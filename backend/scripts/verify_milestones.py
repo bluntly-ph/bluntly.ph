@@ -256,28 +256,28 @@ def verify_m3(hz: Harness) -> None:
     uid, ah = hz.register("m3user")
     _, mh = hz.register("m3mod", role="moderator")
 
-    # Request board + AI validation + dynamic reward.
-    c.post(f"/api/v1/admin/users/{uid}/tokens", headers=mh,
-           json={"amount": 200, "note": "verification"})
+    # Request board + AI validation + demand signal. The bounty escrow and its
+    # up-vote top-up were retired with the token economy (migration 0022), so
+    # what is verified here is that posting costs nothing and up-votes rank.
     bad = c.post("/api/v1/requests", headers=ah,
-                 json={"title": "Review it", "details": "pls", "bounty": 10})
+                 json={"title": "Review it", "details": "pls"})
     check("M3: request board — AI validation blocks thin requests with reasons",
           bad.status_code == 422 and bad.json()["code"] == "request_invalid"
           and bad.json()["reasons"], bad.text[:80])
+    before_post = c.get("/api/v1/tokens/balance", headers=ah).json()["token_balance"]
     req = c.post("/api/v1/requests", headers=ah, json={
         "title": "Review this handheld fan",
-        "details": "Please cover battery life and build quality after two weeks.",
-        "bounty": 25})
-    check("M3: request board — bounty escrowed at creation",
+        "details": "Please cover battery life and build quality after two weeks."})
+    check("M3: request board — posting a request is free and costs no tokens",
           req.status_code == 201 and req.json()["status"] == "open"
-          and c.get("/api/v1/tokens/balance", headers=ah).json()["token_balance"] == 175,
-          req.text[:80])
+          and c.get("/api/v1/tokens/balance", headers=ah).json()["token_balance"]
+          == before_post, req.text[:80])
     rq = req.json()["id"]
     _, uh = hz.register("m3upvoter")
     up = c.post(f"/api/v1/requests/{rq}/upvote", headers=uh)
-    check("M3: request board — dynamic reward calculation (up-vote top-up)",
-          up.json()["effective_reward"] == 25 + settings.request_topup_per_upvote,
-          str(up.json().get("effective_reward")))
+    check("M3: request board — up-vote records demand and the voter's own state",
+          up.status_code == 200 and up.json()["upvote_count"] == 1
+          and up.json()["my_upvote"] is True, up.text[:80])
 
     # Reviewer fulfils with their own published review.
     rev_id, rh = hz.register("m3reviewer")
@@ -286,10 +286,10 @@ def verify_m3(hz: Harness) -> None:
     c.post(f"/api/v1/admin/reviews/{rid}/publish", headers=mh)
     before = c.get("/api/v1/tokens/balance", headers=rh).json()["token_balance"]
     ful = c.post(f"/api/v1/requests/{rq}/fulfill", headers=rh, json={"review_id": rid})
-    check("M3: request board — fulfilment pays bounty + top-up to the reviewer",
+    check("M3: request board — fulfilment links the review and pays nothing",
           ful.status_code == 200 and ful.json()["status"] == "fulfilled"
           and c.get("/api/v1/tokens/balance", headers=rh).json()["token_balance"]
-          == before + 25 + settings.request_topup_per_upvote, ful.text[:80])
+          == before, ful.text[:80])
 
     # Contracts: duration tracking + renewal + buyout.
     mono_id, mh2 = hz.register("m3author")

@@ -13,7 +13,6 @@ from app.models.enums import RequestStatus
 class RequestCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     details: str = Field(min_length=1)
-    bounty: int = Field(ge=1, description="Tokens escrowed from your balance.")
     product_id: uuid.UUID | None = None
     # A marketplace link for humans. Stored, shown, NEVER fetched (no scraping).
     source_url: str | None = Field(default=None, max_length=2048)
@@ -33,7 +32,6 @@ class RequestOut(BaseModel):
     title: str
     details: str
     source_url: str | None = None
-    bounty: int
     status: RequestStatus
     fulfilled_by_review_id: uuid.UUID | None = None
     expires_at: datetime
@@ -45,6 +43,4 @@ class RequestOut(BaseModel):
     # button hanging.
     my_upvote: bool = False
     ai_validation: dict | None = None
-    # bounty + capped up-vote top-up; what a reviewer actually earns.
-    effective_reward: int = 0
     created_at: datetime

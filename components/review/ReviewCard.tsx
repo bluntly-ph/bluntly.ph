@@ -20,10 +20,13 @@ export function ReviewCard({
     <Link
       href={`/reviews/${review.id}`}
       className={[
+        // A thin outline rather than a shadow (BUG-006): the frame draws these
+        // as bounded tiles, and a drop shadow lifted them off a surface they
+        // are meant to sit flush with.
         "group flex flex-col overflow-hidden rounded-[var(--radius-sm)]",
-        "bg-[var(--surface-card)] shadow-[var(--shadow-card)]",
-        "outline outline-1 outline-transparent transition-[outline-color]",
-        "duration-[var(--duration-fast)] hover:outline-[var(--line-hairline-10)]",
+        "bg-[var(--surface-card)]",
+        "outline outline-1 outline-[var(--line-hairline-10)] transition-[outline-color]",
+        "duration-[var(--duration-fast)] hover:outline-[var(--line-hairline-30)]",
         "focus-visible:outline-[var(--accent-primary)]",
         className,
       ].join(" ")}

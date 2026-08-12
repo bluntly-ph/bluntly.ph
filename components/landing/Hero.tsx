@@ -66,7 +66,10 @@ export function Hero({ featured }: { featured: FeaturedData }) {
 
         {/* Featured review with the two floating chips. */}
         <div className="animate-fade-up delay-2 relative mx-auto w-full max-w-[26rem] pt-8 md:pt-0">
-          <span className="absolute -top-2 right-1 z-10 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-3 py-1.5 text-[12px] font-medium text-white shadow-[var(--shadow-card)]">
+          {/* Sits *on* the card it belongs to (BUG-004). It was offset far
+              enough above to read as a separate floating object with a gap
+              between the two; 10px regular, overlapping the top edge. */}
+          <span className="absolute -top-3 right-3 z-10 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-3 py-1 text-[10px] font-normal text-white shadow-[var(--shadow-card)]">
             {FEATURED_REVIEW.earned}
           </span>
           <FeaturedReviewCard featured={featured} />

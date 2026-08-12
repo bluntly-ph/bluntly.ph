@@ -150,9 +150,9 @@ class Settings(BaseSettings):
     pii_hash_salt: str = "dev-pii-salt"
 
     # --- Request board (M3 slice 9) ---
-    request_min_bounty: int = 10          # tokens; escrowed at creation
-    request_topup_per_upvote: int = 2     # platform-minted, per up-vote
-    request_topup_cap: int = 50           # ceiling on the top-up
+    # Bounty and top-up settings lived here until migration 0022 retired the
+    # request board's token economy. Posting is free and up-votes rank the
+    # board rather than raising a purse, so there is nothing left to tune.
     request_ttl_days: int = 30            # open -> expired (escrow refunded)
 
     # --- Review contracts (M3 slice 10) ---
