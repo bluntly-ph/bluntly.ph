@@ -89,6 +89,22 @@ key, which fails Vercel's schema validation outright, so the git integration
 produced no build and the site simply stayed on the previous version. The
 rationale moved to `docs/DEPLOYMENT.md`; do not put comments back in that file.
 
+## The trust badge now shows a score
+
+Per the product decision, the badge is the level name **and** the number:
+**"Verified Buyer · 63"**. Both halves earn their place — all three real
+reviewers are "Verified Buyer" but they score 63, 63 and 17, so the level says
+what someone has unlocked and the number says how well they are actually doing.
+
+It renders through one `TrustBadge` component (`components/ui/TrustBadge.tsx`,
+formatting in `lib/trust.ts`) on all five surfaces that show trust: the featured
+card, a review, a public profile, your own profile, and a Q&A answer. Screen
+readers hear "Verified Buyer, trust score 63 out of 100".
+
+One retest caveat: the badge is fed by a 60-second Data Cache, so straight after
+a deploy it can briefly show the level with no number. That is expected and
+clears itself.
+
 ## What is still open
 
 - Coverage Checklist rows 41–43 (Q&A), 47 (edit profile), 56–59 (cross-browser),
