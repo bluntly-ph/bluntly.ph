@@ -23,6 +23,21 @@
         "--output-dir",
         ".playwright-mcp"
       ]
+    },
+    "google-sheets": {
+      "type": "stdio",
+      "command": "${UVX_PATH:-uvx}",
+      "args": [
+        "--from",
+        "mcp-google-sheets@latest",
+        "--with",
+        "mcp<2",
+        "mcp-google-sheets"
+      ],
+      "env": {
+        "SERVICE_ACCOUNT_PATH": "${GOOGLE_SHEETS_SA_KEY}",
+        "ENABLED_TOOLS": "list_spreadsheets,list_sheets,get_sheet_data,update_cells,batch_update_cells,add_rows"
+      }
     }
   }
 }
