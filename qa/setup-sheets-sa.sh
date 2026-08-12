@@ -60,12 +60,26 @@ fi
 
 # --- key -------------------------------------------------------------------
 say "Key"
-if [ -f "$HOME/$KEY_FILE" ]; then
-  echo "    $KEY_FILE already in your home directory; keeping it."
-  echo "    Delete it and re-run if you want a fresh key."
+# Existence is not enough: an interrupted `keys create` leaves a zero-byte file
+# behind, and treating that as "already done" sends you off to download an empty
+# credential and debug it on the far side. Require it to parse and to carry a
+# private key before trusting it.
+key_is_valid() {
+  [ -s "$1" ] && python3 -c "import json,sys; d=json.load(open(sys.argv[1])); \
+sys.exit(0 if d.get('private_key') and d.get('client_email') else 1)" "$1" 2>/dev/null
+}
+
+if key_is_valid "$HOME/$KEY_FILE"; then
+  echo "    valid key already in your home directory; keeping it."
+  echo "    Delete it and re-run if you want a fresh one."
 else
+  if [ -e "$HOME/$KEY_FILE" ]; then
+    echo "    found an empty or unreadable $KEY_FILE — replacing it."
+    rm -f "$HOME/$KEY_FILE"
+  fi
   gcloud iam service-accounts keys create "$HOME/$KEY_FILE" --iam-account="$SA_EMAIL"
-  echo "    written to ~/$KEY_FILE"
+  key_is_valid "$HOME/$KEY_FILE" || { echo "    key creation failed"; exit 1; }
+  echo "    written to ~/$KEY_FILE ($(wc -c <"$HOME/$KEY_FILE") bytes)"
 fi
 
 # --- what is left for you --------------------------------------------------
@@ -89,8 +103,13 @@ Done in the cloud. Two things left, both on your side.
 
        cloudshell download ~/$KEY_FILE
 
-   (or use the three-dot More > Download menu). Save it somewhere outside the
-   git repo, then in PowerShell:
+   (or use the three-dot More > Download menu). CHECK THE SIZE ON ARRIVAL — a
+   silently-failed download lands as a 0-byte file, which then fails much later
+   as an authentication error that looks like a permissions problem:
+
+       ls -l ~/$KEY_FILE          # in Cloud Shell, should be ~2.3 KB
+
+   Save it somewhere outside the git repo, then in PowerShell:
 
        setx GOOGLE_SHEETS_SA_KEY "C:\\Users\\Blutnly.ph\\.config\\gcloud\\$KEY_FILE"
 

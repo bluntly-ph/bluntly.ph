@@ -62,3 +62,10 @@ backend/.ruff_cache/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Service account keys and other credentials. Nothing in this repo should ever
+# hold one — they live outside the working tree and are referenced by env var —
+# but a stray download into the project should be refused, not staged.
+*-sa.json
+*service-account*.json
+*credentials*.json
