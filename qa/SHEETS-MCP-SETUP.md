@@ -93,6 +93,20 @@ account, and moving the key file onto this machine (`cloudshell download`).
 **MCP servers load at startup**, so the tools appear only after Claude Code
 restarts, not immediately.
 
+## If you script against this server yourself
+
+Set the encoding explicitly when you spawn it. JSON-RPC over stdio is UTF-8, but
+Python's `subprocess` with `text=True` alone encodes using the *locale* codepage,
+which on Windows is cp1252. The failure is quiet and ugly: em dashes arrive at
+the server as mis-encoded bytes and land in the spreadsheet as `â€"`, so the
+write succeeds and the data is wrong.
+
+```python
+subprocess.Popen(..., text=True, encoding="utf-8", errors="strict")
+```
+
+This happened on the first write of the tracker; the block had to be rewritten.
+
 ## Checking it works
 
 Ask for the Bug Log tab to be read back. The spreadsheet ID is in the URL:
