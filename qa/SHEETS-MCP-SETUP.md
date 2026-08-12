@@ -48,7 +48,21 @@ hang. A service account is headless and has no interactive step, at the cost of
 one extra click: the sheet has to be shared with it, exactly like sharing with a
 colleague.
 
-## Setup
+## Setup, the fast way: Cloud Shell
+
+Steps 1–4 below are all `gcloud` commands, so `qa/setup-sheets-sa.sh` does them
+for you. Open [Cloud Shell](https://shell.cloud.google.com) — free, no card,
+already signed in as you — and paste the script in. It creates the project,
+enables the API, creates the service account and its key, then prints the
+address to share the sheet with.
+
+It is safe to re-run: every step checks for what it would create first, so a
+second run repairs a half-finished setup instead of duplicating anything.
+
+Two things it deliberately leaves to you: sharing the sheet with the service
+account, and moving the key file onto this machine (`cloudshell download`).
+
+## Setup, by hand
 
 1. **Google Cloud Console** → create or pick a project. It will not ask for a
    card.
