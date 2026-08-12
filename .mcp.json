@@ -36,7 +36,7 @@
       ],
       "env": {
         "SERVICE_ACCOUNT_PATH": "${GOOGLE_SHEETS_SA_KEY}",
-        "ENABLED_TOOLS": "list_spreadsheets,list_sheets,get_sheet_data,update_cells,batch_update_cells,add_rows"
+        "ENABLED_TOOLS": "list_sheets,get_sheet_data,update_cells,batch_update_cells,add_rows"
       }
     }
   }
