@@ -1,12 +1,5 @@
 {
     "$schema": "https://openapi.vercel.sh/vercel.json",
-    "//": [
-        "regions: sin1 (Singapore) because Supabase lives in ap-southeast-1.",
-        "Without this, functions default to iad1 (Virginia) while the database",
-        "sits in Singapore, so every query crosses the Pacific twice. Measured",
-        "2026-08-10: /health 0.44s but any DB-backed call 1.7-2.9s, while the",
-        "query itself executes in 1.9ms. sin1 is also nearest the PH audience."
-    ],
     "regions": ["sin1"],
     "services": {
         "frontend": {

@@ -7,6 +7,19 @@ Two services from one repo, wired by `vercel.json`:
 | `frontend` | `.` | Next.js 16 |
 | `backend` | `backend` | FastAPI |
 
+**`vercel.json` takes no comments.** It is validated against a strict schema and
+a `"//"` key fails the build with *"should NOT have additional property `//`"* —
+which fails silently as a skipped deploy if you are relying on the git
+integration. Anything explanatory goes here instead.
+
+## Region
+
+`"regions": ["sin1"]` (Singapore), because Supabase lives in `ap-southeast-1`.
+Without it functions default to `iad1` (Virginia) while the database sits in
+Singapore, so every query crosses the Pacific twice. Measured 2026-08-10:
+`/health` 0.44s but any DB-backed call 1.7–2.9s, while the query itself executes
+in 1.9ms. `sin1` is also nearest the PH audience.
+
 ## Routing
 
 The rewrites send to the backend exactly the paths FastAPI actually mounts, so

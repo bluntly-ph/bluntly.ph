@@ -56,6 +56,28 @@ SELECT count(*) FROM reviews r
 WHERE NOT r.is_removed AND r.published_at IS NOT NULL
 """
 
+# The request board has the same problem and needed the same treatment: on
+# 2026-08-12 all 51 open requests were test output and none belonged to a real
+# account, so /requests was showing nothing but fixtures. Requests have no
+# `is_removed` flag — `status = 'removed'` is the equivalent, and every read path
+# already excludes it — so the reversal restores them to 'open'.
+# `visible` counts only 'open', not merely "not removed": a cancelled, expired
+# or fulfilled request is already off the board, and this script neither hides
+# nor restores those. Counting them would make the dry run promise to change
+# rows it will not touch.
+REQUEST_COUNT_SQL = f"""
+SELECT
+  count(*) FILTER (WHERE rr.status = 'open')    AS visible,
+  count(*) FILTER (WHERE rr.status = 'removed') AS hidden,
+  count(*)                                       AS total
+FROM review_requests rr JOIN users u ON u.id = rr.requester_id
+WHERE {TEST_ACCOUNT_PREDICATE}
+"""
+
+PUBLIC_REQUESTS_SQL = """
+SELECT count(*) FROM review_requests rr WHERE rr.status = 'open'
+"""
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -77,6 +99,19 @@ def main() -> int:
       AND {TEST_ACCOUNT_PREDICATE}
     """
 
+    # Requests move between 'removed' and 'open'. Restoring to 'open' is right
+    # for anything this script hid: it only ever hides rows that were not
+    # already removed, so a genuinely cancelled or fulfilled request is never
+    # touched in either direction.
+    request_update_sql = f"""
+    UPDATE review_requests rr
+    SET status = '{'removed' if hiding else 'open'}'
+    FROM users u
+    WHERE u.id = rr.requester_id
+      AND rr.status = '{'open' if hiding else 'removed'}'
+      AND {TEST_ACCOUNT_PREDICATE}
+    """
+
     with engine.begin() as conn:
         leaked = conn.execute(text(SAFETY_SQL)).scalar() or 0
         if leaked:
@@ -87,24 +122,35 @@ def main() -> int:
 
         before = conn.execute(text(COUNT_SQL)).one()
         public_before = conn.execute(text(PUBLIC_SQL)).scalar()
+        req_before = conn.execute(text(REQUEST_COUNT_SQL)).one()
+        public_req_before = conn.execute(text(PUBLIC_REQUESTS_SQL)).scalar()
         print(f"test-authored reviews : {before.total} "
               f"({before.visible} visible, {before.hidden} hidden)")
         print(f"published + visible reviews site-wide : {public_before}")
+        print(f"test-authored requests : {req_before.total} "
+              f"({req_before.visible} visible, {req_before.hidden} hidden)")
+        print(f"open requests site-wide : {public_req_before}")
 
         if not args.apply:
             verb = "hide" if hiding else "restore"
             n = before.visible if hiding else before.hidden
-            print(f"\nDRY RUN — would {verb} {n} review(s). Re-run with --apply.")
+            rn = req_before.visible if hiding else req_before.hidden
+            print(f"\nDRY RUN — would {verb} {n} review(s) and {rn} request(s). "
+                  "Re-run with --apply.")
             return 0
 
         changed = conn.execute(text(update_sql)).rowcount
+        req_changed = conn.execute(text(request_update_sql)).rowcount
         after = conn.execute(text(COUNT_SQL)).one()
         public_after = conn.execute(text(PUBLIC_SQL)).scalar()
+        public_req_after = conn.execute(text(PUBLIC_REQUESTS_SQL)).scalar()
 
-    print(f"\n{'hid' if hiding else 'restored'} {changed} review(s)")
+    print(f"\n{'hid' if hiding else 'restored'} {changed} review(s) "
+          f"and {req_changed} request(s)")
     print(f"test-authored reviews : {after.total} "
           f"({after.visible} visible, {after.hidden} hidden)")
     print(f"published + visible reviews site-wide : {public_before} -> {public_after}")
+    print(f"open requests site-wide : {public_req_before} -> {public_req_after}")
     print("\nReversible: python -m scripts.hide_test_content "
           f"{'--revert ' if hiding else ''}--apply")
     return 0
