@@ -15,10 +15,13 @@ export function ReviewOverflowMenu({
   title,
   reviewId,
   canReport,
+  onBar = false,
 }: {
   title: string;
   reviewId: string;
   canReport: boolean;
+  /** Sitting on the review's orange nav bar, so the trigger is white. */
+  onBar?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -61,7 +64,11 @@ export function ReviewOverflowMenu({
         aria-label="More options"
         aria-expanded={open}
         aria-haspopup="menu"
-        className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+        className={
+          onBar
+            ? "grid h-9 w-9 place-items-center rounded-full text-white hover:bg-white/15"
+            : "grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+        }
       >
         <DotsThree size={22} weight="bold" />
       </button>

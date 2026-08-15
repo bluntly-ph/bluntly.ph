@@ -19,7 +19,13 @@ import { TrustBadge } from "@/components/ui/TrustBadge";
 import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
 import { ShareButton } from "@/components/review/ShareButton";
-import { ageLabel, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
+import {
+  ageLabel,
+  splitHeadline,
+  usablePhoto,
+  type ReviewFull,
+  type Verdict,
+} from "@/lib/reviews";
 
 const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof ThumbsUp }> = {
   yes_absolutely: {
@@ -54,58 +60,65 @@ export function ReviewDetail({
   const authorName = author?.display_name || author?.username || "reviewer";
   const hasPros = (review.pros?.length ?? 0) > 0;
   const hasCons = (review.cons?.length ?? 0) > 0;
+  const headline = splitHeadline(review.title, product?.canonical_name);
 
   return (
-    <article className="mx-auto w-full max-w-[44rem] px-6 py-6 lg:py-10">
-      {/* Top nav (BUG-012). The frame draws five controls here; only Back was
-          rendered, so from a review there was no way to search, reach the
-          listing, or get to your own profile without going home first. The
-          overflow menu carries report and share, which also live in the action
-          row below — this bar is the reach-anywhere copy, not a second home
-          for them. */}
-      <nav aria-label="Review" className="flex items-center justify-between">
+    <>
+      {/* The review's own nav is a solid brand-orange bar in the frame, not
+          icons floating on the page ground — it is the one screen that replaces
+          the site header rather than sitting under it, which is why the page no
+          longer renders SiteHeader. Sticky so the way back survives a 2,273px
+          scroll. The five controls are the BUG-012 set, recoloured for the bar.
+          The #d9d9d9 strip above it in the mockup is the phone status bar, i.e.
+          device chrome, so it is deliberately not built. */}
+      <nav
+        aria-label="Review"
+        className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-white"
+      >
         <Link
           href="/"
           aria-label="Back"
-          className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15"
         >
-          <CaretLeft size={18} /> Back
+          <CaretLeft size={24} />
         </Link>
 
         <div className="flex items-center gap-1">
-          <Link
-            href="/search"
-            aria-label="Search reviews"
-            className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
-          >
-            <MagnifyingGlass size={18} />
-          </Link>
           {review.referral_redirect_url ? (
             <a
               href={review.referral_redirect_url}
               target="_blank"
               rel="nofollow sponsored noopener noreferrer"
               aria-label="Buy this product"
-              className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+              className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15"
             >
-              <ShoppingBag size={18} />
+              <ShoppingBag size={22} />
             </a>
           ) : null}
           <ReviewOverflowMenu
             title={review.title}
             reviewId={review.id}
             canReport={!isOwnReview}
+            onBar
           />
+          <Link
+            href="/search"
+            aria-label="Search reviews"
+            className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15"
+          >
+            <MagnifyingGlass size={22} />
+          </Link>
           <Link
             href="/profile"
             aria-label="Your profile"
-            className="grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
+            className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15"
           >
             <UserCircle size={22} />
           </Link>
         </div>
       </nav>
 
+      <article className="mx-auto w-full max-w-[44rem] px-4 py-6 lg:px-6 lg:py-10">
       {/* Product context */}
       {product ? (
         <div className="mt-5 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
@@ -153,8 +166,20 @@ export function ReviewDetail({
       </div>
 
       {/* Title + verdict + rating */}
-      <h1 className="mt-4 text-[24px] font-bold leading-tight text-[var(--text-primary)] lg:text-[30px]">
-        {review.title}
+      {/* 20px SemiBold, product name then the verdict in italic after a dash —
+          the same split the cards use, from the same frame. It was 24px bold
+          as one undifferentiated string. splitHeadline honours the reviewer's
+          own dash and falls back to the canonical product name. */}
+      <h1 className="mt-4 text-[20px] font-semibold leading-[normal] text-[var(--text-primary)] lg:text-[26px]">
+        {headline.product ? (
+          <>
+            {headline.product}
+            <span className="font-normal text-[var(--text-muted)]"> — </span>
+            <span className="font-normal italic">{headline.rest}</span>
+          </>
+        ) : (
+          review.title
+        )}
       </h1>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <span
@@ -270,7 +295,8 @@ export function ReviewDetail({
           ) : null}
         </div>
       </div>
-    </article>
+      </article>
+    </>
   );
 }
 

@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { CommentThread } from "@/components/review/CommentThread";
 import { ReviewDetail } from "@/components/review/ReviewDetail";
 import { SiteFooter } from "@/components/site/SiteFooter";
-import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getComments } from "@/lib/comments";
 import { getUser } from "@/lib/dal";
 import { getReviewFull } from "@/lib/reviews";
@@ -39,12 +38,10 @@ export default async function ReviewPage({
   ]);
   if (!data) notFound();
 
-  let user: HeaderUser = null;
   let canVote = false;
   let isOwnReview = false;
   let viewerId: string | null = null;
   if (me) {
-    user = { username: me.username, avatarUrl: me.avatar_url };
     viewerId = me.id;
     isOwnReview = me.id === data.author?.id;
     // You may vote on any published review except your own.
@@ -52,11 +49,13 @@ export default async function ReviewPage({
   }
 
   return (
+    // No SiteHeader here on purpose: the frame gives the review its own orange
+    // nav bar carrying back / shop / overflow / search / profile, so the global
+    // header would stack a second, redundant one above it.
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={user} />
       <main className="flex-1">
         <ReviewDetail data={data} canVote={canVote} isOwnReview={isOwnReview} />
-        <div className="mx-auto w-full max-w-[44rem] px-6 pb-10">
+        <div className="mx-auto w-full max-w-[44rem] px-4 pb-10 lg:px-6">
           <CommentThread reviewId={id} initial={comments} viewerId={viewerId} />
         </div>
       </main>
