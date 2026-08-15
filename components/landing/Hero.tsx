@@ -32,12 +32,16 @@ export function Hero({ featured }: { featured: FeaturedData }) {
 
       <div className="relative mx-auto grid w-full max-w-[72rem] gap-12 px-6 py-14 md:grid-cols-2 md:items-center md:gap-8 md:px-8 lg:min-h-[86vh] lg:gap-16 lg:px-10 lg:py-20">
         <div className="animate-fade-up">
-          <h1 className="text-[34px] font-bold leading-[1.1] text-[var(--text-primary)] md:text-[40px] lg:text-[56px]">
+          {/* 32px SemiBold with the period in brand orange, per the Page 1
+              frame. It was 34px bold — a heavier, larger voice than drawn.
+              Desktop scales the same type up rather than restyling it, so the
+              web version stays the mobile design at a larger size. */}
+          <h1 className="text-[32px] font-semibold leading-[normal] text-[var(--text-primary)] md:text-[40px] lg:text-[56px]">
             Finally.
             <br />
             Honest reviews<span className="text-[var(--accent-primary)]">.</span>
           </h1>
-          <p className="mt-4 text-[15px] text-[var(--text-secondary)] lg:text-[17px]">
+          <p className="mt-1 text-[12px] font-light tracking-[0.144px] text-[rgba(32,32,32,0.7)] lg:text-[14px]">
             No sponsorships. No bias. Ever.
           </p>
 
@@ -52,7 +56,10 @@ export function Hero({ featured }: { featured: FeaturedData }) {
               name="q"
               placeholder="Search or ask anything"
               aria-label="Search or ask anything"
-              className="h-12 w-full rounded-[var(--radius-pill)] bg-[var(--surface-card)] pl-12 pr-14 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]"
+              // Sits on the page ground with a hairline, not a raised white
+              // card — the frame draws it flush at 48px / radius 32, and the
+              // shadow was inventing a depth the design does not have.
+              className="h-12 w-full rounded-[32px] border border-[rgba(32,32,32,0.1)] bg-[var(--surface-app)] pl-11 pr-12 text-[12px] font-light text-[var(--text-primary)] outline-none placeholder:text-[rgba(32,32,32,0.4)] focus-visible:border-[var(--accent-primary)] lg:text-[14px]"
             />
             <button
               type="submit"

@@ -14,22 +14,29 @@ export function TrustSection() {
   return (
     <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
       <div className="mx-auto flex min-h-[58vh] w-full max-w-[40rem] flex-col items-center justify-center px-6 py-20 text-center lg:py-28">
-        <h2 className="text-[28px] font-semibold leading-tight text-[var(--text-primary)]">
+        {/* Both lines are SemiBold in the frame — 28px ink, then 16px brand
+            orange, centred. The bullets are 10px Light with 20px icons and 8px
+            gaps, a deliberately quiet list under a loud promise. */}
+        <h2 className="text-[28px] font-semibold leading-[normal] text-[var(--text-primary)] lg:text-[40px]">
           Trust is expensive.
         </h2>
-        <p className="mt-2 text-[16px] font-semibold text-[var(--accent-primary)]">
+        <p className="text-center text-[16px] font-semibold text-[var(--accent-primary)] lg:text-[22px]">
           We won&rsquo;t waste yours.
         </p>
 
-        <ul className="mx-auto mt-10 flex max-w-[20rem] flex-col gap-5 text-left">
+        {/* The bullet column is deliberately narrow at 390px — that is the
+            frame. Left at 18rem it became a thin ribbon stranded in a 1280
+            canvas, so it widens with the viewport while the mobile proportions
+            stay exactly as drawn. */}
+        <ul className="mx-auto mt-5 flex max-w-[18rem] flex-col gap-2 text-left lg:mt-8 lg:max-w-[34rem] lg:gap-3">
           {TRUST_POINTS.map(({ icon: Icon, text }) => (
-            <li key={text} className="flex items-center gap-3">
+            <li key={text} className="flex items-center gap-2 lg:gap-3">
               <Icon
-                size={22}
+                size={20}
                 weight="regular"
-                className="shrink-0 text-[var(--text-primary)]"
+                className="shrink-0 text-[var(--text-primary)] lg:h-6 lg:w-6"
               />
-              <span className="text-[13px] leading-relaxed text-[var(--text-secondary)]">
+              <span className="text-[10px] font-light tracking-[0.12px] text-[var(--text-primary)] lg:text-[14px]">
                 {text}
               </span>
             </li>

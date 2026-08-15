@@ -15,21 +15,29 @@ import type { FeaturedData } from "@/lib/reviews";
 export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
   return (
     <div className="relative">
-      {/* Tilted cards peeking behind, back to front. */}
+      {/* The stack, exactly as drawn on Page 1: two tinted cards in brand
+          orange at 10% — one rotated +5deg, one square behind — with the real
+          card counter-rotated -5deg on top. The tint is a flat
+          rgba(239,88,33,0.1) in the frame, not a shadow: the depth comes from
+          the rotation, which is why softening it into shadows (as this
+          previously did) flattened the whole effect. */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 rotate-[6deg] rounded-[var(--radius-sm)] shadow-[0_10px_30px_-12px_rgba(32,32,32,0.18)]"
-        style={{ backgroundColor: "rgba(255, 120, 80, 0.16)" }}
+        className="absolute inset-0 rotate-[5deg] rounded-[12px]"
+        style={{ backgroundColor: "rgba(239, 88, 33, 0.1)" }}
       />
       <div
         aria-hidden="true"
-        className="absolute inset-0 rotate-[3deg] rounded-[var(--radius-sm)] shadow-[0_8px_24px_-14px_rgba(32,32,32,0.14)]"
-        style={{ backgroundColor: "rgba(255, 120, 80, 0.09)" }}
+        className="absolute inset-0 rounded-[12px]"
+        style={{ backgroundColor: "rgba(239, 88, 33, 0.1)" }}
       />
 
       <Link
         href={featured.id ? `/reviews/${featured.id}` : "/search"}
-        className="relative block rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] outline outline-1 outline-[var(--line-hairline-10)] transition-transform duration-[var(--duration-base)] hover:-translate-y-0.5"
+        // -5deg and the frame's own shadow colour (#bcaca6 — a warm grey, not
+        // black). Hover lifts the rotation slightly rather than translating,
+        // so the card stays seated in its stack.
+        className="relative block -rotate-[5deg] rounded-[12px] bg-[var(--surface-app)] p-4 shadow-[0px_4px_4px_0px_#bcaca6] transition-transform duration-[var(--duration-base)] hover:-rotate-[3deg]"
       >
         <div className="flex items-start gap-2">
           {featured.avatarUrl ? (

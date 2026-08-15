@@ -18,10 +18,16 @@ const SOCIALS = [
   { label: "TikTok", href: "https://www.tiktok.com/@bluntlyph", Icon: TiktokLogo },
 ];
 
-/** The site footer — brand, link columns, socials, copyright. */
+/**
+ * The site footer — brand, link columns, socials, copyright.
+ *
+ * Ground is --base-gray-200 (#d9d9d9), the footer colour in the Page 1 frame.
+ * It sat on gray-150 (#eaeaea): close enough to look deliberate, wrong enough
+ * that the footer never separated from the section above it.
+ */
 export function SiteFooter() {
   return (
-    <footer className="mt-4 bg-[var(--base-gray-150)]">
+    <footer className="mt-4 bg-[var(--base-gray-200)]">
       <div className="mx-auto grid w-full max-w-[72rem] gap-10 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4 lg:px-10">
         <div className="sm:col-span-2 lg:col-span-1">
           <span className="text-[var(--accent-primary)]">
