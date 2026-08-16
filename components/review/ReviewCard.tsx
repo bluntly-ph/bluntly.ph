@@ -12,10 +12,21 @@ import type { ReviewCardData } from "@/lib/landing-data";
 export function ReviewCard({
   review,
   className = "",
+  headingLevel = 3,
 }: {
   review: ReviewCardData;
   className?: string;
+  /**
+   * Where this card's title sits in the page outline.
+   *
+   * Defaults to 3, which is right wherever the grid follows a section heading
+   * ("What people are reading", "Your reviews"). Search puts the grid directly
+   * under the page h1 with nothing in between, so it passes 2 — otherwise the
+   * outline jumps h1 to h3 and heading navigation skips a level.
+   */
+  headingLevel?: 2 | 3;
 }) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <Link
       href={`/reviews/${review.id}`}
@@ -80,14 +91,14 @@ export function ReviewCard({
             {review.product}
           </p>
         ) : null}
-        <h3
+        <Heading
           className={[
             "line-clamp-3 text-[13px] leading-snug text-[var(--text-secondary)]",
             review.product ? "mt-0.5 font-normal" : "text-[14px] font-semibold text-[var(--text-primary)]",
           ].join(" ")}
         >
           {review.title}
-        </h3>
+        </Heading>
         {/* Count then icon, both stats always present, as drawn. */}
         <div className="mt-3 flex items-center gap-3 text-[12px] text-[var(--text-secondary)]">
           <span className="inline-flex items-center gap-1">

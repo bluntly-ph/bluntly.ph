@@ -84,7 +84,11 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
 
         {/* Product bold, verdict italic, split on the dash reviewers already
             write (BUG-004). */}
-        <h3 className="mt-3 line-clamp-3 text-[15px] leading-snug text-[var(--text-primary)]">
+        {/* h2, not h3: this card sits directly under the page h1 in the hero,
+            so h3 skipped a level — a screen reader user navigating by heading
+            hears the outline jump. The grid cards below stay h3 because they
+            sit under the "What people are reading" h2. */}
+        <h2 className="mt-3 line-clamp-3 text-[15px] leading-snug text-[var(--text-primary)]">
           {featured.product ? (
             <>
               <span className="font-semibold">{featured.product}</span>
@@ -94,7 +98,7 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
           ) : (
             <span className="font-semibold">{featured.title}</span>
           )}
-        </h3>
+        </h2>
         <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[var(--text-secondary)]">
           {featured.excerpt}
         </p>

@@ -78,15 +78,21 @@ function FooterColumn({
 }) {
   return (
     <nav aria-label={title}>
-      <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">
+      {/* h2, not h3. The footer is on every page, and on pages whose main
+          content is a card grid there is no h2 between the page h1 and these,
+          so h3 skipped a level site-wide. */}
+      <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">
         {title}
-      </h3>
-      <ul className="mt-4 flex flex-col gap-3">
+      </h2>
+      {/* gap-3 was measured between 19px-tall links; the padding grows each
+          target past the WCAG 2.5.8 floor and the reduced gap keeps the column
+          the same height it was. */}
+      <ul className="mt-3 flex flex-col gap-1">
         {links.map((l) => (
           <li key={l.label}>
             <Link
               href={l.href}
-              className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              className="inline-flex min-h-[32px] items-center text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               {l.label}
             </Link>

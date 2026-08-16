@@ -54,21 +54,21 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
 
           <Link
             href="/categories"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
+            className="hidden min-h-[44px] items-center text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline-flex"
           >
             Categories
           </Link>
 
           <Link
             href="/questions"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
+            className="hidden min-h-[44px] items-center text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline-flex"
           >
             Q&amp;A
           </Link>
 
           <Link
             href="/requests"
-            className="hidden text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline"
+            className="hidden min-h-[44px] items-center text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline-flex"
           >
             Requests
           </Link>

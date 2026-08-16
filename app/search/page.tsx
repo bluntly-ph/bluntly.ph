@@ -104,7 +104,9 @@ export default async function SearchPage({
         {results.length > 0 ? (
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
             {results.map((r) => (
-              <ReviewCard key={r.id} review={r} />
+              // headingLevel 2: the results grid follows the page h1 directly,
+              // with no section heading in between.
+              <ReviewCard key={r.id} review={r} headingLevel={2} />
             ))}
           </div>
         ) : (

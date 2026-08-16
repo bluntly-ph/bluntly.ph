@@ -22,9 +22,13 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
           <span className="text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--accent-trust)]">
             Discover
           </span>
+          {/* -my-2.5 py-2.5 grows the touch target to 44px without moving
+              anything: the padding is added and then pulled back out of flow,
+              so the row reads exactly as drawn while the tappable area clears
+              WCAG 2.5.8. It was 20px tall. */}
           <Link
             href="/search"
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent-trust)] hover:underline"
+            className="-my-2.5 inline-flex items-center gap-1 py-2.5 text-[13px] font-medium text-[var(--accent-trust)] hover:underline"
           >
             Browse all
             <ArrowRight size={14} />
@@ -45,7 +49,10 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
                   <Link
                     href={active ? "/search" : `/search?category=${c.slug}`}
                     className={[
-                      "inline-flex items-center gap-1.5 whitespace-nowrap text-[14px]",
+                      // Same -my/py trick as Browse all: these were 21px tall
+                      // and are the primary way to browse on a phone, so they
+                      // were the worst offenders on the page.
+                      "-my-3 inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap py-3 text-[14px]",
                       // Selected tab: orange, medium weight (BUG-006).
                       active
                         ? "font-medium text-[var(--accent-primary)]"
