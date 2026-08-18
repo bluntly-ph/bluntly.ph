@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 
-import { ReviewCard } from "@/components/review/ReviewCard";
+import { ReviewListRow } from "@/components/review/ReviewListRow";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
@@ -70,8 +70,20 @@ export default async function SearchPage({
             defaultValue={q}
             placeholder="Search products, reviews, or ask a question"
             aria-label="Search"
-            className="h-12 w-full rounded-[var(--radius-pill)] bg-[var(--surface-card)] pl-12 pr-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]"
+            // 56px at radius 32 with a #323232 hairline, as drawn — it was a
+            // 48px raised white card. Search is this page's subject, so the
+            // frame gives it more height than the landing's.
+            className="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-12 pr-12 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
           />
+          {q ? (
+            <Link
+              href="/search"
+              aria-label="Clear search"
+              className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
+            >
+              <X size={20} />
+            </Link>
+          ) : null}
         </form>
 
         {/* Category chips */}
@@ -105,13 +117,13 @@ export default async function SearchPage({
         {results === null ? (
           <Unavailable what="reviews" />
         ) : results.length > 0 ? (
-          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
+          // A list, not a grid — see ReviewListRow. Each row's title is an h2,
+          // following the page h1 directly with no section heading between.
+          <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
             {results.map((r) => (
-              // headingLevel 2: the results grid follows the page h1 directly,
-              // with no section heading in between.
-              <ReviewCard key={r.id} review={r} headingLevel={2} />
+              <ReviewListRow key={r.id} review={r} />
             ))}
-          </div>
+          </ul>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
             <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />

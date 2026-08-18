@@ -14,12 +14,23 @@ export function TrustBadge({
   stage,
   score,
   plain = false,
+  compact = false,
   className = "",
 }: {
   levelName: string | null | undefined;
   stage?: number | null;
   score: string | number | null | undefined;
   plain?: boolean;
+  /**
+   * Shield and number only, dropping the level name.
+   *
+   * The search row writes the author line as one line — handle, shield, score,
+   * age — and "Verified Buyer" in the middle of that wraps it onto two at
+   * 390px. The level name is the useful half on a profile, where there is room;
+   * in a dense result row the number carries it and the shield says what the
+   * number is. The accessible name keeps both either way.
+   */
+  compact?: boolean;
   className?: string;
 }) {
   const level = trustLevel(levelName, stage);
@@ -42,11 +53,17 @@ export function TrustBadge({
     >
       <ShieldCheck size={14} weight="fill" aria-hidden="true" />
       <span aria-hidden="true">
-        {level}
-        {value === null ? null : (
+        {compact ? (
+          value ?? level
+        ) : (
           <>
-            <span className="mx-1 opacity-50">·</span>
-            {value}
+            {level}
+            {value === null ? null : (
+              <>
+                <span className="mx-1 opacity-50">·</span>
+                {value}
+              </>
+            )}
           </>
         )}
       </span>

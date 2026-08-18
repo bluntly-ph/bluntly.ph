@@ -62,6 +62,17 @@ export type ReviewCardData = {
   authorHue: number;
   ageLabel: string;
   /**
+   * Identity, for the search list row: the frame writes an author line of
+   * @handle, a trust shield with its score, and the age. The grid card shows
+   * only the name, so these are optional — a card that does not need them
+   * simply does not read them.
+   */
+  username?: string | null;
+  avatarUrl?: string | null;
+  trustScore?: string | null;
+  trustStage?: number;
+  trustLevel?: string | null;
+  /**
    * The product this review is about, rendered bold above the title (BUG-006).
    * The two used to arrive as one undifferentiated string, so a card gave no
    * way to tell what was being reviewed from what the reviewer concluded.
