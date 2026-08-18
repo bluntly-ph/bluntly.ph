@@ -39,12 +39,20 @@ BUG-028 instead of `BUG-XXX`.
 Both are flagged in the Notes column too, but they are the kind of thing that
 gets lost in a spreadsheet:
 
-- **`review-photos` Supabase bucket does not exist.** Review photo upload
-  (BUG-023) is built and will fail until it is created. See `docs/schema.md`
-  for the bucket table.
-- **No product has an image.** BUG-009's root cause was that `products.image_url`
-  was never exposed by any schema, which is fixed — but 0 of 562 products
-  actually have one set. Run `backend/scripts/seed_product_images.py`.
+~~Both done on 2026-08-19.~~ Kept here because the diagnosis is the useful part:
+
+- **The storage buckets did not exist.** Only `avatars` did. Review photo
+  upload (BUG-023) and every product image failed at the storage layer —
+  below anything the application could see or report, which is why both looked
+  like content problems. `product-images` and `review-photos` are now created
+  (public read, 5 MB / 8 MB, png/jpeg/webp), and both upload paths are verified
+  end to end. See `docs/schema.md`.
+- **Products now have images.** No product has a genuine `source_url` to read
+  an `og:image` from, so the seeder gained `--from-file`, taking a checked-in
+  `canonical_name`→page-URL map instead of inventing `source_url` values.
+  5 of the 6 products on the feed resolved and were checked by eye, not on
+  status code — that is how a wrong-generation MacBook image got caught before
+  it shipped. Uniqlo serves a bot challenge and keeps the placeholder.
 
 ## BUG-025 was resolved by removing the feature
 
