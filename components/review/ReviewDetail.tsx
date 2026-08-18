@@ -315,13 +315,21 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+/**
+ * A titled block of the review body.
+ *
+ * The frame writes these as 16px SemiBold in full ink over 14px/22px Light —
+ * a plain sentence-case heading, not the 13px uppercase muted label this used.
+ * Uppercase tracking reads as a form field; these are section titles in a piece
+ * of writing.
+ */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-8">
-      <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+      <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
         {title}
       </h2>
-      <div className="mt-2 text-[15px] leading-relaxed text-[var(--text-primary)]">
+      <div className="mt-3 text-[14px] font-light leading-[22px] text-[var(--text-primary)]">
         {children}
       </div>
     </section>
@@ -332,20 +340,23 @@ function ProsCons({ kind, items }: { kind: "pro" | "con"; items: string[] }) {
   const isPro = kind === "pro";
   return (
     <div>
-      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">
+      <h3 className="text-[16px] font-semibold text-[var(--text-primary)]">
         {isPro ? "Pros" : "Cons"}
       </h3>
       <ul className="mt-3 flex flex-col gap-2.5">
         {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-[14px] text-[var(--text-secondary)]">
+          <li key={i} className="flex items-center gap-3 text-[12px] text-[var(--text-primary)]">
+            {/* 44px ringed circle, as drawn — the frame gives each point a
+                substantial marker rather than a small inline tick, which is
+                what makes the pro/con columns scannable at a glance. */}
             <span
-              className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ring-1 ${
                 isPro
-                  ? "bg-[color-mix(in_srgb,var(--accent-success)_16%,transparent)] text-[var(--accent-success)]"
-                  : "bg-[color-mix(in_srgb,var(--accent-danger)_14%,transparent)] text-[var(--accent-danger)]"
+                  ? "text-[var(--accent-success)] ring-[color-mix(in_srgb,var(--accent-success)_35%,transparent)]"
+                  : "text-[var(--accent-danger)] ring-[color-mix(in_srgb,var(--accent-danger)_35%,transparent)]"
               }`}
             >
-              {isPro ? <Check size={12} weight="bold" /> : <X size={12} weight="bold" />}
+              {isPro ? <Check size={22} weight="bold" /> : <X size={22} weight="bold" />}
             </span>
             {item}
           </li>
