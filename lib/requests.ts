@@ -28,13 +28,15 @@ export type RequestItem = {
 export async function getRequests(
   sort: "demand" | "newest" = "demand",
   token?: string | null,
-): Promise<RequestItem[]> {
+): Promise<RequestItem[] | null> {
   try {
     return await apiFetch<RequestItem[]>(
       `/api/v1/requests?status=open&sort=${sort}&limit=30`,
       { token: token ?? undefined },
     );
   } catch {
-    return [];
+    // null, not [] — an unreachable API is not an empty board, and the
+    // caller has to be able to tell those apart to say so honestly.
+    return null;
   }
 }

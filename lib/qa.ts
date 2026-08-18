@@ -37,12 +37,13 @@ export type Question = {
 export type QuestionDetail = Question & { answers: Answer[] };
 
 /** Open community questions. Public — no token needed. */
-export async function getQuestions(productId?: string): Promise<Question[]> {
+export async function getQuestions(productId?: string): Promise<Question[] | null> {
   try {
     const qs = productId ? `?product_id=${productId}&limit=30` : "?limit=30";
     return await apiFetch<Question[]>(`/api/v1/questions${qs}`, { revalidate: 60 });
   } catch {
-    return [];
+    // See lib/requests.ts: null distinguishes "unreachable" from "none".
+    return null;
   }
 }
 

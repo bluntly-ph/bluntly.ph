@@ -249,7 +249,7 @@ export async function searchReviews(opts: {
   author_id?: string;
   sort?: "wilson" | "newest";
   limit?: number;
-}): Promise<ReviewCardData[]> {
+}): Promise<ReviewCardData[] | null> {
   const params = new URLSearchParams({
     sort: opts.sort ?? "wilson",
     limit: String(opts.limit ?? 24),
@@ -263,7 +263,10 @@ export async function searchReviews(opts: {
     });
     return items.map(toCard);
   } catch {
-    return [];
+    // null, not [] — "we could not reach the server" and "this search matched
+    // nothing" are different answers, and only one of them is the reader's
+    // fault to act on. Returning [] made an outage read as "No reviews found".
+    return null;
   }
 }
 

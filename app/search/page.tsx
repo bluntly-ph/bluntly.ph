@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
 import { ReviewCard } from "@/components/review/ReviewCard";
+import { Unavailable } from "@/components/site/Unavailable";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { CATEGORIES } from "@/lib/landing-data";
@@ -101,7 +102,9 @@ export default async function SearchPage({
           {heading}
         </h1>
 
-        {results.length > 0 ? (
+        {results === null ? (
+          <Unavailable what="reviews" />
+        ) : results.length > 0 ? (
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
             {results.map((r) => (
               // headingLevel 2: the results grid follows the page h1 directly,

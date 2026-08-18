@@ -6,6 +6,7 @@ import { PencilSimpleLine, SealCheck, Star } from "@phosphor-icons/react/dist/ss
 import { logout } from "@/app/actions/auth";
 import { ReviewCard } from "@/components/review/ReviewCard";
 import { SiteFooter } from "@/components/site/SiteFooter";
+import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
 import { TrustBadge } from "@/components/ui/TrustBadge";
@@ -79,7 +80,7 @@ export default async function ProfilePage() {
         <section className="mt-6 grid grid-cols-3 gap-3 sm:max-w-[28rem]">
           <Stat icon={<SealCheck size={18} weight="fill" className="text-[var(--accent-success)]" />} value={me.verified_review_count} label="Verified" />
           <Stat icon={<Star size={18} weight="fill" className="text-[var(--accent-star)]" />} value={me.reputation_score} label="Reputation" />
-          <Stat value={reviews.length} label="Published" />
+          <Stat value={reviews?.length ?? "—"} label="Published" />
         </section>
 
         {/* Interests */}
@@ -101,7 +102,9 @@ export default async function ProfilePage() {
         {/* Reviews */}
         <section className="mt-10">
           <h2 className="text-[18px] font-bold text-[var(--text-primary)]">Your reviews</h2>
-          {reviews.length > 0 ? (
+          {reviews === null ? (
+            <Unavailable what="your reviews" />
+          ) : reviews.length > 0 ? (
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
               {reviews.map((r) => (
                 <ReviewCard key={r.id} review={r} />

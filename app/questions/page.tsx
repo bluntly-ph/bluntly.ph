@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChatCircle, PlusCircle, SealCheck } from "@phosphor-icons/react/dist/ssr";
 
 import { SiteFooter } from "@/components/site/SiteFooter";
+import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
 import { getUser } from "@/lib/dal";
@@ -42,7 +43,9 @@ export default async function QuestionsPage() {
           </Link>
         </div>
 
-        {questions.length > 0 ? (
+        {questions === null ? (
+          <Unavailable what="questions" />
+        ) : questions.length > 0 ? (
           <ul className="mt-6 flex flex-col gap-3">
             {questions.map((q) => (
               <li key={q.id}>

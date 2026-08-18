@@ -4,6 +4,7 @@ import { PlusCircle, Users } from "@phosphor-icons/react/dist/ssr";
 
 import { RequestUpvote } from "@/components/requests/RequestUpvote";
 import { SiteFooter } from "@/components/site/SiteFooter";
+import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
 import { getUser } from "@/lib/dal";
@@ -50,7 +51,9 @@ export default async function RequestsPage() {
           </Link>
         </div>
 
-        {requests.length > 0 ? (
+        {requests === null ? (
+          <Unavailable what="the request board" />
+        ) : requests.length > 0 ? (
           <ul className="mt-6 flex flex-col gap-3">
             {requests.map((r) => (
               <li
