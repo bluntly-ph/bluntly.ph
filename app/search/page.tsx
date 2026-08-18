@@ -49,7 +49,12 @@ export default async function SearchPage({
       {/* `flex flex-col` so the empty state below can claim the leftover height.
           Without it a no-results page leaves a tall blank band and the footer
           reads as having "ridden up" into the middle of the screen (BUG-005). */}
-      <main className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col px-6 py-8 lg:px-10 lg:py-10">
+      {/* 52rem, not the 72rem the browsing pages use. A results list is read,
+          not scanned by picture: at full width the title sat hard left and its
+          thumbnail was stranded ~600px away at the right edge, and nothing tied
+          the two together. Narrowing the column is what stops this reading as a
+          phone layout stretched to fill a monitor. */}
+      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-6 py-8 lg:py-10">
         {fromCategories ? (
           <Link
             href="/categories"

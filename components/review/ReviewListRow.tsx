@@ -25,7 +25,7 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
     <li className="border-b border-[var(--line-hairline-10)]">
       <Link
         href={`/reviews/${review.id}`}
-        className="flex items-start gap-4 py-4 transition-colors hover:bg-[var(--line-hairline-10)]"
+        className="flex items-start gap-4 py-4 transition-colors hover:bg-[var(--line-hairline-10)] lg:gap-6 lg:py-5"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -60,7 +60,7 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
             </span>
           </div>
 
-          <h2 className="mt-2 text-[14px] leading-snug text-[var(--text-primary)]">
+          <h2 className="mt-2 text-[14px] leading-snug text-[var(--text-primary)] lg:text-[16px]">
             {headline.product ? (
               <>
                 <span className="font-bold">{headline.product}</span>
@@ -83,7 +83,7 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
         </div>
 
         {/* 100px square, radius 16, pinned right. */}
-        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px]">
+        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] lg:h-[120px] lg:w-[120px]">
           {review.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

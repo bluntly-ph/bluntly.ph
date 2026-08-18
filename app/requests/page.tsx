@@ -85,10 +85,14 @@ export default async function RequestsPage() {
                   <p className="mt-1 line-clamp-2 text-[13px] text-[var(--text-secondary)]">
                     {r.details}
                   </p>
-                  <div className="mt-2">
+                  <div className="mt-1">
+                    {/* Same -my/py hit-area trick as the header and footer
+                        links: the text is 19px tall, which fails WCAG 2.5.8.
+                        This one only surfaces when the board has a request, so
+                        the a11y spec missed it while the board was empty. */}
                     <Link
                       href="/reviews/new"
-                      className="text-[13px] font-medium text-[var(--accent-primary)] hover:underline"
+                      className="-my-2.5 inline-flex items-center py-2.5 text-[13px] font-medium text-[var(--accent-primary)] hover:underline"
                     >
                       Answer with a review →
                     </Link>
