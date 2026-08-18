@@ -135,11 +135,23 @@ is a deploy step rather than something `alembic upgrade` picks up.
 | `product-images` | yes | 5 MB | `scripts/seed_product_images.py`, admin upload |
 | `review-photos` | yes | 8 MB | `POST /reviews/photo` (BUG-023) |
 
-**`review-photos` must be created before review photo upload works** — the code
-is in `services/storage.py::upload_review_photo`, but the bucket itself does not
-exist yet. Objects are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
+All three buckets now exist. `product-images` and `review-photos` were created
+2026-08-19; until then both upload paths failed at the storage layer, which is
+why review photo upload (BUG-023) never worked and why every product card fell
+through to a placeholder no matter what the database held. Each is public read
+with the size ceiling above and `image/png,image/jpeg,image/webp` enforced by
+the bucket as well as by `sniff_image_type`.
+
+Review photos are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
 because a receipt photographed on a phone routinely clears 5 MB, and rejecting a
 valid proof of purchase is worse than storing a few extra megabytes.
+
+**Product images still need a real listing URL to seed from.**
+`scripts/seed_product_images.py` reads the `og:image` from a product's own
+`source_url`, and as of 2026-08-19 no product in the database has a genuine one
+— the 25 that are set all carry the placeholder `https://shopee.ph/x-i.1.2`, and
+the six products actually visible on the feed have none at all. The pipeline is
+ready; it has nothing real to read.
 
 ## Row-Level Security
 All 15 tables have RLS enabled (31 policies). Owner-write tables key on
