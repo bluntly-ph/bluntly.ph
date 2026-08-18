@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import pathlib
 import socket
 import time
 import urllib.parse
@@ -84,11 +85,25 @@ class _MetaImageParser(HTMLParser):
             self.twitter = content
 
 
+def _https_upgrade(url: str) -> str:
+    """http:// -> https:// on the same host.
+
+    Plenty of storefronts still emit an http og:image even when the page itself
+    is https and the asset is served fine over both — Shopify does it, which is
+    why jisulife.com produced a perfectly good tag that we then refused to
+    fetch. `is_fetchable` requires https, so without this the guard silently
+    rejects a valid image. Upgrading is strictly safer than the alternative of
+    relaxing the scheme check, and if https genuinely is not available the
+    fetch fails and we fall through to the moderator path as before.
+    """
+    return "https://" + url[len("http://"):] if url.startswith("http://") else url
+
+
 def extract_og_image(html: str, base_url: str) -> str | None:
     parser = _MetaImageParser()
     parser.feed(html)
     found = parser.og or parser.twitter
-    return urllib.parse.urljoin(base_url, found) if found else None
+    return _https_upgrade(urllib.parse.urljoin(base_url, found)) if found else None
 
 
 def is_fetchable(url: str) -> bool:
@@ -168,37 +183,85 @@ def resolve_image(url: str) -> bytes | None:
     return _get(image_url, MAX_IMAGE_BYTES)
 
 
+def _load_map(path: str) -> list[tuple[str, str]]:
+    """`canonical_name<TAB>page_url` pairs from a checked-in TSV.
+
+    The alternative was to write these URLs into `products.source_url`, and
+    that would have been a lie: source_url means "the marketplace listing this
+    product was submitted from" and feeds canonicalization (models/product.py
+    §3.1). A brand's own product page is a fine place to read an og:image from
+    and a wrong answer to "where did this listing come from". Keeping the two
+    apart costs one small file and leaves both fields true.
+    """
+    pairs: list[tuple[str, str]] = []
+    for raw in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, _, url = line.partition("	")
+        if url.strip():
+            pairs.append((name.strip(), url.strip()))
+    return pairs
+
+
+def _apply(db, product: Product, url: str, dry_run: bool) -> bool:
+    """Resolve one product's image and persist it. True if an image landed."""
+    print(f"[fetch] {product.canonical_name or product.id} {url}")
+    data = resolve_image(url)
+    if data is None:
+        print("  -> no usable og:image (moderator will supply)")
+        return False
+    if dry_run:
+        print(f"  -> would upload {len(data)} bytes")
+        return True
+    product.image_url = upload_product_image(product.id, data)
+    product.image_source = ImageSource.seeded
+    product.image_fetched_at = datetime.now(UTC)
+    db.commit()
+    print(f"  -> {product.image_url}")
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--from-file",
+        metavar="TSV",
+        help="canonical_name<TAB>page_url map to seed from instead of source_url",
+    )
     args = ap.parse_args()
 
     hits = misses = 0
     with SessionLocal() as db:
-        products = (db.query(Product)
-                      .filter(Product.image_url.is_(None),
-                              Product.source_url.isnot(None))
-                      .limit(args.limit).all())
-        for product in products:
-            print(f"[fetch] {product.id} {product.source_url}")
-            data = resolve_image(product.source_url)
-            if data is None:
-                misses += 1
-                print("  -> no usable og:image (moderator will supply)")
-            elif args.dry_run:
-                hits += 1
-                print(f"  -> would upload {len(data)} bytes")
-            else:
-                product.image_url = upload_product_image(product.id, data)
-                product.image_source = ImageSource.seeded
-                product.image_fetched_at = datetime.now(UTC)
-                db.commit()
-                hits += 1
-                print(f"  -> {product.image_url}")
-            time.sleep(DELAY_S)
+        if args.from_file:
+            for name, url in _load_map(args.from_file):
+                product = (db.query(Product)
+                             .filter(Product.canonical_name == name).one_or_none())
+                if product is None:
+                    print(f"[skip ] no product named {name!r}")
+                    misses += 1
+                    continue
+                if product.image_url is not None:
+                    print(f"[skip ] {name} already has an image")
+                    continue
+                hits, misses = ((hits + 1, misses) if _apply(db, product, url, args.dry_run)
+                                else (hits, misses + 1))
+                time.sleep(DELAY_S)
+        else:
+            products = (db.query(Product)
+                          .filter(Product.image_url.is_(None),
+                                  Product.source_url.isnot(None))
+                          .limit(args.limit).all())
+            for product in products:
+                hits, misses = ((hits + 1, misses)
+                                if _apply(db, product, product.source_url, args.dry_run)
+                                else (hits, misses + 1))
+                time.sleep(DELAY_S)
 
     print(f"\nresolved {hits}, unresolved {misses} of {hits + misses}")
+
 
 
 if __name__ == "__main__":

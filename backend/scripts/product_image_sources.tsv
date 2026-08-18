@@ -1,0 +1,29 @@
+# Product image sources — canonical_name<TAB>page_url
+#
+# Read by `python -m scripts.seed_product_images --from-file`, which pulls the
+# og:image from each page and uploads it to the product-images bucket. Run by
+# hand, by the owner; nothing in the running platform reads this file.
+#
+# Why this file and not products.source_url: source_url means "the marketplace
+# listing this product was submitted from" and feeds canonicalization. These
+# are the manufacturers' own product pages -- the right place to read a product
+# photo from, and the wrong answer to that question. Keeping them apart leaves
+# both fields true.
+#
+# Each URL is the brand's official page for the exact product being reviewed.
+# Verified resolvable on 2026-08-19 except where noted.
+# The shop page shows the current-generation Air (and both sizes); this review
+# is of the M2, so the WWDC22 announcement image is the one that is actually
+# the product. Checked by eye, not just by status code.
+Apple MacBook Air M2 (13-inch)	https://www.apple.com/newsroom/2022/06/apple-unveils-all-new-macbook-air-supercharged-by-the-new-m2-chip/
+CeraVe Foaming Facial Cleanser	https://www.cerave.com/skincare/cleansers/foaming-facial-cleanser
+Anker 737 Power Bank (24000mAh)	https://www.anker.com/products/a1289
+Akko 5075B Plus Mechanical Keyboard	https://en.akkogear.com/product/blacksilver-5075b-plus-mechanical-keyboard/
+Jisulife Life9 Handheld Fan	https://jisulife.com/products/jisulife-handheld-fan-life9
+#
+# Uniqlo serves a bot challenge instead of the page on every path tried (US and
+# PH, product and feature). It is listed so the intent is recorded and a future
+# run picks it up if that ever changes; today it resolves to nothing and the
+# product falls to the moderator upload path, exactly as the module docstring
+# anticipates.
+Uniqlo AIRism Crew Neck Tee	https://www.uniqlo.com/us/en/products/E482514-000/00

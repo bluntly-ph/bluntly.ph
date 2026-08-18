@@ -146,12 +146,20 @@ Review photos are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
 because a receipt photographed on a phone routinely clears 5 MB, and rejecting a
 valid proof of purchase is worse than storing a few extra megabytes.
 
-**Product images still need a real listing URL to seed from.**
-`scripts/seed_product_images.py` reads the `og:image` from a product's own
-`source_url`, and as of 2026-08-19 no product in the database has a genuine one
-— the 25 that are set all carry the placeholder `https://shopee.ph/x-i.1.2`, and
-the six products actually visible on the feed have none at all. The pipeline is
-ready; it has nothing real to read.
+**Product images are seeded from a checked-in URL map, not from `source_url`.**
+No product has a genuine `source_url`: the 25 that are set all carry the
+placeholder `https://shopee.ph/x-i.1.2`, and the six on the feed have none. So
+`scripts/seed_product_images.py --from-file scripts/product_image_sources.tsv`
+reads the `og:image` from each manufacturer's own product page instead, listed
+by canonical name. Writing those URLs into `source_url` was the alternative and
+would have been false — that column means "the marketplace listing this product
+was submitted from" and feeds canonicalization.
+
+Five of the six feed products resolved on 2026-08-19 and were checked by eye,
+not merely by status code: Apple's shop page returns the current-generation Air
+in both sizes, so the M2 review takes the WWDC22 announcement image. Uniqlo
+serves a bot challenge on every path tried and falls to the moderator path,
+which is the partial success the module docstring anticipates.
 
 ## Row-Level Security
 All 15 tables have RLS enabled (31 policies). Owner-write tables key on
