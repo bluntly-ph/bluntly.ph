@@ -61,8 +61,24 @@ class Review(Base, UUIDPrimaryKey, Timestamps):
     pros: Mapped[list | None] = mapped_column(JSONB)   # max 10 (app-validated)
     cons: Mapped[list | None] = mapped_column(JSONB)   # max 10 (app-validated)
 
-    photo_url: Mapped[str | None] = mapped_column(Text)     # Supabase Storage
-    receipt_url: Mapped[str | None] = mapped_column(Text)   # optional post-publish
+    # The PUBLIC product photograph, drawn on the published review (FR-3).
+    photo_url: Mapped[str | None] = mapped_column(Text)     # public bucket URL
+    # Proof of purchase: an object key into the PRIVATE review-receipts bucket,
+    # never a URL. Optional, post-publish, and scoped to moderator evaluation of
+    # the earn_eligible gate - readers never see it, so no public API field
+    # carries it. Access goes through GET /reviews/{id}/receipt, which
+    # authorizes first and then mints a short-lived signed URL.
+    receipt_key: Mapped[str | None] = mapped_column(Text)
+
+    @property
+    def has_receipt(self) -> bool:
+        """Whether proof of purchase was submitted, without saying where.
+
+        This is what the public schema is allowed to know. Serializers read it
+        by name via `from_attributes`, so the locator never has to be present
+        on a response model for the boolean to be available.
+        """
+        return bool(self.receipt_key)
     price_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
 
     verification_status: Mapped[VerificationStatus] = mapped_column(

@@ -40,7 +40,12 @@ from app.schemas.review import (
 )
 from app.services import report_service, review_service, vote_service
 from app.services.ai_critique import get_provider
-from app.services.storage import upload_review_photo
+from app.services.storage import (
+    receipt_key_belongs_to,
+    signed_receipt_url,
+    upload_receipt,
+    upload_review_photo,
+)
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -57,6 +62,20 @@ def _visible_or_404(review: Review, user: User | None) -> Review:
     if review.published_at is None and not _can_view_unpublished(review, user):
         raise NotFoundError("Review not found.", code="review_not_found")
     return review
+
+
+def _own_receipt_key_or_400(key: str | None, user: User) -> str | None:
+    """Reject a receipt key this caller did not upload.
+
+    Keys are `{uploader_id}/{uuid}.{ext}`, so without this check a user could
+    attach somebody else's receipt to their own review and then read it back
+    through the authorized endpoint - which would turn the private bucket into
+    a slower version of the hole it replaced.
+    """
+    if key is None or receipt_key_belongs_to(key, user.id):
+        return key
+    raise ForbiddenError("That proof of purchase belongs to someone else.",
+                         code="receipt_not_owned")
 
 
 def _my_votes(db: Session, user: User | None,
@@ -107,6 +126,7 @@ def _comment_counts(db: Session, review_ids: list[uuid.UUID]) -> dict[uuid.UUID,
 @router.post("", response_model=ReviewOut, status_code=201, summary="Submit a review")
 def create_review(payload: ReviewCreate, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> ReviewOut:
+    _own_receipt_key_or_400(payload.receipt_key, user)
     review = review_service.create_review(db, user.id, payload)
     return ReviewOut.model_validate(review)
 
@@ -115,18 +135,81 @@ class PhotoUploaded(BaseModel):
     url: str
 
 
+class ReceiptUploaded(BaseModel):
+    """The key is what gets submitted with the review; the URL is for preview.
+
+    Two different things on purpose. `key` is the durable, opaque locator the
+    API stores. `preview_url` is a short-lived signed URL so the uploader can
+    see what they just attached - it is a bearer credential, expires quickly,
+    and is never persisted anywhere.
+    """
+
+    key: str
+    preview_url: str
+    expires_in: int
+
+
+class ReceiptAccess(BaseModel):
+    url: str
+    expires_in: int
+
+
 @router.post("/photo", response_model=PhotoUploaded,
-             summary="Upload a review photo or proof of purchase; returns its URL")
+             summary="Upload a PUBLIC review photo; returns its URL")
 def upload_photo(file: UploadFile,
                  user: User = Depends(get_current_user)) -> PhotoUploaded:
-    """Store an image and hand back its URL for `photo_url` / `receipt_url`.
+    """Store a PUBLIC review photo and hand back its URL for `photo_url`.
 
     Separate from review creation because the photo is picked while the review
     is still being written — there is no review id to attach it to yet, and
     making the author upload only to have submission fail validation would lose
     the file. Declared above `/{review_id}` so the literal path wins the match.
+
+    Proof of purchase does NOT come through here; see POST /reviews/receipt.
+    This endpoint writes to a public bucket, which is correct for an image
+    that appears on the published review and wrong for anything else.
     """
     return PhotoUploaded(url=upload_review_photo(user.id, file.file.read()))
+
+
+@router.post("/receipt", response_model=ReceiptUploaded,
+             summary="Upload proof of purchase to private storage")
+def upload_receipt_route(file: UploadFile,
+                         user: User = Depends(get_current_user)) -> ReceiptUploaded:
+    """Store proof of purchase and return its private key.
+
+    Separate from /reviews/photo because the two have different audiences, and
+    one endpoint returning "a URL suitable for either" is what let a receipt
+    end up in a public bucket. The caller does not choose the destination: the
+    endpoint it calls decides, server-side.
+    """
+    key = upload_receipt(user.id, file.file.read())
+    ttl = settings.receipt_url_ttl_seconds
+    return ReceiptUploaded(key=key, preview_url=signed_receipt_url(key, ttl),
+                           expires_in=ttl)
+
+
+@router.get("/{review_id}/receipt", response_model=ReceiptAccess,
+            summary="Signed, short-lived access to a review's proof of purchase")
+def get_receipt(review_id: uuid.UUID, db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)) -> ReceiptAccess:
+    """Author or moderator only. Authorization happens before signing.
+
+    404 rather than 403 for everyone else, including when no receipt exists:
+    a distinct "forbidden" would confirm to an unrelated user that this review
+    has proof of purchase attached, which is itself something they should not
+    learn. The PRD scopes receipts to earn_eligible evaluation (FR-3, FR-9),
+    so the moderator half of this is a requirement, not a convenience.
+    """
+    review = review_service.get_review_or_404(db, review_id)
+    if not (user.id == review.author_id or _is_moderator(user)):
+        raise NotFoundError("Review not found.", code="review_not_found")
+    if not review.receipt_key:
+        raise NotFoundError("No proof of purchase on this review.",
+                            code="receipt_not_found")
+    ttl = settings.receipt_url_ttl_seconds
+    return ReceiptAccess(url=signed_receipt_url(review.receipt_key, ttl),
+                         expires_in=ttl)
 
 
 @router.get("", response_model=list[ReviewOut],
@@ -210,6 +293,7 @@ def update_review(review_id: uuid.UUID, payload: ReviewUpdate,
     if review.author_id != user.id and user.role != MemberRole.moderator:
         raise ForbiddenError("Only the author or a moderator may edit this review.",
                              code="not_review_owner")
+    _own_receipt_key_or_400(payload.receipt_key, user)
     review = review_service.update_review(db, review, user.id, payload)
     return ReviewOut.model_validate(review)
 

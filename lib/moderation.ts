@@ -12,6 +12,10 @@ export type QueueItem = {
     verdict: "yes_absolutely" | "it_depends" | "hard_pass";
     star_rating: number;
     verification_status: "verified" | "unverified";
+    /** Proof of purchase was submitted. Never its location — moderators fetch
+     *  the object itself from GET /reviews/{id}/receipt, which authorizes the
+     *  caller and returns a short-lived signed URL. */
+    has_receipt: boolean;
     created_at: string;
   };
   product: {

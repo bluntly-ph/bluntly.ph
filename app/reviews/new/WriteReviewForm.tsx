@@ -76,7 +76,10 @@ type Draft = {
   target: string;
   anti: string;
   photoUrl: string | null;
-  receiptUrl: string | null;
+  // The private object key from POST /reviews/receipt. Never a URL, and never
+  // the signed preview URL: that is a short-lived bearer credential, and
+  // localStorage would outlive it and travel with a synced browser profile.
+  receiptKey: string | null;
   price: string;
   savedAt: number;
 };
@@ -93,7 +96,7 @@ const EMPTY_DRAFT: Draft = {
   target: "",
   anti: "",
   photoUrl: null,
-  receiptUrl: null,
+  receiptKey: null,
   price: "",
   savedAt: 0,
 };
@@ -107,7 +110,12 @@ function readDraft(): Draft | null {
     if (!parsed.product && !parsed.discussion?.trim() && !parsed.title?.trim()) {
       return null;
     }
-    return { ...EMPTY_DRAFT, ...parsed };
+    // Drafts written before receipts moved to private storage carry a
+    // `receiptUrl` pointing at an object that no longer exists publicly.
+    // Drop it; the author can re-attach.
+    const { ...rest } = parsed as Partial<Draft> & { receiptUrl?: unknown };
+    delete (rest as { receiptUrl?: unknown }).receiptUrl;
+    return { ...EMPTY_DRAFT, ...rest };
   } catch {
     return null;
   }
@@ -533,7 +541,7 @@ function StepsFlow({
           pros: lines(draft.pros),
           cons: lines(draft.cons),
           photo_url: draft.photoUrl,
-          receipt_url: draft.receiptUrl,
+          receipt_key: draft.receiptKey,
           price_paid: draft.price.trim() ? Number(draft.price) : null,
         }),
       });
@@ -710,11 +718,9 @@ function StepsFlow({
 
         {step === 5 ? (
           <div className="flex flex-col gap-6">
-            <PhotoField
-              label="Proof of purchase"
-              hint="A receipt, order screenshot, or the confirmation email. Reviews with proof are marked verified."
-              url={draft.receiptUrl}
-              onChange={(url) => patch({ receiptUrl: url })}
+            <ReceiptField
+              value={draft.receiptKey}
+              onChange={(key) => patch({ receiptKey: key })}
             />
             <PhotoField
               label="A photo of the product (optional)"
@@ -794,6 +800,124 @@ function StepsFlow({
  * away whether the file was accepted — a rejection discovered at the end, after
  * seven steps, is the worst possible time to learn a photo was too large.
  */
+/**
+ * Proof of purchase — private storage, deliberately not a PhotoField.
+ *
+ * Three differences from the public photo field, all of them the point:
+ *  - it posts to /reviews/receipt, so the *server* picks the private bucket;
+ *    the client never names a destination
+ *  - it stores an opaque object key, not a URL
+ *  - the preview URL is signed, short-lived, and held only in component state.
+ *    Resuming a saved draft therefore shows "attached" rather than the image:
+ *    persisting the signed URL to survive a reload is exactly the mistake this
+ *    whole change exists to undo.
+ */
+function ReceiptField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (key: string | null) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function pick(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/bff/api/v1/reviews/receipt", {
+        method: "POST",
+        body,
+      });
+      if (!res.ok) {
+        const p = (await res.json().catch(() => ({}))) as { detail?: string };
+        setError(p.detail ?? "That image couldn't be uploaded.");
+        return;
+      }
+      const { key, preview_url } = (await res.json()) as {
+        key: string;
+        preview_url: string;
+      };
+      onChange(key);
+      setPreview(preview_url);
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-medium text-[var(--text-primary)]">
+        Proof of purchase
+      </span>
+      <span className="text-[12px] text-[var(--text-secondary)]">
+        A receipt, order screenshot, or the confirmation email. Only you and the
+        moderators reviewing it can ever open this — it is never shown on your
+        published review.
+      </span>
+
+      {value ? (
+        <div className="mt-2 flex items-start gap-3">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={preview}
+              alt="Proof of purchase preview"
+              className="h-28 w-28 rounded-[var(--radius-sm)] object-cover shadow-[var(--shadow-hairline-inset)]"
+            />
+          ) : (
+            <div className="grid h-28 w-28 place-items-center rounded-[var(--radius-sm)] text-center text-[12px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
+              Attached
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setPreview(null);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-2 text-[13px] text-[var(--accent-danger)] hover:bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)]"
+          >
+            <Trash size={16} /> Remove
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          disabled={busy}
+          className="mt-2 inline-flex items-center gap-2 self-start rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] px-4 py-3 text-[13px] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] disabled:opacity-60"
+        >
+          <ImageIcon size={18} />
+          {busy ? "Uploading…" : "Choose an image"}
+        </button>
+      )}
+
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void pick(file);
+        }}
+      />
+      {error ? (
+        <p className="text-[12px] text-[var(--accent-danger)]">{error}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function PhotoField({
   label,
   hint,

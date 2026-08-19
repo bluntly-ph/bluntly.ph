@@ -200,6 +200,13 @@ class Settings(BaseSettings):
     otp_send_window_seconds: int = 900
     otp_max_sends_per_window: int = 5
 
+    # --- Proof-of-purchase access ---
+    # TTL for a signed receipt URL. Short on purpose: the URL is a bearer
+    # credential once issued, so its usefulness to anyone who intercepts it is
+    # bounded by this number. Long enough for a moderator to open the image,
+    # not long enough to be worth passing around.
+    receipt_url_ttl_seconds: int = 300
+
     # --- CORS ---
     cors_origins: str = "http://localhost:3000"
 

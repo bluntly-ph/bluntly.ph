@@ -36,7 +36,9 @@ class ReviewCreate(BaseModel):
     pros: list[str] = Field(default_factory=list, max_length=10)
     cons: list[str] = Field(default_factory=list, max_length=10)
     photo_url: str | None = None
-    receipt_url: str | None = None
+    # Object key from POST /reviews/receipt, not a URL. The route verifies the
+    # key was uploaded by this caller before it is stored.
+    receipt_key: str | None = None
     price_paid: Decimal | None = None
 
 
@@ -53,7 +55,7 @@ class ReviewUpdate(BaseModel):
     pros: list[str] | None = Field(default=None, max_length=10)
     cons: list[str] | None = Field(default=None, max_length=10)
     photo_url: str | None = None
-    receipt_url: str | None = None
+    receipt_key: str | None = None
     price_paid: Decimal | None = None
     change_note: str | None = None
 
@@ -82,7 +84,14 @@ class ReviewOut(BaseModel):
     pros: list | None = None
     cons: list | None = None
     photo_url: str | None = None
-    receipt_url: str | None = None
+    # Deliberately NO receipt locator on any response model.
+    #
+    # This schema is returned by GET /reviews and GET /reviews/{id}, both of
+    # which accept anonymous callers, so anything on it is public for every
+    # published review. `has_receipt` is the harmless half of the fact - it
+    # says evidence was submitted without saying where it lives. A moderator
+    # or the author fetches the object itself from GET /reviews/{id}/receipt.
+    has_receipt: bool = False
     price_paid: Decimal | None = None
     verification_status: VerificationStatus
     # Community visibility voting (M2 slice 2).

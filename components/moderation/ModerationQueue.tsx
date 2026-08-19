@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowSquareOut, LinkSimple, Warning } from "@phosphor-icons/react/dist/ssr";
+import { ArrowSquareOut, LinkSimple, Receipt, Warning } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
 import type { QueueItem } from "@/lib/moderation";
@@ -55,6 +55,7 @@ function ModerationCard({
   const [error, setError] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [url, setUrl] = useState("");
+  const [receiptBusy, setReceiptBusy] = useState(false);
   const [platform, setPlatform] = useState(item.suggested_platform ?? "shopee");
 
   const flags = [
@@ -87,6 +88,28 @@ function ModerationCard({
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Fetch a short-lived signed URL and open it. Deliberately not rendered as
+   *  an <img src>: the URL is a bearer credential, and putting it in the DOM
+   *  leaves it in the page source and in any screenshot of this queue. It is
+   *  requested at the moment of use and never stored. */
+  async function openReceipt() {
+    setReceiptBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/bff/api/v1/reviews/${review.id}/receipt`);
+      if (!res.ok) {
+        setError("Couldn't open the proof of purchase.");
+        return;
+      }
+      const { url: signed } = (await res.json()) as { url: string };
+      window.open(signed, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setReceiptBusy(false);
     }
   }
 
@@ -123,6 +146,17 @@ function ModerationCard({
           >
             source <ArrowSquareOut size={12} />
           </a>
+        ) : null}
+        {review.has_receipt ? (
+          <button
+            type="button"
+            onClick={() => void openReceipt()}
+            disabled={receiptBusy}
+            className="inline-flex items-center gap-1 text-[var(--accent-primary)] hover:underline disabled:opacity-60"
+          >
+            <Receipt size={12} />
+            {receiptBusy ? "opening…" : "proof of purchase"}
+          </button>
         ) : null}
         <span className="ml-auto">
           {review.verification_status === "verified" ? "✓ verified" : "unverified"}

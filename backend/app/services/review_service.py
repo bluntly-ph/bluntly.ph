@@ -16,10 +16,16 @@ from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
 
 # Fields captured in each version snapshot.
+#
+# receipt_key is deliberately absent. Snapshots are served by
+# GET /reviews/{id}/versions[/{n}], which accept anonymous callers for any
+# published review - so anything in here is public. The edit history records
+# `receipt_present` instead, which preserves the audit fact (evidence was
+# attached, or removed) without publishing where the object lives.
 VERSIONED_FIELDS = (
     "title", "discussion", "verdict", "verdict_explanation", "target_audience",
     "anti_target_audience", "star_rating", "pros", "cons", "photo_url",
-    "receipt_url", "price_paid",
+    "price_paid",
 )
 
 
@@ -32,6 +38,7 @@ def _snapshot(review: Review) -> dict:
         elif field == "price_paid" and value is not None:
             value = str(value)
         snap[field] = value
+    snap["receipt_present"] = bool(review.receipt_key)
     return snap
 
 
@@ -78,7 +85,7 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
         pros=payload.pros,
         cons=payload.cons,
         photo_url=payload.photo_url,
-        receipt_url=payload.receipt_url,
+        receipt_key=payload.receipt_key,
         price_paid=payload.price_paid,
         # Proof photo at submission => verified (FR-3).
         verification_status=(VerificationStatus.verified if payload.photo_url
