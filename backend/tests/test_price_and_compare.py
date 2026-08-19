@@ -250,21 +250,27 @@ def test_comparison_never_claims_a_seller_rating(client):
     assert "seller_trust" not in blob
 
 
-def test_compare_route_is_matched_before_the_product_id_route(client):
-    """Route ORDER regression - no database needed.
+def test_compare_route_is_declared_before_the_product_id_route():
+    """Route ORDER regression - genuinely no database.
 
     `/compare` and `/{product_id}` both match the path "compare", and FastAPI
     resolves in declaration order. When /compare was appended to the end of the
     module the id route won, tried to parse "compare" as a UUID, and every
-    comparison 422'd in production while passing every DB-backed test that
-    built its URL from real ids.
+    comparison 422'd in production while passing every DB-backed test - those
+    build their URLs from real ids, so they exercise the query string rather
+    than the path collision.
 
-    Two unknown UUIDs must therefore yield 200 with both listed in `not_found`,
-    not a validation error.
+    An earlier version of this test issued a real request and claimed to need
+    no database. It did: /compare queries products, so it failed for anyone
+    without Postgres. Asserting on the route table tests the thing that
+    actually broke and runs anywhere.
     """
-    a, b = uuid.uuid4(), uuid.uuid4()
-    resp = client.get(f"/api/v1/products/compare?ids={a},{b}")
-    assert resp.status_code == 200, (
-        f"/compare resolved to the wrong route: HTTP {resp.status_code}")
-    assert sorted(resp.json()["not_found"]) == sorted([str(a), str(b)])
-    assert resp.json()["entries"] == []
+    from app.main import app
+
+    paths = [getattr(r, "path", "") for r in app.routes]
+    compare_at = paths.index("/api/v1/products/compare")
+    by_id_at = paths.index("/api/v1/products/{product_id}")
+    assert compare_at < by_id_at, (
+        "/products/compare must be declared before /products/{product_id}; "
+        f"found compare at {compare_at}, id route at {by_id_at}"
+    )
