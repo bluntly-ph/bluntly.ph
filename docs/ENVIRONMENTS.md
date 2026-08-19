@@ -27,11 +27,24 @@ behaviour. What follows is the arrangement that stops them.
 
 Two rows deserve emphasis.
 
-**Local development still points at production.** `npm run dev:all` reads the
-repo-root `.env`, so clicking around the local app writes to the live database.
-This is not fixed by the guard — the guard covers automated commands, and
-running the app is a deliberate act. Until the test project is seeded with
-enough content to develop against, treat the local app as production.
+**Local development refuses to start against production.** `npm run dev:all`
+reads the repo-root `.env`, so clicking around the local app used to write to
+the live database. The launcher now resolves the target first and stops:
+
+```
+REFUSING TO START - local dev is pointed at PRODUCTION
+```
+
+`scripts/dev.ps1 -AllowProduction` is the deliberate escape hatch for read-only
+debugging; it prints a loud banner every time and is never persisted.
+
+The guard sits in the launcher, not the application, because the deployed
+production function obviously still has to boot with production configuration.
+
+When `backend/.env.test` exists the launcher loads it into **both** child
+processes, so the frontend and backend are always one environment. A frontend
+on test with a backend on production is worse than either alone: every symptom
+points at the wrong half.
 
 **E2E is read-only and must stay that way.** All five specs assert on public
 read surfaces and client-side behaviour; none issues a write. If you add a spec

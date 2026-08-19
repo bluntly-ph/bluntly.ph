@@ -22,7 +22,10 @@
 param(
     [int]$ApiPort = 8000,
     [int]$WebPort = 3000,
-    [switch]$Stop
+    [switch]$Stop,
+    # Deliberately run local development against PRODUCTION. Off by default,
+    # never persisted, and announced loudly every time it is used.
+    [switch]$AllowProduction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,6 +80,74 @@ if ($Stop) {
 $python = Join-Path $root 'backend\.venv\Scripts\python.exe'
 if (-not (Test-Path $python)) {
     throw "Backend virtualenv not found at $python. Create it before running this."
+}
+
+# --- Refuse to start against production -------------------------------------
+# `npm run dev:all` reads the repo-root .env, which is production. Clicking
+# around the local app therefore wrote to the live database, and no automated
+# guard covered it because starting the app is a deliberate act rather than an
+# automated command. It is guarded here, at the launcher, rather than in the
+# application: the deployed production function must obviously still boot with
+# production configuration.
+#
+# Both processes are checked as ONE environment. A frontend on test with a
+# backend on production (or the reverse) is worse than either alone, because
+# every symptom points at the wrong half.
+# Load backend/.env.test into THIS process, so both child processes inherit it.
+# Without this the probe could report "test" while uvicorn still read the
+# repo-root .env and connected to production - the two must be one environment,
+# and a frontend on test with a backend on production is worse than either
+# alone because every symptom points at the wrong half.
+$envTest = Join-Path $root 'backend/.env.test'
+if (Test-Path $envTest) {
+    Get-Content $envTest | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith('#') -and $line.Contains('=')) {
+            $k, $v = $line.Split('=', 2)
+            # A variable already exported wins, so CI and one-off overrides hold.
+            if (-not [Environment]::GetEnvironmentVariable($k.Trim())) {
+                Set-Item -Path "env:$($k.Trim())" -Value $v.Trim()
+            }
+        }
+    }
+    Write-Host "  loaded backend/.env.test into the dev environment" -ForegroundColor DarkGray
+}
+
+$probeScript = Join-Path $root 'backend\scripts\print_env_target.py'
+$targetProbe = & $python $probeScript 2>&1
+
+$targetLine = ($targetProbe | Select-Object -First 1)
+$verdict = ($targetProbe | Select-Object -Last 1)
+
+Write-Host ""
+Write-Host "  environment -> $targetLine" -ForegroundColor DarkGray
+
+if ($verdict -eq 'PRODUCTION' -and -not $AllowProduction) {
+    Write-Host ""
+    Write-Host "  ====================================================" -ForegroundColor Red
+    Write-Host "  REFUSING TO START - local dev is pointed at PRODUCTION" -ForegroundColor Red
+    Write-Host "  ====================================================" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Anything you click in the local app would write to the live" -ForegroundColor Yellow
+    Write-Host "  database that serves www.bluntly.ph." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Point it at the test project instead:" -ForegroundColor Cyan
+    Write-Host "    1. cp backend/.env.test.example backend/.env.test" -ForegroundColor Cyan
+    Write-Host "    2. fill in the test project's credentials" -ForegroundColor Cyan
+    Write-Host "    3. npm run dev:all" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  If you genuinely need production (read-only debugging):" -ForegroundColor DarkGray
+    Write-Host "    powershell -File scripts/dev.ps1 -AllowProduction" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  See docs/ENVIRONMENTS.md." -ForegroundColor DarkGray
+    exit 1
+}
+
+if ($verdict -eq 'PRODUCTION' -and $AllowProduction) {
+    Write-Host ""
+    Write-Host "  !! RUNNING LOCAL DEV AGAINST PRODUCTION !!" -ForegroundColor Red
+    Write-Host "  Every write you make here lands on the live site." -ForegroundColor Red
+    Write-Host ""
 }
 
 Write-Host "Starting API on $ApiPort..." -ForegroundColor Cyan
