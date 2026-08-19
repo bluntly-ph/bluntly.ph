@@ -95,6 +95,32 @@ Automated as `backend/tests/test_receipt_privacy.py` (13 tests), including a
 structural guard that fails if any locator field is ever added back to a shared
 review schema.
 
+## Receipt-view audit logging: an owner decision, not a defect
+
+Moderator receipt access currently writes no `moderation_logs` entry. Before
+treating that as a gap, the requirements were searched. What they actually say:
+
+- **PRD FR-9** requires a "filterable audit log" of platform administration,
+  and lists reviewing audit logs among the moderator's duties.
+- **`02-bluntly-ph-architecture.md`** maps "Audit log of moderation/admin
+  **actions**" to ISO/IEC 27002 8.15.
+- `moderation_logs` doubles as the audit log (`DEVIATIONS.md` §4) and already
+  carries non-decision admin actions: `csv_import`, `payout`,
+  `honesty_fund_distribution`.
+
+Every action logged today changes state. Viewing evidence is a read, and no
+document requires logging reads. So this is **not** a contractual requirement
+and has deliberately not been implemented — adding it would mean a new
+`ModerationAction` enum value, which on Postgres is a schema migration, and
+that is scope the owner should agree to rather than inherit.
+
+It is worth doing. The architecture doc's own ISO/IEC 27002 8.15 citation
+covers access logging, receipts contain personal data under RA 10173, and
+"who looked at this customer's receipt, and when" is exactly the question an
+audit log exists to answer. If approved, it should record moderator id, review
+id, action, and timestamp — and never the object key, the signed URL, or
+anything from the receipt itself.
+
 ## BUG-025 was resolved by removing the feature
 
 Tokens were retired in favour of the PHP revenue share, and the request board
