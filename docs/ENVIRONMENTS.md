@@ -19,11 +19,11 @@ behaviour. What follows is the arrangement that stops them.
 |---|---|---|---|---|
 | **Production** | `www.bluntly.ph` (Vercel, `main` auto-deploy) | Supabase `byobedbhodhvocgrkrse` | `avatars`, `product-images`, `review-photos` (public); `review-receipts` (private) | **No** |
 | **Preview** | none configured | — | — | n/a |
-| **Local development** | `npm run dev:all` | **production** (repo-root `.env`) | production | **No** — see the warning below |
+| **Local development** | `npm run dev:all` | test project when `backend/.env.test` exists; otherwise **refuses to start** | matching project | Yes, once pointed at test |
 | **Backend tests** | pytest | Supabase `miysywhcdqkoniaibglx` (`bluntly-ph-test`) via `backend/.env.test` | that project's buckets | **Yes** |
 | **Frontend tests** | none exist | — | — | n/a |
 | **E2E (Playwright)** | local dev server | whatever the dev server uses | same | read-only by design |
-| **CI** | none configured | — | — | n/a |
+| **CI** | workflow written, parked at `docs/ci/ci.yml` | none (DB job opt-in on secrets) | — | n/a — fails closed on a production target |
 
 Two rows deserve emphasis.
 
@@ -74,11 +74,17 @@ Signals checked, any one of which means production:
 - `APP_ENV=production`
 
 It resolves those values from the **same env files pydantic-settings reads**
-(`.env`, `backend/.env`, `backend/.env.test`) with real environment variables
-taking precedence — not from `os.environ` alone. An earlier draft read only the
-process environment, saw nothing (the credentials live in a file), and reported
+(`.env`, `backend/.env`) with real environment variables taking precedence —
+not from `os.environ` alone. An earlier draft read only the process
+environment, saw nothing (the credentials live in a file), and reported
 "unrecognised"; anyone who then set the test marker would have gone straight to
 production. Reading the files is what makes the guard real.
+
+`.env.test` is deliberately **not** in that list. Including it made the guard
+lie: merely having the file on disk made it report "test" while
+pydantic-settings — which does not read it — still resolved production. The
+test values count only once `load_test_env()` has put them in `os.environ`,
+which is the same moment they start affecting `Settings`.
 
 It **fails closed**: a target that has not positively identified itself as a
 test environment is treated as production. Assuming "unknown means safe" is how
