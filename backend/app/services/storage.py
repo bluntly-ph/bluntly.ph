@@ -234,15 +234,22 @@ def receipt_key_belongs_to(key: str, user_id: uuid.UUID) -> bool:
     return key.split("/", 1)[0] == str(user_id)
 
 
-def signed_receipt_url(key: str, expires_in: int) -> str:
-    """A short-lived signed URL for an already-authorized caller.
+def signed_receipt_url(key: str, expires_in: int) -> str | None:
+    """A short-lived signed URL for an already-authorized caller, or None.
 
     Call this only after deciding the caller may see the object. It is
     deliberately not cached, stored, or logged: the returned string is a
     bearer credential for the lifetime of `expires_in`.
+
+    None when the object is not there - a row can outlive its object, and the
+    honest answer to "show me this receipt" is then "there is nothing to show",
+    not a 500 that reads like the endpoint is broken.
     """
-    signed = get_service_client().storage.from_(RECEIPT_BUCKET).create_signed_url(
-        key, expires_in)
+    try:
+        signed = get_service_client().storage.from_(RECEIPT_BUCKET).create_signed_url(
+            key, expires_in)
+    except Exception:  # noqa: BLE001
+        return None
     url = signed["signedURL"] if isinstance(signed, dict) else signed.signedURL
     if url.startswith("http"):
         return url

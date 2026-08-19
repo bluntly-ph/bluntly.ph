@@ -133,8 +133,50 @@ export interface paths {
         /** List products */
         get: operations["list_products_api_v1_products_get"];
         put?: never;
-        /** Create a product */
+        /**
+         * Create a product
+         * @description Submit a product.
+         *
+         *     A reviewer submits a *marketplace link* and the row lands `pending`, which
+         *     is what ProductStatus.pending has always documented itself as meaning
+         *     ("submitted via source_url, awaiting canonicalization"). The route used to
+         *     shortcut straight to `canonicalized` with whatever name the reviewer typed
+         *     (BUG-020) — so "Jisulife fan", "jisulife life9" and "JISULIFE Life 9" became
+         *     three products, splitting the reviews that should consolidate under one.
+         *
+         *     The name a reviewer types is kept as a provisional label so the product is
+         *     recognisable in the meantime; a moderator replaces it via /canonicalize.
+         *     Moderators still create canonicalized rows directly — they are the ones
+         *     doing the naming, and they may be adding something with no listing at all.
+         *
+         *     `source_url` is deliberately *not* enforced here even though the write-review
+         *     form always sends one. Requiring it would be a breaking contract change for
+         *     every existing caller — seeds, scripts, and a dozen test fixtures create
+         *     products by name alone — to re-state a rule the only human-facing path
+         *     already applies. The status is what protects the catalogue: an unnamed
+         *     submission stays `pending` whether or not a link came with it.
+         */
         post: operations["create_product_api_v1_products_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{product_id}/canonicalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a pending product's canonical name (moderator)
+         * @description Name a submission and admit it to the catalogue (BUG-020).
+         */
+        post: operations["canonicalize_product_api_v1_products__product_id__canonicalize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -170,6 +212,86 @@ export interface paths {
         put?: never;
         /** Submit a review */
         post: operations["create_review_api_v1_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a PUBLIC review photo; returns its URL
+         * @description Store a PUBLIC review photo and hand back its URL for `photo_url`.
+         *
+         *     Separate from review creation because the photo is picked while the review
+         *     is still being written — there is no review id to attach it to yet, and
+         *     making the author upload only to have submission fail validation would lose
+         *     the file. Declared above `/{review_id}` so the literal path wins the match.
+         *
+         *     Proof of purchase does NOT come through here; see POST /reviews/receipt.
+         *     This endpoint writes to a public bucket, which is correct for an image
+         *     that appears on the published review and wrong for anything else.
+         */
+        post: operations["upload_photo_api_v1_reviews_photo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload proof of purchase to private storage
+         * @description Store proof of purchase and return its private key.
+         *
+         *     Separate from /reviews/photo because the two have different audiences, and
+         *     one endpoint returning "a URL suitable for either" is what let a receipt
+         *     end up in a public bucket. The caller does not choose the destination: the
+         *     endpoint it calls decides, server-side.
+         */
+        post: operations["upload_receipt_route_api_v1_reviews_receipt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{review_id}/receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Signed, short-lived access to a review's proof of purchase
+         * @description Author or moderator only. Authorization happens before signing.
+         *
+         *     404 rather than 403 for everyone else, including when no receipt exists:
+         *     a distinct "forbidden" would confirm to an unrelated user that this review
+         *     has proof of purchase attached, which is itself something they should not
+         *     learn. The PRD scopes receipts to earn_eligible evaluation (FR-3, FR-9),
+         *     so the moderator half of this is a requirement, not a convenience.
+         */
+        get: operations["get_receipt_api_v1_reviews__review_id__receipt_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -590,6 +712,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/username-available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether a username is free to claim
+         * @description Check a username *before* the signup wizard is finished (BUG-018).
+         *
+         *     Availability was only ever discovered on submit, so someone could pick a
+         *     handle, choose interests, read two more screens, and only then be told to
+         *     start over with a different name.
+         *
+         *     No enumeration concern: usernames are public handles, printed on every
+         *     review and profile. Rate-limited anyway, because a cheap endpoint that
+         *     answers questions about accounts should not be free to hammer.
+         */
+        get: operations["username_available_api_v1_users_username_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -789,7 +939,7 @@ export interface paths {
         /** List review requests */
         get: operations["list_requests_api_v1_requests_get"];
         put?: never;
-        /** Post a review request (AI-screened; bounty escrowed) */
+        /** Post a review request (AI-screened; free to post) */
         post: operations["create_request_api_v1_requests_post"];
         delete?: never;
         options?: never;
@@ -824,7 +974,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Up-vote a request (raises the platform top-up) */
+        /** Up-vote a request (says you want this reviewed too) */
         post: operations["upvote_api_v1_requests__request_id__upvote_post"];
         /** Remove your up-vote */
         delete: operations["remove_upvote_api_v1_requests__request_id__upvote_delete"];
@@ -1260,6 +1410,22 @@ export interface components {
              */
             file: string;
         };
+        /** Body_upload_photo_api_v1_reviews_photo_post */
+        Body_upload_photo_api_v1_reviews_photo_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_upload_receipt_route_api_v1_reviews_receipt_post */
+        Body_upload_receipt_route_api_v1_reviews_receipt_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** BuyoutOffer */
         BuyoutOffer: {
             /**
@@ -1435,6 +1601,11 @@ export interface components {
             trust_stage: number;
             /** Trust Level Name */
             trust_level_name?: string | null;
+            /**
+             * Reputation Score
+             * @default 0
+             */
+            reputation_score: string;
         };
         /**
          * FeedItemOut
@@ -1448,6 +1619,11 @@ export interface components {
             review: components["schemas"]["ReviewOut"];
             author?: components["schemas"]["FeedAuthor"] | null;
             product?: components["schemas"]["FeedProduct"] | null;
+            /**
+             * Comment Count
+             * @default 0
+             */
+            comment_count: number;
         };
         /**
          * FeedProduct
@@ -1473,6 +1649,8 @@ export interface components {
              * @default 0
              */
             review_count: number;
+            /** Image Url */
+            image_url?: string | null;
         };
         /** FulfillRequest */
         FulfillRequest: {
@@ -1665,6 +1843,11 @@ export interface components {
          * @enum {string}
          */
         PayoutStatus: "scheduled" | "processing" | "paid" | "failed" | "cancelled";
+        /** PhotoUploaded */
+        PhotoUploaded: {
+            /** Url */
+            url: string;
+        };
         /**
          * Platform
          * @enum {string}
@@ -1690,6 +1873,27 @@ export interface components {
             instance: string;
             /** Code */
             code: string;
+        };
+        /**
+         * ProductCanonicalize
+         * @description A moderator's canonical naming of a pending submission (BUG-020).
+         *
+         *     The four parts the naming convention asks for are separate fields rather
+         *     than one free-text box, because that is what keeps two people naming the
+         *     same product the same way — which is the entire point of consolidating
+         *     reviews under one entry.
+         */
+        ProductCanonicalize: {
+            /** Brand */
+            brand: string;
+            /** Product Line */
+            product_line: string;
+            /** Key Spec */
+            key_spec?: string | null;
+            /** Descriptor */
+            descriptor?: string | null;
+            /** Category */
+            category?: string | null;
         };
         /** ProductCreate */
         ProductCreate: {
@@ -1720,6 +1924,8 @@ export interface components {
             avg_rating: string;
             /** Review Count */
             review_count: number;
+            /** Image Url */
+            image_url?: string | null;
             /**
              * Trust Score
              * @default 0
@@ -1774,6 +1980,11 @@ export interface components {
             trust_stage: number;
             /** Trust Level Name */
             trust_level_name?: string | null;
+            /**
+             * Reputation Score
+             * @default 0
+             */
+            reputation_score: string;
         };
         /** QuestionCreate */
         QuestionCreate: {
@@ -1951,6 +2162,30 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ReceiptAccess */
+        ReceiptAccess: {
+            /** Url */
+            url: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * ReceiptUploaded
+         * @description The key is what gets submitted with the review; the URL is for preview.
+         *
+         *     Two different things on purpose. `key` is the durable, opaque locator the
+         *     API stores. `preview_url` is a short-lived signed URL so the uploader can
+         *     see what they just attached - it is a bearer credential, expires quickly,
+         *     and is never persisted anywhere.
+         */
+        ReceiptUploaded: {
+            /** Key */
+            key: string;
+            /** Preview Url */
+            preview_url: string;
+            /** Expires In */
+            expires_in: number;
+        };
         /** ReferralLinkOut */
         ReferralLinkOut: {
             /**
@@ -2108,11 +2343,6 @@ export interface components {
             title: string;
             /** Details */
             details: string;
-            /**
-             * Bounty
-             * @description Tokens escrowed from your balance.
-             */
-            bounty: number;
             /** Product Id */
             product_id?: string | null;
             /** Source Url */
@@ -2140,8 +2370,6 @@ export interface components {
             details: string;
             /** Source Url */
             source_url?: string | null;
-            /** Bounty */
-            bounty: number;
             status: components["schemas"]["RequestStatus"];
             /** Fulfilled By Review Id */
             fulfilled_by_review_id?: string | null;
@@ -2155,15 +2383,15 @@ export interface components {
              * @default 0
              */
             upvote_count: number;
+            /**
+             * My Upvote
+             * @default false
+             */
+            my_upvote: boolean;
             /** Ai Validation */
             ai_validation?: {
                 [key: string]: unknown;
             } | null;
-            /**
-             * Effective Reward
-             * @default 0
-             */
-            effective_reward: number;
             /**
              * Created At
              * Format: date-time
@@ -2202,13 +2430,14 @@ export interface components {
             cons?: string[];
             /** Photo Url */
             photo_url?: string | null;
-            /** Receipt Url */
-            receipt_url?: string | null;
+            /** Receipt Key */
+            receipt_key?: string | null;
             /** Price Paid */
             price_paid?: number | string | null;
         };
         /** ReviewOut */
         ReviewOut: {
+            my_vote?: components["schemas"]["VoteDirection"] | null;
             /**
              * Id
              * Format: uuid
@@ -2242,8 +2471,11 @@ export interface components {
             cons?: unknown[] | null;
             /** Photo Url */
             photo_url?: string | null;
-            /** Receipt Url */
-            receipt_url?: string | null;
+            /**
+             * Has Receipt
+             * @default false
+             */
+            has_receipt: boolean;
             /** Price Paid */
             price_paid?: string | null;
             verification_status: components["schemas"]["VerificationStatus"];
@@ -2315,8 +2547,8 @@ export interface components {
             cons?: string[] | null;
             /** Photo Url */
             photo_url?: string | null;
-            /** Receipt Url */
-            receipt_url?: string | null;
+            /** Receipt Key */
+            receipt_key?: string | null;
             /** Price Paid */
             price_paid?: number | string | null;
             /** Change Note */
@@ -2518,6 +2750,15 @@ export interface components {
             helpfulness_ratio: string;
             /** Badges */
             badges?: components["schemas"]["BadgeOut"][];
+        };
+        /** UsernameAvailability */
+        UsernameAvailability: {
+            /** Username */
+            username: string;
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3010,6 +3251,41 @@ export interface operations {
             };
         };
     };
+    canonicalize_product_api_v1_products__product_id__canonicalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCanonicalize"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_product_api_v1_products__product_id__get: {
         parameters: {
             query?: never;
@@ -3095,6 +3371,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_photo_api_v1_reviews_photo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_photo_api_v1_reviews_photo_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoUploaded"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_receipt_route_api_v1_reviews_receipt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_receipt_route_api_v1_reviews_receipt_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptUploaded"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_receipt_api_v1_reviews__review_id__receipt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptAccess"];
                 };
             };
             /** @description Validation Error */
@@ -4087,6 +4460,37 @@ export interface operations {
             };
         };
     };
+    username_available_api_v1_users_username_available_get: {
+        parameters: {
+            query: {
+                username: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsernameAvailability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_me_api_v1_users_me_patch: {
         parameters: {
             query?: never;
@@ -4563,7 +4967,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["RequestStatus"] | null;
-                sort?: "newest" | "reward";
+                sort?: "newest" | "demand";
                 limit?: number;
             };
             header?: never;

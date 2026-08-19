@@ -185,8 +185,11 @@ def upload_receipt_route(file: UploadFile,
     """
     key = upload_receipt(user.id, file.file.read())
     ttl = settings.receipt_url_ttl_seconds
-    return ReceiptUploaded(key=key, preview_url=signed_receipt_url(key, ttl),
-                           expires_in=ttl)
+    preview = signed_receipt_url(key, ttl)
+    if preview is None:
+        raise NotFoundError("Upload succeeded but could not be previewed.",
+                            code="receipt_not_found")
+    return ReceiptUploaded(key=key, preview_url=preview, expires_in=ttl)
 
 
 @router.get("/{review_id}/receipt", response_model=ReceiptAccess,
@@ -208,8 +211,12 @@ def get_receipt(review_id: uuid.UUID, db: Session = Depends(get_db),
         raise NotFoundError("No proof of purchase on this review.",
                             code="receipt_not_found")
     ttl = settings.receipt_url_ttl_seconds
-    return ReceiptAccess(url=signed_receipt_url(review.receipt_key, ttl),
-                         expires_in=ttl)
+    url = signed_receipt_url(review.receipt_key, ttl)
+    if url is None:
+        # The row points at an object that is no longer in the bucket.
+        raise NotFoundError("No proof of purchase on this review.",
+                            code="receipt_not_found")
+    return ReceiptAccess(url=url, expires_in=ttl)
 
 
 @router.get("", response_model=list[ReviewOut],

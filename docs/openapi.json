@@ -468,6 +468,7 @@
           "products"
         ],
         "summary": "Create a product",
+        "description": "Submit a product.\n\nA reviewer submits a *marketplace link* and the row lands `pending`, which\nis what ProductStatus.pending has always documented itself as meaning\n(\"submitted via source_url, awaiting canonicalization\"). The route used to\nshortcut straight to `canonicalized` with whatever name the reviewer typed\n(BUG-020) \u2014 so \"Jisulife fan\", \"jisulife life9\" and \"JISULIFE Life 9\" became\nthree products, splitting the reviews that should consolidate under one.\n\nThe name a reviewer types is kept as a provisional label so the product is\nrecognisable in the meantime; a moderator replaces it via /canonicalize.\nModerators still create canonicalized rows directly \u2014 they are the ones\ndoing the naming, and they may be adding something with no listing at all.\n\n`source_url` is deliberately *not* enforced here even though the write-review\nform always sends one. Requiring it would be a breaking contract change for\nevery existing caller \u2014 seeds, scripts, and a dozen test fixtures create\nproducts by name alone \u2014 to re-state a rule the only human-facing path\nalready applies. The status is what protects the catalogue: an unnamed\nsubmission stays `pending` whether or not a link came with it.",
         "operationId": "create_product_api_v1_products_post",
         "security": [
           {
@@ -562,6 +563,65 @@
                     "$ref": "#/components/schemas/ProductOut"
                   },
                   "title": "Response List Products Api V1 Products Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}/canonicalize": {
+      "post": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Set a pending product's canonical name (moderator)",
+        "description": "Name a submission and admit it to the catalogue (BUG-020).",
+        "operationId": "canonicalize_product_api_v1_products__product_id__canonicalize_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCanonicalize"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductOut"
                 }
               }
             }
@@ -737,6 +797,149 @@
                     "$ref": "#/components/schemas/ReviewOut"
                   },
                   "title": "Response List Reviews Api V1 Reviews Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/photo": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Upload a PUBLIC review photo; returns its URL",
+        "description": "Store a PUBLIC review photo and hand back its URL for `photo_url`.\n\nSeparate from review creation because the photo is picked while the review\nis still being written \u2014 there is no review id to attach it to yet, and\nmaking the author upload only to have submission fail validation would lose\nthe file. Declared above `/{review_id}` so the literal path wins the match.\n\nProof of purchase does NOT come through here; see POST /reviews/receipt.\nThis endpoint writes to a public bucket, which is correct for an image\nthat appears on the published review and wrong for anything else.",
+        "operationId": "upload_photo_api_v1_reviews_photo_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_photo_api_v1_reviews_photo_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoUploaded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/reviews/receipt": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Upload proof of purchase to private storage",
+        "description": "Store proof of purchase and return its private key.\n\nSeparate from /reviews/photo because the two have different audiences, and\none endpoint returning \"a URL suitable for either\" is what let a receipt\nend up in a public bucket. The caller does not choose the destination: the\nendpoint it calls decides, server-side.",
+        "operationId": "upload_receipt_route_api_v1_reviews_receipt_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_receipt_route_api_v1_reviews_receipt_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptUploaded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/reviews/{review_id}/receipt": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Signed, short-lived access to a review's proof of purchase",
+        "description": "Author or moderator only. Authorization happens before signing.\n\n404 rather than 403 for everyone else, including when no receipt exists:\na distinct \"forbidden\" would confirm to an unrelated user that this review\nhas proof of purchase attached, which is itself something they should not\nlearn. The PRD scopes receipts to earn_eligible evaluation (FR-3, FR-9),\nso the moderator half of this is a requirement, not a convenience.",
+        "operationId": "get_receipt_api_v1_reviews__review_id__receipt_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptAccess"
                 }
               }
             }
@@ -2367,6 +2570,49 @@
         ]
       }
     },
+    "/api/v1/users/username-available": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Whether a username is free to claim",
+        "description": "Check a username *before* the signup wizard is finished (BUG-018).\n\nAvailability was only ever discovered on submit, so someone could pick a\nhandle, choose interests, read two more screens, and only then be told to\nstart over with a different name.\n\nNo enumeration concern: usernames are public handles, printed on every\nreview and profile. Rate-limited anyway, because a cheap endpoint that\nanswers questions about accounts should not be free to hammer.",
+        "operationId": "username_available_api_v1_users_username_available_get",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameAvailability"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users/me": {
       "patch": {
         "tags": [
@@ -3078,7 +3324,7 @@
         "tags": [
           "request board"
         ],
-        "summary": "Post a review request (AI-screened; bounty escrowed)",
+        "summary": "Post a review request (AI-screened; free to post)",
         "operationId": "create_request_api_v1_requests_post",
         "security": [
           {
@@ -3148,7 +3394,7 @@
             "schema": {
               "enum": [
                 "newest",
-                "reward"
+                "demand"
               ],
               "type": "string",
               "default": "newest",
@@ -3290,7 +3536,7 @@
         "tags": [
           "request board"
         ],
-        "summary": "Up-vote a request (raises the platform top-up)",
+        "summary": "Up-vote a request (says you want this reviewed too)",
         "operationId": "upvote_api_v1_requests__request_id__upvote_post",
         "security": [
           {
@@ -4636,6 +4882,34 @@
         ],
         "title": "Body_set_avatar_api_v1_users_me_avatar_post"
       },
+      "Body_upload_photo_api_v1_reviews_photo_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_photo_api_v1_reviews_photo_post"
+      },
+      "Body_upload_receipt_route_api_v1_reviews_receipt_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_receipt_route_api_v1_reviews_receipt_post"
+      },
       "BuyoutOffer": {
         "properties": {
           "amount": {
@@ -5123,6 +5397,12 @@
               }
             ],
             "title": "Trust Level Name"
+          },
+          "reputation_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reputation Score",
+            "default": "0"
           }
         },
         "type": "object",
@@ -5156,6 +5436,11 @@
                 "type": "null"
               }
             ]
+          },
+          "comment_count": {
+            "type": "integer",
+            "title": "Comment Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -5204,6 +5489,17 @@
             "type": "integer",
             "title": "Review Count",
             "default": 0
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
           }
         },
         "type": "object",
@@ -5636,6 +5932,19 @@
         "title": "PayoutStatus",
         "description": "Payout lifecycle (M3 slice 11). The wallet is debited at `scheduled` and\nrefunded on `failed`/`cancelled` \u2014 so scheduled/processing/paid are all\n'money has left the wallet' states."
       },
+      "PhotoUploaded": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "PhotoUploaded"
+      },
       "Platform": {
         "type": "string",
         "enum": [
@@ -5688,6 +5997,64 @@
         "title": "Problem",
         "description": "RFC 9457 problem document \u2014 the single error schema for the API."
       },
+      "ProductCanonicalize": {
+        "properties": {
+          "brand": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Brand"
+          },
+          "product_line": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Product Line"
+          },
+          "key_spec": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Spec"
+          },
+          "descriptor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descriptor"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "brand",
+          "product_line"
+        ],
+        "title": "ProductCanonicalize",
+        "description": "A moderator's canonical naming of a pending submission (BUG-020).\n\nThe four parts the naming convention asks for are separate fields rather\nthan one free-text box, because that is what keeps two people naming the\nsame product the same way \u2014 which is the entire point of consolidating\nreviews under one entry."
+      },
       "ProductCreate": {
         "properties": {
           "name": {
@@ -5721,7 +6088,8 @@
           "source_url": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2048
               },
               {
                 "type": "null"
@@ -5787,6 +6155,17 @@
           "review_count": {
             "type": "integer",
             "title": "Review Count"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
           },
           "trust_score": {
             "type": "string",
@@ -5916,6 +6295,12 @@
               }
             ],
             "title": "Trust Level Name"
+          },
+          "reputation_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reputation Score",
+            "default": "0"
           }
         },
         "type": "object",
@@ -6342,6 +6727,48 @@
           "reason"
         ],
         "title": "ReasonRequest"
+      },
+      "ReceiptAccess": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_in"
+        ],
+        "title": "ReceiptAccess"
+      },
+      "ReceiptUploaded": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "preview_url": {
+            "type": "string",
+            "title": "Preview Url"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "preview_url",
+          "expires_in"
+        ],
+        "title": "ReceiptUploaded",
+        "description": "The key is what gets submitted with the review; the URL is for preview.\n\nTwo different things on purpose. `key` is the durable, opaque locator the\nAPI stores. `preview_url` is a short-lived signed URL so the uploader can\nsee what they just attached - it is a bearer credential, expires quickly,\nand is never persisted anywhere."
       },
       "ReferralLinkOut": {
         "properties": {
@@ -6799,12 +7226,6 @@
             "minLength": 1,
             "title": "Details"
           },
-          "bounty": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Bounty",
-            "description": "Tokens escrowed from your balance."
-          },
           "product_id": {
             "anyOf": [
               {
@@ -6833,8 +7254,7 @@
         "type": "object",
         "required": [
           "title",
-          "details",
-          "bounty"
+          "details"
         ],
         "title": "RequestCreate"
       },
@@ -6892,10 +7312,6 @@
             ],
             "title": "Source Url"
           },
-          "bounty": {
-            "type": "integer",
-            "title": "Bounty"
-          },
           "status": {
             "$ref": "#/components/schemas/RequestStatus"
           },
@@ -6921,6 +7337,11 @@
             "title": "Upvote Count",
             "default": 0
           },
+          "my_upvote": {
+            "type": "boolean",
+            "title": "My Upvote",
+            "default": false
+          },
           "ai_validation": {
             "anyOf": [
               {
@@ -6932,11 +7353,6 @@
               }
             ],
             "title": "Ai Validation"
-          },
-          "effective_reward": {
-            "type": "integer",
-            "title": "Effective Reward",
-            "default": 0
           },
           "created_at": {
             "type": "string",
@@ -6950,7 +7366,6 @@
           "requester_id",
           "title",
           "details",
-          "bounty",
           "status",
           "expires_at",
           "created_at"
@@ -6984,6 +7399,7 @@
           },
           "discussion": {
             "type": "string",
+            "maxLength": 5000,
             "minLength": 1,
             "title": "Discussion"
           },
@@ -7056,7 +7472,7 @@
             ],
             "title": "Photo Url"
           },
-          "receipt_url": {
+          "receipt_key": {
             "anyOf": [
               {
                 "type": "string"
@@ -7065,7 +7481,7 @@
                 "type": "null"
               }
             ],
-            "title": "Receipt Url"
+            "title": "Receipt Key"
           },
           "price_paid": {
             "anyOf": [
@@ -7095,6 +7511,16 @@
       },
       "ReviewOut": {
         "properties": {
+          "my_vote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoteDirection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -7211,16 +7637,10 @@
             ],
             "title": "Photo Url"
           },
-          "receipt_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Receipt Url"
+          "has_receipt": {
+            "type": "boolean",
+            "title": "Has Receipt",
+            "default": false
           },
           "price_paid": {
             "anyOf": [
@@ -7461,7 +7881,7 @@
             ],
             "title": "Photo Url"
           },
-          "receipt_url": {
+          "receipt_key": {
             "anyOf": [
               {
                 "type": "string"
@@ -7470,7 +7890,7 @@
                 "type": "null"
               }
             ],
-            "title": "Receipt Url"
+            "title": "Receipt Key"
           },
           "price_paid": {
             "anyOf": [
@@ -8020,6 +8440,35 @@
         ],
         "title": "UserTrustOut",
         "description": "Public trust profile (M2 slice 3). Stages move only via recompute."
+      },
+      "UsernameAvailability": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "available"
+        ],
+        "title": "UsernameAvailability"
       },
       "ValidationError": {
         "properties": {
