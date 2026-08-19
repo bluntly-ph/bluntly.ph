@@ -166,22 +166,6 @@ def list_products(db: Session = Depends(get_db), limit: int = 50,
     return [_product_out(p) for p in rows]
 
 
-@router.get("/{product_id}", response_model=ProductOut,
-            summary="Get a product (always retrievable; low_trust computed)")
-def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> ProductOut:
-    product = db.get(Product, product_id)
-    if product is None:
-        raise NotFoundError("Product not found.", code="product_not_found")
-    return _product_out(product)
-
-
-# --------------------------------------------------------------------------
-# FR-2: community price observations, the price panel, and comparison.
-#
-# `/compare` is declared before `/{product_id}` so the literal path wins the
-# match; otherwise "compare" is parsed as a product UUID and 422s.
-# --------------------------------------------------------------------------
-
 @router.get("/compare", response_model=ComparisonOut,
             summary="Side-by-side comparison of 2-4 products (FR-2)")
 def compare_products(ids: str, db: Session = Depends(get_db)) -> ComparisonOut:
@@ -236,6 +220,22 @@ def compare_products(ids: str, db: Session = Depends(get_db)) -> ComparisonOut:
         ))
     return ComparisonOut(entries=entries, not_found=missing)
 
+
+@router.get("/{product_id}", response_model=ProductOut,
+            summary="Get a product (always retrievable; low_trust computed)")
+def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> ProductOut:
+    product = db.get(Product, product_id)
+    if product is None:
+        raise NotFoundError("Product not found.", code="product_not_found")
+    return _product_out(product)
+
+
+# --------------------------------------------------------------------------
+# FR-2: community price observations, the price panel, and comparison.
+#
+# `/compare` is declared before `/{product_id}` so the literal path wins the
+# match; otherwise "compare" is parsed as a product UUID and 422s.
+# --------------------------------------------------------------------------
 
 @router.get("/{product_id}/prices", response_model=PricePanelOut,
             summary="Community price panel for a product (FR-2)")

@@ -248,3 +248,23 @@ def test_comparison_never_claims_a_seller_rating(client):
     blob = str(body).lower()
     assert "seller_rating" not in blob
     assert "seller_trust" not in blob
+
+
+def test_compare_route_is_matched_before_the_product_id_route(client):
+    """Route ORDER regression - no database needed.
+
+    `/compare` and `/{product_id}` both match the path "compare", and FastAPI
+    resolves in declaration order. When /compare was appended to the end of the
+    module the id route won, tried to parse "compare" as a UUID, and every
+    comparison 422'd in production while passing every DB-backed test that
+    built its URL from real ids.
+
+    Two unknown UUIDs must therefore yield 200 with both listed in `not_found`,
+    not a validation error.
+    """
+    a, b = uuid.uuid4(), uuid.uuid4()
+    resp = client.get(f"/api/v1/products/compare?ids={a},{b}")
+    assert resp.status_code == 200, (
+        f"/compare resolved to the wrong route: HTTP {resp.status_code}")
+    assert sorted(resp.json()["not_found"]) == sorted([str(a), str(b)])
+    assert resp.json()["entries"] == []
