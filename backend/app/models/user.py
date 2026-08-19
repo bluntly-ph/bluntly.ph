@@ -116,10 +116,16 @@ class User(Base, Timestamps):
     strikes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_on_probation: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
-    # Seller-dimension aggregates (JSONB) when this user is a seller.
-    seller_aggregates: Mapped[dict | None] = mapped_column(JSONB)
-    # Time-decayed Wilson trust over seller_reviews.would_recommend (M2 slice 4).
-    seller_trust_score: Mapped[Decimal | None] = mapped_column(Numeric(6, 5))
+    # seller_aggregates and seller_trust_score were the denormalized mirrors of
+    # seller_reviews (M2 slice 4). Seller trust ratings were withdrawn from
+    # contract on 2026-07-28 and the table is dropped by migration 0024; with
+    # their source gone these could only ever hold stale numbers, and a stale
+    # trust score is worse than none.
+    #
+    # Removed from the model BEFORE the migration drops the columns. Doing it
+    # the other way round is what took the API down on 2026-08-19: SQLAlchemy
+    # emits every mapped column in its SELECT, so a column the model still
+    # declares but the database no longer has fails every read of this table.
 
     # Earnings.
     wallet_balance: Mapped[Decimal] = mapped_column(
