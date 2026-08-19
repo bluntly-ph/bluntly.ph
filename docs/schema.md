@@ -129,18 +129,66 @@ Supabase Storage `avatars` bucket.
 Buckets are created in the Supabase dashboard, not by a migration, so a new one
 is a deploy step rather than something `alembic upgrade` picks up.
 
-| Bucket | Public | Max object | Written by |
-|---|---|---|---|
-| `avatars` | yes | 5 MB | `POST /users/me/avatar` |
-| `product-images` | yes | 5 MB | `scripts/seed_product_images.py`, admin upload |
-| `review-photos` | yes | 8 MB | `POST /reviews/photo` (BUG-023) |
+Buckets are classified by **audience**, not by what uploaded them. The
+distinction below is load-bearing and must not be collapsed: it is what
+BUG-029 was.
 
-All three buckets now exist. `product-images` and `review-photos` were created
-2026-08-19; until then both upload paths failed at the storage layer, which is
-why review photo upload (BUG-023) never worked and why every product card fell
-through to a placeholder no matter what the database held. Each is public read
-with the size ceiling above and `image/png,image/jpeg,image/webp` enforced by
-the bucket as well as by `sniff_image_type`.
+| Bucket | Public | Max object | Holds | Written by |
+|---|---|---|---|---|
+| `avatars` | yes | 5 MB (app) | Profile pictures | `POST /users/me/avatar` |
+| `product-images` | yes | 5 MB | Product listing imagery | `scripts/seed_product_images.py`, admin upload |
+| `review-photos` | yes | 8 MB | The product photograph shown **on** a published review (FR-3) | `POST /reviews/photo` |
+| **`review-receipts`** | **no** | 8 MB | **Proof of purchase — evidence for `earn_eligible` evaluation (FR-3, FR-9)** | `POST /reviews/receipt` |
+
+### Public review media vs. private proof of purchase
+
+A **review photo** is review content: the reviewer's own picture of the thing,
+drawn on the published page, and the first layer of the fraud framework
+(FR-8.1). Public is correct for it.
+
+A **receipt** is not review content. It routinely carries the buyer's name,
+delivery address, order number and prices. Readers never see it; its audience
+is the author and the moderators evaluating the `earn_eligible` gate.
+
+**Access rules**
+
+| Caller | Public review photo | Receipt |
+|---|---|---|
+| Anonymous | may read | no locator in any response; no storage access; 401 from the receipt endpoint |
+| Authenticated, unrelated | may read | 404 — deliberately not 403, which would confirm a receipt exists |
+| Review author | may read | `GET /reviews/{id}/receipt` → short-lived signed URL |
+| Moderator | may read | same endpoint; this is how the queue's "proof of purchase" control works |
+
+**How access is granted.** `reviews.receipt_key` holds an opaque object key,
+never a URL. No response model carries it — `ReviewOut` exposes `has_receipt`,
+the fact without the location. `GET /reviews/{id}/receipt` authorizes *first*,
+then mints a signed URL with `settings.receipt_url_ttl_seconds` (300 s). That
+URL is a bearer credential for its lifetime: it is never stored, never logged,
+never written into the DOM, and never persisted to a draft in localStorage.
+
+**Why a public URL was wrong**, recorded so it is not reintroduced: it moved
+the authorization decision out of the application and into a string. The API's
+role checks and RLS govern the *row*; they govern the *object* not at all. An
+unguessable UUID is secrecy, not authorization — it cannot be revoked, never
+expires, and leaks through browser history, `Referer` headers, proxy logs,
+screenshots and shared links. Unlike a password it cannot be rotated without
+breaking the record that points at it.
+
+**Retention.** A receipt outlives the review edit that attached it, because
+moderation may revisit an earn_eligible decision. `review_versions.snapshot`
+records only `receipt_present` (a boolean) — the locator was stripped from all
+675 historical snapshots by migration `0023`, since both version endpoints
+serve anonymous callers for any published review.
+
+`product-images` and `review-photos` were created 2026-08-19; until then both
+upload paths failed at the storage layer, which is why review photo upload
+(BUG-023) never worked and why every product card fell through to a placeholder
+no matter what the database held. `review-receipts` followed the same day, when
+BUG-029 established that receipts had been sharing the public photo bucket.
+Each carries the size ceiling above plus `image/png,image/jpeg,image/webp`
+enforced by the bucket as well as by `sniff_image_type` — except `avatars`,
+which predates that practice and has no bucket-level ceiling (the 5 MB limit is
+enforced in `validate_avatar` only).
 
 Review photos are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
 because a receipt photographed on a phone routinely clears 5 MB, and rejecting a

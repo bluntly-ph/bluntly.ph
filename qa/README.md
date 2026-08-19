@@ -54,6 +54,47 @@ gets lost in a spreadsheet:
   status code — that is how a wrong-generation MacBook image got caught before
   it shipped. Uniqlo serves a bot challenge and keeps the placeholder.
 
+## BUG-029 — receipts were in a public bucket (P0, 2026-08-19)
+
+Filed as a new ID rather than folded into BUG-023, because it is a different
+defect: BUG-023 was "upload does not work", this is "upload worked and put a
+customer's receipt somewhere anyone could read it". The full row is in
+`bug-log-new-rows.tsv`; paste it below BUG-028.
+
+The short version: `POST /reviews/photo` was documented as returning "a URL
+suitable for `photo_url` / `receipt_url`", so one function served two
+audiences and the caller's convention — not the server — decided whether an
+object was public. A receipt therefore landed in the public `review-photos`
+bucket behind a permanent URL, and `receipt_url` rode on `ReviewOut`, which
+anonymous callers receive for any published review.
+
+Two things make it worth reading rather than just retesting:
+
+- **Tracing found a second, independent leak.** `review_versions.snapshot`
+  embedded `receipt_url` in all 675 rows, and both version endpoints serve
+  anonymous callers. Fixing only the field on `ReviewOut` would have left it.
+- **An unguessable UUID is not authorization.** It cannot be revoked, never
+  expires, and leaks through history, `Referer` headers, proxy logs and
+  screenshots — and the API itself was about to hand it out on publish.
+
+**How to retest** (no production receipt needed):
+
+1. Sign in, start a review, attach a proof of purchase. The response must
+   contain a `key`, not a public URL, and the preview must not survive a page
+   reload — a signed preview URL is deliberately never persisted.
+2. Publish that review as a moderator. `GET /api/v1/reviews/{id}` and
+   `GET /api/v1/reviews/{id}/versions` with no credentials must contain no
+   `receipt_url`, no `receipt_key`, and no `review-receipts` string.
+   `has_receipt: true` is expected and is fine.
+3. `GET /api/v1/reviews/{id}/receipt` — anonymous 401, unrelated user 404,
+   author and moderator 200 with a signed URL that expires in 300 s.
+4. Strip the `?token=` from that signed URL and request it: must be refused.
+5. Confirm public review photos still render on the published review.
+
+Automated as `backend/tests/test_receipt_privacy.py` (13 tests), including a
+structural guard that fails if any locator field is ever added back to a shared
+review schema.
+
 ## BUG-025 was resolved by removing the feature
 
 Tokens were retired in favour of the PHP revenue share, and the request board
