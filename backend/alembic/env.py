@@ -7,8 +7,38 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import pool
 
-from app.core.config import settings
-from app.db.base import Base
+# Resolve the target BEFORE importing settings: pydantic-settings reads its
+# env_file at import time, so a later os.environ change would not be seen.
+#
+# This guard exists because of a near-miss. `alembic upgrade head` reads the
+# repo-root .env, which is production - so an operator intending to migrate the
+# test database silently migrated production instead. pytest and the scripts
+# were already guarded; alembic was the remaining door, and it is the one that
+# applies schema changes.
+#
+# Choose the target explicitly:
+#   alembic -x test=1 upgrade head              -> the test project
+#   alembic -x allow_production=1 upgrade head  -> production, deliberately
+from app.core.env_guard import (  # noqa: E402
+    ProductionTargetError,
+    describe_target,
+    load_test_env,
+    require_non_production,
+)
+
+_x = context.get_x_argument(as_dictionary=True)
+if _x.get("test"):
+    load_test_env()
+
+_allow_production = bool(_x.get("allow_production"))
+print(f"[alembic] target -> {describe_target()}")
+try:
+    require_non_production("alembic", allow_production=_allow_production)
+except ProductionTargetError as _exc:
+    raise SystemExit(str(_exc)) from None
+
+from app.core.config import settings  # noqa: E402
+from app.db.base import Base  # noqa: E402
 
 # Import the models package so every table registers on Base.metadata.
 import app.models  # noqa: F401,E402

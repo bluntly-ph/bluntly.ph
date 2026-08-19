@@ -60,11 +60,19 @@ _KEYS = (
 # Relative to backend/app/core/ -> backend/ -> repo root.
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _REPO_ROOT = os.path.dirname(_BACKEND_DIR)
+# Exactly the files `Settings` reads, and no others.
+#
+# `.env.test` is deliberately NOT here. Including it made the guard lie: merely
+# having the file on disk made it report "test" while pydantic-settings - which
+# does not read it - still resolved production from the root .env. The guard has
+# to describe the connection the app will actually open, so the test values are
+# only visible here once `load_test_env()` has put them in os.environ, which is
+# also the moment they start affecting Settings.
 _ENV_FILES = (
     os.path.join(_REPO_ROOT, ".env"),
     os.path.join(_BACKEND_DIR, ".env"),
-    os.path.join(_BACKEND_DIR, ".env.test"),
 )
+_TEST_ENV_FILE = os.path.join(_BACKEND_DIR, ".env.test")
 
 
 def _read_env_file(path: str) -> dict[str, str]:
@@ -106,6 +114,22 @@ def _values() -> dict[str, str]:
     return {k: (merged.get(k) or "").lower() for k in _KEYS}
 
 
+def load_test_env() -> bool:
+    """Load backend/.env.test into the process environment. True if it existed.
+
+    Real environment variables win (`setdefault`), so CI can override any line.
+    This has to happen before `app.core.config` is imported: pydantic-settings
+    reads its `env_file` at import, and `app.db.session` opens an engine from
+    whatever it resolved.
+    """
+    path = _TEST_ENV_FILE
+    if not os.path.isfile(path):
+        return False
+    for key, value in _read_env_file(path).items():
+        os.environ.setdefault(key, value)
+    return True
+
+
 def production_signals(extra: dict[str, str] | None = None) -> list[str]:
     """Every reason to believe the current target is production.
 
@@ -141,12 +165,9 @@ def is_test_target() -> bool:
     checks the connection. A stale marker left in a shell must not be able to
     unlock production.
     """
-    if os.getenv(TEST_ENV_MARKER):
-        return True
-    for path in _ENV_FILES:
-        if _read_env_file(path).get(TEST_ENV_MARKER):
-            return True
-    return False
+    # os.environ only: the marker counts once it has actually been loaded, not
+    # because a file mentioning it exists somewhere on disk.
+    return bool(os.getenv(TEST_ENV_MARKER))
 
 
 def describe_target() -> str:

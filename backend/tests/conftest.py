@@ -17,19 +17,16 @@ import sys
 # pydantic-settings gives actual environment variables precedence over its
 # `env_file`, so this is what redirects the suite away from the repo-root .env
 # (which is production). Set before any app import.
-_ENV_TEST = pathlib.Path(__file__).resolve().parent.parent / ".env.test"
-if _ENV_TEST.is_file():
-    for _line in _ENV_TEST.read_text(encoding="utf-8").splitlines():
-        _line = _line.strip()
-        if not _line or _line.startswith("#") or "=" not in _line:
-            continue
-        _key, _value = _line.split("=", 1)
-        # An explicitly exported variable still wins, so CI can override.
-        os.environ.setdefault(_key.strip(), _value.strip())
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from app.core.env_guard import (  # noqa: E402
+    ProductionTargetError,
+    load_test_env,
+    require_non_production,
+)
+
+load_test_env()
 
 # --- 2. Refuse to continue if this is production -----------------------------
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from app.core.env_guard import ProductionTargetError, require_non_production  # noqa: E402
 
 try:
     require_non_production("pytest")
