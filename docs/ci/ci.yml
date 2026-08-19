@@ -1,0 +1,168 @@
+name: CI
+
+# Added 2026-08-19. Not a contractual deliverable — justified by the production
+# safety incident: the full test suite was run against the live database and
+# created hundreds of fixture reviews. The most important job here is not the
+# tests, it is `guard`: it proves on every push that automated commands still
+# refuse a production target.
+#
+# Everything below runs WITHOUT secrets. DB-backed tests are the one exception
+# and are opt-in via repository secrets (see `backend-db-tests`). There is no
+# path in this file that can reach production: the guard fails the job closed
+# if a production target is ever configured.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  guard:
+    name: Production guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install backend deps
+        working-directory: backend
+        run: pip install -e ".[dev]" || pip install -r requirements.txt
+
+      # The guard's own tests: production is detected, an undeclared target
+      # fails closed, and a test marker alone cannot unlock production.
+      - name: Guard unit tests
+        working-directory: backend
+        env:
+          BLUNTLY_TEST_ENV: "1"
+          APP_ENV: test
+          DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+        run: python -m pytest tests/test_env_guard.py -q
+
+      # Belt and braces: assert that a *simulated* production configuration is
+      # actually refused, rather than trusting the unit tests alone.
+      - name: Refuses a production target
+        working-directory: backend
+        env:
+          SUPABASE_URL: https://byobedbhodhvocgrkrse.supabase.co
+        run: |
+          if python -m pytest tests/test_health.py -q; then
+            echo "::error::pytest did NOT refuse a production target"
+            exit 1
+          fi
+          echo "pytest correctly refused a production target"
+
+  backend:
+    name: Backend (no database)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install backend deps
+        working-directory: backend
+        run: pip install -e ".[dev]" || pip install -r requirements.txt
+
+      # DB-backed tests skip themselves via `requires_db` when no Postgres is
+      # reachable, so this runs the unit half of the suite.
+      - name: pytest
+        working-directory: backend
+        env:
+          BLUNTLY_TEST_ENV: "1"
+          APP_ENV: test
+          DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+          EMAIL_PROVIDER: console
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789ab
+        run: python -m pytest -q
+
+      - name: Migration safety report
+        working-directory: backend
+        env:
+          BLUNTLY_TEST_ENV: "1"
+          DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+        # Advisory: prints which migrations need a deliberate rollout order.
+        run: python -m scripts.check_migration_safety --all
+
+  backend-db-tests:
+    name: Backend (isolated database)
+    runs-on: ubuntu-latest
+    # Opt-in. Runs only once the test project's credential is in repository
+    # secrets. It can never fall back to production: the connection string is
+    # required, and the guard refuses a production target regardless.
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip when the test database is not configured
+        id: gate
+        env:
+          TEST_DSN: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
+        run: |
+          if [ -z "$TEST_DSN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::TEST_SUPABASE_SESSION_POOLER not set - DB-backed tests skipped."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.configured == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install backend deps
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: backend
+        run: pip install -e ".[dev]" || pip install -r requirements.txt
+      - name: Migrate the test database
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: backend
+        env:
+          BLUNTLY_TEST_ENV: "1"
+          APP_ENV: test
+          USE_SUPABASE: "true"
+          SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.TEST_SUPABASE_SECRET_KEY }}
+          SUPABASE_CONNECTION_STRING_SESSION_POOLER: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
+        run: python -m alembic -x test=1 upgrade head
+      - name: pytest (full)
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: backend
+        env:
+          BLUNTLY_TEST_ENV: "1"
+          APP_ENV: test
+          USE_SUPABASE: "true"
+          SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.TEST_SUPABASE_SECRET_KEY }}
+          SUPABASE_CONNECTION_STRING_SESSION_POOLER: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
+          EMAIL_PROVIDER: console
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789ab
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        # The build must not need runtime secrets; pages fetch at request time.
+        run: npm run build

@@ -62,7 +62,9 @@ attribution for Shopee/Lazada/Amazon**, **tier-based revenue split calculation**
 > **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
 > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
 > seller directory. The frontend, API, model and table were removed;
-> `0021_drop_seller_reviews` drops the data (written, not yet applied). Product
+> `0024_drop_seller_reviews` drops the data (2026-08-19; the `0021` cited
+> here before was never written - `0021` is `review_comments`, and the table
+> stayed in production carrying 10 fixture rows until it was found). Product
 > trust ratings are unaffected. Frontend removal: `cf7afbc`; backend removal:
 > `8936dda`; types/remnants sweep: `9366a5b`; verification-script update:
 > `b0f8ba0`.

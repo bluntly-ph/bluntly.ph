@@ -129,7 +129,8 @@ First run on a new machine needs `npx playwright install firefox webkit`.
   withdrawn by owner decision: bluntly.ph is an affiliate-review platform, not a
   seller directory. The route, its form component, and the backend surface behind it
   are deleted (`cf7afbc`, `8936dda`, `9366a5b`); the `seller_reviews` table drop is
-  migration `0021_drop_seller_reviews` (written, not yet applied). See
+  migration `0024_drop_seller_reviews` (applied 2026-08-19; the `0021`
+  cited here before was never written). See
   `docs/MILESTONES.md` for the full withdrawal note.
 - **Recent Reads / Bookmarks** — reader conveniences, not yet built (bookmarks need a
   backend surface).

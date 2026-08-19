@@ -101,7 +101,7 @@ see §8b note**), `badges`, `user_badges`, `products`
 (+ `trust_score`), `product_platforms` (`is_monetizable`), `price_history`,
 `reviews`, `review_versions`, **`referral_links`**, **`review_votes`** (equal-weight
 community votes, M2 s2), `questions`, `answers`, `seller_reviews`
-(one per seller+reviewer — **withdrawn 2026-07-28**, `0021_drop_seller_reviews`
+(one per seller+reviewer — **withdrawn 2026-07-28**, `0024_drop_seller_reviews`
 written not yet applied), `sessions` (affiliate clicks + PII lifecycle),
 `commissions` (+ tier snapshot columns), `honesty_fund_distributions`,
 `moderation_logs` (also the audit log), `earn_eligible_votes`,
@@ -188,7 +188,7 @@ outbound click is attributed.
   > **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
   > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
   > seller directory. The frontend, API, model and table were removed;
-  > `0021_drop_seller_reviews` drops the data (written, not yet applied). Product
+  > `0024_drop_seller_reviews` (applied 2026-08-19) drops the data. Product
   > trust ratings (`products.trust_score`, above) are unaffected. Frontend removal:
   > `cf7afbc`; backend removal: `8936dda`; types/remnants sweep: `9366a5b`;
   > verification-script update: `b0f8ba0`.

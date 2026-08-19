@@ -184,7 +184,7 @@ testability choice, DEVIATIONS §6).
 | **Catalogue** | `products`, `product_platforms`, `price_history` |
 | **Reviews** | `reviews`, `review_versions`, `review_votes`, `referral_links` |
 | **Q&A** | `questions`, `answers` |
-| **Seller** | `seller_reviews` — **withdrawn 2026-07-28**, see §6.7 (table drop `0021_drop_seller_reviews`, written, not yet applied) |
+| **Seller** | `seller_reviews` — **withdrawn 2026-07-28**, see §6.7 (table drop `0024_drop_seller_reviews` (applied 2026-08-19)) |
 | **Attribution & money** | `sessions`, `commissions`, `honesty_fund_distributions`, `token_transactions`, `payouts` |
 | **Gate & moderation** | `earn_eligible_votes`, `moderation_logs` |
 | **M3 request/contract** | `review_requests`, `request_upvotes`, `review_contracts` |
@@ -280,7 +280,7 @@ listings while keeping them fetchable by id with `low_trust: true`.
 > **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
 > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
 > seller directory. The frontend, API, model and table were removed;
-> `0021_drop_seller_reviews` drops the data (written, not yet applied). **Product**
+> `0024_drop_seller_reviews` (applied 2026-08-19) drops the data. **Product**
 > trust ratings (`products.trust_score`, first paragraph above) are unaffected and
 > remain live. Frontend removal: `cf7afbc`; backend removal: `8936dda`;
 > types/remnants sweep: `9366a5b`; verification-script update: `b0f8ba0`.
@@ -561,7 +561,7 @@ Every divergence is catalogued in `docs/DEVIATIONS.md`; the principal ones:
 | Marketplace data | "Scrapy + proxy rotation" (M3 milestone text) | **no scraping, ever** — manual CSV of first-party reports | MILESTONES §resolution |
 | `commissions.review_id` | polymorphic TEXT | typed enum + real FKs with CHECK | DEVIATIONS §3 |
 | `reputation_score`, Wilson/decay params | undefined | defined, pinned, unit-tested | ADR-003/004 |
-| Seller trust ratings | delivered and verified in M2 (`seller_reviews`, `users.seller_trust_score`) | **withdrawn 2026-07-28** (owner decision): bluntly.ph is an affiliate-review platform, not a seller directory; frontend/API/model removed, table drop `0021_drop_seller_reviews` written but not yet applied | §6.7; `MILESTONES.md` |
+| Seller trust ratings | delivered and verified in M2 (`seller_reviews`, `users.seller_trust_score`) | **withdrawn 2026-07-28** (owner decision): bluntly.ph is an affiliate-review platform, not a seller directory; frontend/API/model removed, table drop `0024_drop_seller_reviews` (applied 2026-08-19) | §6.7; `MILESTONES.md` |
 
 The single most consequential deviation is the **permanent rejection of the
 milestone's scraping pipeline**: it directly contradicts the anti-scraping mandate on

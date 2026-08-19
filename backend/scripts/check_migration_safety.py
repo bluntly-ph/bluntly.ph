@@ -24,6 +24,19 @@ VERSIONS = pathlib.Path(__file__).resolve().parent.parent / "alembic" / "version
 
 # (regex, label, why the rollout order matters)
 PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    # Raw SQL first. A destructive migration is at least as likely to be
+    # written as op.execute("DROP ...") as with the Alembic helper, and an
+    # earlier version of this checker matched only the helpers — so the very
+    # migration that dropped seller_reviews sailed through it unflagged.
+    (re.compile(r"DROP\s+TABLE", re.I), "DROP TABLE (raw SQL)",
+     "Deployed code selecting from this table will 500. Confirm nothing "
+     "references it, and deploy that removal before applying."),
+    (re.compile(r"DROP\s+COLUMN", re.I), "DROP COLUMN (raw SQL)",
+     "Same as the Alembic helper: deploy code that no longer references the "
+     "column first, then drop it in a later migration."),
+    (re.compile(r"ALTER\s+TYPE\s+\S+\s+ADD\s+VALUE", re.I), "ENUM ADD VALUE",
+     "Additive and safe, but on PostgreSQL it cannot run inside a transaction "
+     "alongside other DDL — keep it in its own migration."),
     (re.compile(r"\bop\.drop_column\b"), "DROP COLUMN",
      "Deployed code that still SELECTs this column will 500. Deploy code that "
      "no longer references it first, then drop in a later migration."),

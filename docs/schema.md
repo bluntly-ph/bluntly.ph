@@ -83,7 +83,7 @@ slice 5).
 > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
 > seller directory. `seller_reviews`, `users.seller_trust_score`, and
 > `users.seller_aggregates` are removed from the frontend, API, and model;
-> `0021_drop_seller_reviews` drops the table (written, not yet applied). The
+> `0024_drop_seller_reviews` drops the table (2026-08-19). The `0021` cited here before was never written. The
 > `uq_seller_review_once` constraint above went with the table. `products.trust_score`
 > (M2 slices 2–8 additions above) is unaffected. Frontend removal: `cf7afbc`;
 > backend removal: `8936dda`; types/remnants sweep: `9366a5b`; verification-script

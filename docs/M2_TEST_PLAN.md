@@ -84,7 +84,7 @@ curl -s -X POST $BASE/api/v1/admin/reviews/$RID/publish -H "$MODAUTH"
 > seller trust ratings (`POST/GET /api/v1/sellers/...`), which were built and
 > verified in M2, then removed: bluntly.ph is an affiliate-review platform, not a
 > seller directory. The frontend, API, model and table were removed;
-> `0021_drop_seller_reviews` drops the data (written, not yet applied). These rows
+> `0024_drop_seller_reviews` (applied 2026-08-19) drops the data. These rows
 > passed when originally run and are kept here as capstone evidence, not deleted.
 > Rows C1–C3 (role promotion) and C9–C11 (product trust ratings + visibility
 > thresholds) are unaffected and remain executable — product trust survives, only
