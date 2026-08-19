@@ -682,6 +682,150 @@
         }
       }
     },
+    "/api/v1/products/compare": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Side-by-side comparison of 2-4 products (FR-2)",
+        "description": "Compare products on verified review signal and community price data.\n\nPublic: FR-2 says browsing does not require an account, and comparison is a\nbrowsing activity.\n\nUnknown ids are returned in `not_found` rather than 404ing the whole\nrequest. A shared comparison link outliving one of its products is normal,\nand losing the other three columns to it would be the wrong trade.\n\nSeller ratings are deliberately absent even though FR-2 lists them: seller\nreviews were withdrawn from contract on 2026-07-28 (MILESTONES.md). There\nis no truthful value to put in that column, and inventing one on a platform\nabout honest reviews is not a defensible shortcut.",
+        "operationId": "compare_products_api_v1_products_compare_get",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}/prices": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Community price panel for a product (FR-2)",
+        "description": "Public. Returns an insufficient-data panel rather than 404 when sparse.",
+        "operationId": "get_price_panel_api_v1_products__product_id__prices_get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricePanelOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Submit a community price observation (FR-2)",
+        "description": "Authenticated: an observation is attributable or it is not independent.\n\nThe threshold counts distinct submitters, so an anonymous observation could\nnever be counted anyway - and an unattributable price on a platform built\naround accountable contributions is worse than no price.",
+        "operationId": "submit_price_api_v1_products__product_id__prices_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceObservationIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceObservationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reviews": {
       "post": {
         "tags": [
@@ -5126,6 +5270,81 @@
         ],
         "title": "CommentVoteIn"
       },
+      "ComparisonEntry": {
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/ProductOut"
+          },
+          "price": {
+            "$ref": "#/components/schemas/PricePanelOut"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "avg_rating": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Rating"
+          },
+          "trust_score": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trust Score"
+          },
+          "verified_review_count": {
+            "type": "integer",
+            "title": "Verified Review Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "product",
+          "price",
+          "review_count"
+        ],
+        "title": "ComparisonEntry",
+        "description": "One column of the side-by-side comparison (FR-2)."
+      },
+      "ComparisonOut": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "not_found": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Not Found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "ComparisonOut"
+      },
       "ContractOut": {
         "properties": {
           "id": {
@@ -5954,6 +6173,202 @@
           "other"
         ],
         "title": "Platform"
+      },
+      "PriceObservationIn": {
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Price",
+            "description": "Price actually paid, in PHP."
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Observed At",
+            "description": "The date this price was seen or paid."
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "price",
+          "observed_at"
+        ],
+        "title": "PriceObservationIn",
+        "description": "One community-submitted purchase price (FR-2)."
+      },
+      "PriceObservationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Observed At"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "platform",
+          "price",
+          "observed_at",
+          "created_at"
+        ],
+        "title": "PriceObservationOut"
+      },
+      "PricePanelOut": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "sufficient": {
+            "type": "boolean",
+            "title": "Sufficient"
+          },
+          "observation_count": {
+            "type": "integer",
+            "title": "Observation Count"
+          },
+          "independent_count": {
+            "type": "integer",
+            "title": "Independent Count"
+          },
+          "required_independent": {
+            "type": "integer",
+            "title": "Required Independent"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "PHP"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "latest_observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Observed At"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "sufficient",
+          "observation_count",
+          "independent_count",
+          "required_independent"
+        ],
+        "title": "PricePanelOut",
+        "description": "The panel, or the reason it is not shown yet.\n\n`sufficient` is false until at least 3 INDEPENDENT observations exist\n(FR-2), and the price fields are null in that state - the UI is given the\ncounts so it can say how many more are needed, not prices to hide."
       },
       "Problem": {
         "properties": {

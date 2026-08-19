@@ -200,6 +200,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Side-by-side comparison of 2-4 products (FR-2)
+         * @description Compare products on verified review signal and community price data.
+         *
+         *     Public: FR-2 says browsing does not require an account, and comparison is a
+         *     browsing activity.
+         *
+         *     Unknown ids are returned in `not_found` rather than 404ing the whole
+         *     request. A shared comparison link outliving one of its products is normal,
+         *     and losing the other three columns to it would be the wrong trade.
+         *
+         *     Seller ratings are deliberately absent even though FR-2 lists them: seller
+         *     reviews were withdrawn from contract on 2026-07-28 (MILESTONES.md). There
+         *     is no truthful value to put in that column, and inventing one on a platform
+         *     about honest reviews is not a defensible shortcut.
+         */
+        get: operations["compare_products_api_v1_products_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{product_id}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Community price panel for a product (FR-2)
+         * @description Public. Returns an insufficient-data panel rather than 404 when sparse.
+         */
+        get: operations["get_price_panel_api_v1_products__product_id__prices_get"];
+        put?: never;
+        /**
+         * Submit a community price observation (FR-2)
+         * @description Authenticated: an observation is attributable or it is not independent.
+         *
+         *     The threshold counts distinct submitters, so an anonymous observation could
+         *     never be counted anyway - and an unattributable price on a platform built
+         *     around accountable contributions is worse than no price.
+         */
+        post: operations["submit_price_api_v1_products__product_id__prices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews": {
         parameters: {
             query?: never;
@@ -1495,6 +1555,32 @@ export interface components {
         CommentVoteIn: {
             vote: components["schemas"]["VoteDirection"];
         };
+        /**
+         * ComparisonEntry
+         * @description One column of the side-by-side comparison (FR-2).
+         */
+        ComparisonEntry: {
+            product: components["schemas"]["ProductOut"];
+            price: components["schemas"]["PricePanelOut"];
+            /** Review Count */
+            review_count: number;
+            /** Avg Rating */
+            avg_rating?: string | null;
+            /** Trust Score */
+            trust_score?: string | null;
+            /**
+             * Verified Review Count
+             * @default 0
+             */
+            verified_review_count: number;
+        };
+        /** ComparisonOut */
+        ComparisonOut: {
+            /** Entries */
+            entries: components["schemas"]["ComparisonEntry"][];
+            /** Not Found */
+            not_found?: string[];
+        };
         /** ContractOut */
         ContractOut: {
             /**
@@ -1853,6 +1939,92 @@ export interface components {
          * @enum {string}
          */
         Platform: "shopee" | "lazada" | "amazon" | "other";
+        /**
+         * PriceObservationIn
+         * @description One community-submitted purchase price (FR-2).
+         */
+        PriceObservationIn: {
+            platform: components["schemas"]["Platform"];
+            /**
+             * Price
+             * @description Price actually paid, in PHP.
+             */
+            price: number | string;
+            /**
+             * Observed At
+             * Format: date
+             * @description The date this price was seen or paid.
+             */
+            observed_at: string;
+            /** Variant */
+            variant?: string | null;
+        };
+        /** PriceObservationOut */
+        PriceObservationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            platform: components["schemas"]["Platform"];
+            /** Price */
+            price: string;
+            /**
+             * Observed At
+             * Format: date
+             */
+            observed_at: string;
+            /** Variant */
+            variant?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * PricePanelOut
+         * @description The panel, or the reason it is not shown yet.
+         *
+         *     `sufficient` is false until at least 3 INDEPENDENT observations exist
+         *     (FR-2), and the price fields are null in that state - the UI is given the
+         *     counts so it can say how many more are needed, not prices to hide.
+         */
+        PricePanelOut: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Sufficient */
+            sufficient: boolean;
+            /** Observation Count */
+            observation_count: number;
+            /** Independent Count */
+            independent_count: number;
+            /** Required Independent */
+            required_independent: number;
+            /**
+             * Currency
+             * @default PHP
+             */
+            currency: string;
+            /** Low */
+            low?: string | null;
+            /** High */
+            high?: string | null;
+            /** Median */
+            median?: string | null;
+            /** Latest Observed At */
+            latest_observed_at?: string | null;
+            /** Platforms */
+            platforms?: string[];
+        };
         /**
          * Problem
          * @description RFC 9457 problem document — the single error schema for the API.
@@ -3304,6 +3476,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_products_api_v1_products_compare_get: {
+        parameters: {
+            query: {
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_price_panel_api_v1_products__product_id__prices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricePanelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_price_api_v1_products__product_id__prices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceObservationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceObservationOut"];
                 };
             };
             /** @description Validation Error */

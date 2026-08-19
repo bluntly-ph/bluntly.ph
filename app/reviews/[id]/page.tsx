@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { CommentThread } from "@/components/review/CommentThread";
+import { PricePanel } from "@/components/product/PricePanel";
 import { ReviewDetail } from "@/components/review/ReviewDetail";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { getComments } from "@/lib/comments";
 import { getUser } from "@/lib/dal";
+import { getPricePanel } from "@/lib/products";
 import { getReviewFull } from "@/lib/reviews";
 import { getSessionToken } from "@/lib/session";
 
@@ -38,6 +40,12 @@ export default async function ReviewPage({
   ]);
   if (!data) notFound();
 
+  // Necessarily sequential: the panel is keyed by product id, which only the
+  // review response carries. It is one small cached read (revalidate 60) and
+  // returns null on failure, so a price-service wobble costs the panel rather
+  // than the page.
+  const pricePanel = data.product ? await getPricePanel(data.product.id) : null;
+
   let canVote = false;
   let isOwnReview = false;
   let viewerId: string | null = null;
@@ -56,6 +64,11 @@ export default async function ReviewPage({
       <main className="flex-1">
         <ReviewDetail data={data} canVote={canVote} isOwnReview={isOwnReview} />
         <div className="mx-auto w-full max-w-[44rem] px-4 pb-10 lg:px-6">
+          {/* FR-2 price panel. Rendered on the review because this is the
+              product surface today — there is no standalone product page. It
+              sits above the comments so price context arrives while the
+              reader is still weighing the verdict, not after the discussion. */}
+          {data.product ? <PricePanel panel={pricePanel} /> : null}
           <CommentThread reviewId={id} initial={comments} viewerId={viewerId} />
         </div>
       </main>

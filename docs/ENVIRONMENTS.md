@@ -94,14 +94,56 @@ cannot be left switched on in a shell profile and forgotten.
 and deletes users. Before this work it had no guard whatsoever and a single
 `python -m scripts.reset_and_seed` would have wiped the live site.
 
+### Alembic is guarded too
+
+`alembic upgrade head` reads the repo-root `.env`, which is production. That is
+how a migration intended for the test database silently ran against production
+during this work — a near-miss that did no harm only because production was
+already at head. pytest and the scripts were guarded; alembic was the remaining
+door, and it is the one that applies schema changes.
+
+The target is now printed on every invocation and must be chosen:
+
+```bash
+alembic -x test=1 upgrade head              # the test project
+alembic -x allow_production=1 upgrade head  # production, deliberately
+alembic upgrade head                        # REFUSED — pick one
+```
+
+Nothing in the deploy pipeline runs alembic (Vercel builds the app; migrations
+are applied by hand), so requiring an explicit choice breaks no automation.
+
 ### Setting up the test environment
 
 ```bash
 cp backend/.env.test.example backend/.env.test
 # fill in the two FROM DASHBOARD values, then:
-cd backend && .venv/Scripts/python -m alembic upgrade head
+cd backend && .venv/Scripts/python -m alembic -x test=1 upgrade head
 cd backend && .venv/Scripts/python -m pytest
 ```
+
+**The database password must come from the dashboard.** This is the one step
+that cannot be automated, and it was investigated properly before being called
+a blocker:
+
+- the test project (`bluntly-ph-test`, `miysywhcdqkoniaibglx`) exists and is free
+- the Supabase MCP exposes no password-reset tool
+- `ALTER USER postgres WITH PASSWORD …` fails: on Supabase `postgres` is not a
+  superuser and cannot alter a privileged role
+- a dedicated `bluntly_test` login role **was** created and **does** connect
+  through the session pooler — but migration `0002_rls_policies` fails for it
+  with `permission denied for schema auth`, because its policies call
+  `auth.uid()` and USAGE on the `auth` schema can only be granted by
+  `supabase_admin`
+
+Remaining step: **Supabase dashboard → `bluntly-ph-test` → Settings → Database →
+Reset database password**, then paste the session-pooler connection string into
+`SUPABASE_CONNECTION_STRING_SESSION_POOLER` in `backend/.env.test` and set
+`USE_SUPABASE=true`. After that, the two commands above are all that remain.
+
+Until then `backend/.env.test` leaves the connection blank on purpose, so
+DB-backed tests **skip cleanly** rather than failing against a half-privileged
+role.
 
 `backend/.env.test` is gitignored. The `.example` template is not — `.gitignore`
 carries explicit `!` negations at the end of the file, because `.env*` appears

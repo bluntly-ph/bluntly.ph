@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import ProductStatus
+from app.models.enums import Platform, ProductStatus
 
 
 class ProductCreate(BaseModel):
@@ -57,3 +57,74 @@ class ProductOut(BaseModel):
     trust_score: Decimal = Decimal("0")
     low_trust: bool = False
     created_at: datetime
+
+
+class PriceObservationIn(BaseModel):
+    """One community-submitted purchase price (FR-2)."""
+
+    platform: Platform
+    price: Decimal = Field(gt=0, le=Decimal("10000000"),
+                           description="Price actually paid, in PHP.")
+    observed_at: date = Field(description="The date this price was seen or paid.")
+    variant: str | None = Field(default=None, max_length=120)
+
+    @field_validator("observed_at")
+    @classmethod
+    def _not_in_the_future(cls, value: date) -> date:
+        # A price cannot have been paid tomorrow. Cheap to check here, and it
+        # keeps `latest_observed_at` on the panel honest.
+        if value > date.today():
+            raise ValueError("observed_at cannot be in the future.")
+        return value
+
+
+class PriceObservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    platform: Platform
+    price: Decimal
+    observed_at: date
+    variant: str | None = None
+    created_at: datetime
+
+
+class PricePanelOut(BaseModel):
+    """The panel, or the reason it is not shown yet.
+
+    `sufficient` is false until at least 3 INDEPENDENT observations exist
+    (FR-2), and the price fields are null in that state - the UI is given the
+    counts so it can say how many more are needed, not prices to hide.
+    """
+
+    product_id: uuid.UUID
+    sufficient: bool
+    observation_count: int
+    independent_count: int
+    required_independent: int
+    currency: str = "PHP"
+    low: Decimal | None = None
+    high: Decimal | None = None
+    median: Decimal | None = None
+    latest_observed_at: date | None = None
+    platforms: list[str] = Field(default_factory=list)
+
+
+class ComparisonEntry(BaseModel):
+    """One column of the side-by-side comparison (FR-2)."""
+
+    product: ProductOut
+    price: PricePanelOut
+    # Verified review signal. Seller ratings are deliberately absent: FR-2 named
+    # them, but seller reviews were withdrawn from contract on 2026-07-28
+    # (MILESTONES.md), so there is nothing truthful to put here.
+    review_count: int
+    avg_rating: Decimal | None = None
+    trust_score: Decimal | None = None
+    verified_review_count: int = 0
+
+
+class ComparisonOut(BaseModel):
+    entries: list[ComparisonEntry]
+    not_found: list[uuid.UUID] = Field(default_factory=list)
