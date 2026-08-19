@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
+from app.core.env_guard import guard_cli
 from app.db.session import SessionLocal
 from app.models.enums import MemberRole
 from app.models.session import Session as ClickSession
@@ -434,4 +435,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("api_smoke", production_is_legitimate=False)
     raise SystemExit(main())

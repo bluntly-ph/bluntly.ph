@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from html.parser import HTMLParser
 
+from app.core.env_guard import guard_cli
 from app.db.session import SessionLocal
 from app.models.enums import ImageSource
 from app.models.product import Product
@@ -224,6 +225,8 @@ def _apply(db, product: Product, url: str, dry_run: bool) -> bool:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--allow-production", action="store_true",
+                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument(
@@ -265,4 +268,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("seed_product_images", production_is_legitimate=True)
     main()

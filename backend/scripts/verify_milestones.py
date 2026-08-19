@@ -24,6 +24,7 @@ from decimal import Decimal
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 
+from app.core.env_guard import guard_cli
 from app.core.config import settings
 
 settings.auth_rate_limit_max = 1_000_000
@@ -413,4 +414,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("verify_milestones", production_is_legitimate=False)
     raise SystemExit(main())

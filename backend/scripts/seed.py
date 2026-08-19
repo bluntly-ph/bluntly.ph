@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 
+from app.core.env_guard import guard_cli
 from app.db.session import SessionLocal
 from app.models import Badge, MembershipTierConfig, Product, User
 from app.models.enums import (
@@ -90,4 +91,6 @@ def seed() -> None:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("seed", production_is_legitimate=False)
     seed()

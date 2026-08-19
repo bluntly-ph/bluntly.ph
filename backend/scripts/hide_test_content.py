@@ -26,6 +26,7 @@ import argparse
 
 from sqlalchemy import text
 
+from app.core.env_guard import guard_cli
 from app.db.session import engine
 
 # `t_` + 32 hex chars comes from conftest's uuid4().hex; `mv_m<n>` from the
@@ -81,6 +82,8 @@ SELECT count(*) FROM review_requests rr WHERE rr.status = 'open'
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--allow-production", action="store_true",
+                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
     parser.add_argument("--apply", action="store_true",
                         help="write the change; without it this is a dry run")
     parser.add_argument("--revert", action="store_true",
@@ -157,4 +160,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("hide_test_content", production_is_legitimate=True)
     raise SystemExit(main())

@@ -21,6 +21,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.core.env_guard import guard_cli
 from app.db.session import SessionLocal
 from app.models import Product, User
 from app.models.enums import (
@@ -225,4 +226,6 @@ def seed() -> None:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("seed_showcase", production_is_legitimate=False)
     seed()

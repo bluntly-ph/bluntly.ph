@@ -1,14 +1,49 @@
-"""Shared test fixtures."""
+"""Shared test fixtures.
+
+The import order in this file is load-bearing. `.env.test` is loaded into the
+process environment, and the production guard runs, BEFORE anything from `app`
+is imported - because importing `app.core.config` resolves the database URL and
+importing `app.db.session` opens an engine against it. A guard that ran after
+those imports would be checking a connection that already exists.
+"""
 
 from __future__ import annotations
 
 import os
+import pathlib
+import sys
 
-import pytest
-from fastapi.testclient import TestClient
+# --- 1. Load backend/.env.test, if present, into the real environment -------
+# pydantic-settings gives actual environment variables precedence over its
+# `env_file`, so this is what redirects the suite away from the repo-root .env
+# (which is production). Set before any app import.
+_ENV_TEST = pathlib.Path(__file__).resolve().parent.parent / ".env.test"
+if _ENV_TEST.is_file():
+    for _line in _ENV_TEST.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key, _value = _line.split("=", 1)
+        # An explicitly exported variable still wins, so CI can override.
+        os.environ.setdefault(_key.strip(), _value.strip())
 
-from app.core.config import settings
-from app.main import app
+# --- 2. Refuse to continue if this is production -----------------------------
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from app.core.env_guard import ProductionTargetError, require_non_production  # noqa: E402
+
+try:
+    require_non_production("pytest")
+except ProductionTargetError as exc:  # pragma: no cover - the abort path
+    # Raising from conftest import aborts collection before a single test runs,
+    # which is the point: no fixture, no user, no review reaches the database.
+    raise SystemExit(str(exc)) from exc
+
+# --- 3. Only now is it safe to import the application ------------------------
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+from app.main import app  # noqa: E402
 
 # The suite makes many auth/vote calls from one client IP; lift the rate limits so
 # tests aren't self-throttled. (A dedicated limiter test can set them back locally.)

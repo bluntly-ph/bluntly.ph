@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+from app.core.env_guard import guard_cli
 from app.db.session import SessionLocal
 from scripts import seed_showcase
 
@@ -127,4 +128,6 @@ def run() -> None:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("reset_and_seed (TRUNCATES ALL CONTENT TABLES)", production_is_legitimate=False)
     run()

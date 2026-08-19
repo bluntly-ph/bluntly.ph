@@ -69,3 +69,9 @@ backend/.ruff_cache/
 *-sa.json
 *service-account*.json
 *credentials*.json
+
+# Env templates carry no secrets and are the only record of which variables an
+# environment needs. These negations must stay LAST: `.env*` appears twice
+# above, and a later ignore rule overrides an earlier negation.
+!.env.example
+!backend/.env.test.example

@@ -25,6 +25,7 @@ import urllib.request
 
 from sqlalchemy import inspect, text
 
+from app.core.env_guard import guard_cli
 from app.core.supabase_client import get_service_client
 from app.db.session import SessionLocal, engine
 from app.services.storage import (
@@ -121,6 +122,8 @@ def purge_phase() -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--allow-production", action="store_true",
+                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
     ap.add_argument("--copy", action="store_true", help="public -> private, verified")
     ap.add_argument("--purge", action="store_true", help="delete the public originals")
     args = ap.parse_args()
@@ -134,4 +137,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("migrate_receipts", production_is_legitimate=True)
     main()

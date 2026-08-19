@@ -28,6 +28,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
+from app.core.env_guard import guard_cli
 from app.core.config import settings
 
 # The verifier drives many auth/vote calls from one client; don't self-throttle.
@@ -537,4 +538,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Refuses production before a single row is touched.
+    guard_cli("supabase_verify", production_is_legitimate=False)
     raise SystemExit(main())
