@@ -135,7 +135,7 @@ BUG-029 was.
 
 | Bucket | Public | Max object | Holds | Written by |
 |---|---|---|---|---|
-| `avatars` | yes | 5 MB (app) | Profile pictures | `POST /users/me/avatar` |
+| `avatars` | yes | 5 MB | Profile pictures | `POST /users/me/avatar` |
 | `product-images` | yes | 5 MB | Product listing imagery | `scripts/seed_product_images.py`, admin upload |
 | `review-photos` | yes | 8 MB | The product photograph shown **on** a published review (FR-3) | `POST /reviews/photo` |
 | **`review-receipts`** | **no** | 8 MB | **Proof of purchase — evidence for `earn_eligible` evaluation (FR-3, FR-9)** | `POST /reviews/receipt` |
@@ -186,9 +186,12 @@ upload paths failed at the storage layer, which is why review photo upload
 no matter what the database held. `review-receipts` followed the same day, when
 BUG-029 established that receipts had been sharing the public photo bucket.
 Each carries the size ceiling above plus `image/png,image/jpeg,image/webp`
-enforced by the bucket as well as by `sniff_image_type` — except `avatars`,
-which predates that practice and has no bucket-level ceiling (the 5 MB limit is
-enforced in `validate_avatar` only).
+enforced **by the bucket as well as** by `sniff_image_type`. `avatars` predated
+that practice and had neither; both were applied on 2026-08-19 after an audit
+found application validation was the only thing enforcing its 5 MB limit. It
+held no objects and no user had an `avatar_url`, so nothing existing was
+affected — verified before the change, and normal upload plus oversize
+rejection verified after.
 
 Review photos are keyed `{uploader_id}/{uuid}.{ext}`; the larger ceiling is
 because a receipt photographed on a phone routinely clears 5 MB, and rejecting a
