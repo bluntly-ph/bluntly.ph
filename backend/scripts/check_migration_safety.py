@@ -85,11 +85,55 @@ def scan(path: pathlib.Path) -> list[tuple[str, str]]:
     return [(label, why) for pattern, label, why in PATTERNS if pattern.search(upgrade)]
 
 
+def check_chain() -> list[str]:
+    """Structural problems that no per-migration scan can see.
+
+    A fork in the chain, a second head, or a lost base are the failures that
+    make `upgrade head` ambiguous or refuse outright, and they are invisible
+    when reading migrations one at a time. Cheap to check, and the answer is
+    only interesting when it is bad.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    problems: list[str] = []
+    try:
+        sd = ScriptDirectory.from_config(Config("alembic.ini"))
+    except Exception as exc:  # noqa: BLE001
+        return [f"could not read the migration chain: {type(exc).__name__}"]
+
+    heads, bases = sd.get_heads(), sd.get_bases()
+    revisions = list(sd.walk_revisions())
+    if len(heads) != 1:
+        problems.append(f"{len(heads)} heads ({', '.join(heads)}) - `upgrade head` is ambiguous")
+    if len(bases) != 1:
+        problems.append(f"{len(bases)} bases - the chain is not a single line")
+
+    children: dict[str | None, list[str]] = {}
+    for rev in revisions:
+        downs = rev.down_revision if isinstance(rev.down_revision, tuple) else (rev.down_revision,)
+        for down in downs:
+            children.setdefault(down, []).append(rev.revision)
+    for parent, kids in children.items():
+        if len(kids) > 1:
+            problems.append(f"fork after {parent}: {', '.join(kids)}")
+
+    print(f"[chain] {len(revisions)} migrations, {len(heads)} head, {len(bases)} base"
+          f" -> {'linear' if not problems else 'PROBLEMS'}")
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--all", action="store_true",
                     help="Scan every migration, not just unapplied ones.")
     args = ap.parse_args()
+
+    chain_problems = check_chain()
+    for problem in chain_problems:
+        print(f"  [CHAIN] {problem}")
+    if chain_problems:
+        print()
 
     current = applied_revision()
     files = sorted(p for p in VERSIONS.glob("*.py") if p.name != "__init__.py")
