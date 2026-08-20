@@ -103,7 +103,11 @@ and full system **deployed and production-ready**.
 > removed alongside the seller-ratings withdrawal above (`b0f8ba0`). The 49/49 figure
 > is the true result of the 2026-07-25 run, from before the check was dropped. The
 > script has been repaired and verified **by inspection only**; it has not yet been
-> re-executed against a live environment, so **48/48** is expected, not observed.
+> re-executed against a live environment. **Superseded 2026-08-20:** the
+> verifier now has **58** checks (ten added for FR-2 and receipt privacy,
+> which it did not cover at all), and the historical 48/48 is not valid
+> evidence — it was produced by running a fixture-writing verifier against
+> production. No run has been observed since; see `docs/ENVIRONMENTS.md`.
 > Remove this caveat once someone runs it for real.
 >
 > **Still pending (owner-supplied):** live PayPal **sandbox** verification — the manual

@@ -10,10 +10,16 @@ voting, affiliate links, revenue split, token economy), and **M3** (request boar
 contracts, payouts, affiliate report ingestion). One command checks **48 separate
 claims** and prints PASS or FAIL for each.
 
-> **Note (2026-07-28):** this was 49 claims until the seller trust-ratings feature
-> was withdrawn by owner decision and its verification check removed (`b0f8ba0`).
-> The script has been verified by inspection only — **48/48 is expected, not yet
-> observed** against a live run. Remove this note once someone runs it for real.
+> **Note (2026-08-20):** the verifier now carries **58** checks. It was 49, then
+> 48 when seller trust ratings were withdrawn (`b0f8ba0`), and ten were added for
+> FR-2 and receipt privacy — it previously had no assertion touching either, so
+> it would have reported a green 48/48 with both features deleted.
+>
+> **Do not treat the historical 48/48 as evidence.** That figure was produced by
+> running this fixture-writing verifier against the production database, which
+> is the practice the environment guards now prevent. No run has been observed
+> since; the isolated test environment is awaiting its credential
+> (`docs/ENVIRONMENTS.md`).
 
 Everything runs on your own machine, on a throwaway database. It touches nothing live,
 sends no email, and spends no money.
@@ -119,12 +125,13 @@ checks the results in the database.
 ending with:
 
 ```
-=== MILESTONE CLAIMS: 48/48 verified ===
+=== MILESTONE CLAIMS: 58/58 verified ===
 ```
 
-**48/48 means every M1, M2 and M3 claim passed.** (Expected, not yet observed — see
-the note in Step 6's introduction.) If any line says `[FAIL]`, copy the
-whole output and send it to the team — that is exactly what they need.
+**58/58 means every M1–M3 claim passed, plus FR-2 and receipt privacy.** The
+count is not sacred: it should go down if contractual functionality is removed,
+which is the whole point of adding those ten. If any line says `[FAIL]`, copy
+the whole output and send it to the team — that is exactly what they need.
 
 ---
 
