@@ -395,6 +395,68 @@ def verify_m3(hz: Harness) -> None:
           hits == "", hits[:100])
 
 
+def verify_fr2_and_receipt_privacy(h) -> None:
+    """Contractual functionality added after the M1-M3 milestones were written.
+
+    The verifier had no coverage of FR-2 or of receipt privacy, which meant it
+    would have stayed fully green with both features deleted. A milestone count
+    that cannot go down when contractual functionality disappears is not
+    evidence of anything.
+    """
+    c = h.c
+    author_id, ah = h.register("fr2")
+
+    pid = c.post("/api/v1/products", headers=ah,
+                 json={"name": f"FR2 {uuid.uuid4().hex[:8]}",
+                       "category": "electronics"}).json()["id"]
+
+    # FR-2: the panel exists and is public, and stays locked below 3
+    # INDEPENDENT observations - the threshold is the requirement.
+    panel = c.get(f"/api/v1/products/{pid}/prices")
+    check("FR-2: price panel is public and returns an insufficient state",
+          panel.status_code == 200 and panel.json()["sufficient"] is False,
+          f"HTTP {panel.status_code}")
+    check("FR-2: no prices are published below the threshold",
+          panel.json()["low"] is None and panel.json()["median"] is None)
+    check("FR-2: the threshold is 3 independent observations",
+          panel.json()["required_independent"] == 3)
+
+    for value in ("1000", "1100", "1200"):
+        c.post(f"/api/v1/products/{pid}/prices", headers=ah, json={
+            "platform": "shopee", "price": value,
+            "observed_at": date.today().isoformat(), "variant": None})
+    one_author = c.get(f"/api/v1/products/{pid}/prices").json()
+    check("FR-2: three observations from ONE buyer keep the panel locked",
+          one_author["sufficient"] is False and one_author["observation_count"] == 3,
+          f"independent={one_author['independent_count']}")
+
+    other = c.post("/api/v1/products", headers=ah,
+                   json={"name": f"FR2b {uuid.uuid4().hex[:8]}",
+                         "category": "electronics"}).json()["id"]
+    cmp_resp = c.get(f"/api/v1/products/compare?ids={pid},{other}")
+    check("FR-2: comparison returns both products side by side",
+          cmp_resp.status_code == 200 and len(cmp_resp.json()["entries"]) == 2,
+          f"HTTP {cmp_resp.status_code}")
+    check("FR-2: comparison rejects fewer than two products",
+          c.get(f"/api/v1/products/compare?ids={pid}").status_code == 422)
+    check("FR-2: comparison claims no seller rating (withdrawn 2026-07-28)",
+          "seller_rating" not in cmp_resp.text.lower())
+
+    # Receipt privacy (BUG-029): no locator may reach an anonymous caller.
+    key = f"{author_id}/{uuid.uuid4().hex}.jpg"
+    rid = c.post("/api/v1/reviews", headers=ah, json={
+        "product_id": pid, "title": "receipt privacy claim",
+        "discussion": "Verifier fixture asserting no receipt locator is public.",
+        "verdict": "it_depends", "star_rating": 3, "receipt_key": key}).json()["id"]
+    body = c.get(f"/api/v1/reviews/{rid}", headers=ah).text
+    check("Privacy: no receipt locator on the review response",
+          "receipt_url" not in body and "receipt_key" not in body)
+    check("Privacy: the review reports that evidence exists, without its location",
+          c.get(f"/api/v1/reviews/{rid}", headers=ah).json()["has_receipt"] is True)
+    check("Privacy: the receipt endpoint refuses an anonymous caller",
+          c.get(f"/api/v1/reviews/{rid}/receipt").status_code == 401)
+
+
 def main() -> int:
     url = make_url(settings.effective_database_url)
     print(f"MILESTONE VERIFICATION — {url.host}:{url.port}/{url.database} "
@@ -405,6 +467,7 @@ def main() -> int:
     verify_m1(hz)
     verify_m2(hz)
     verify_m3(hz)
+    verify_fr2_and_receipt_privacy(hz)
     passed = sum(1 for ok, *_ in _RESULTS if ok)
     failed = [f"{n} ({d})" for ok, n, d in _RESULTS if not ok]
     print(f"\n=== MILESTONE CLAIMS: {passed}/{len(_RESULTS)} verified ===")
