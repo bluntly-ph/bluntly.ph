@@ -17,7 +17,18 @@ from app.core.errors import AppError
 from app.core.supabase_client import get_service_client
 
 AVATAR_BUCKET = "avatars"
-MAX_AVATAR_BYTES = 5 * 1024 * 1024
+# Measured against production 2026-08-20: the platform refuses a request body
+# somewhere between 3.0 MB and 4.4 MB with a bare 413, before any of this code
+# runs. A cap above that is a cap the API can never enforce - the user gets a
+# platform error page instead of a sentence explaining what went wrong. 4 MB
+# leaves room for multipart overhead underneath it.
+#
+# Product images are not in this list on purpose: they are uploaded by
+# scripts/seed_product_images.py straight to Supabase Storage, so they never
+# cross a serverless function and the platform limit does not apply.
+UPLOAD_CEILING_BYTES = 4 * 1024 * 1024
+
+MAX_AVATAR_BYTES = UPLOAD_CEILING_BYTES
 
 # (magic prefix, mime, file extension)
 _MAGIC: tuple[tuple[bytes, str, str], ...] = (
@@ -140,7 +151,7 @@ def upload_product_image(product_id: uuid.UUID, data: bytes) -> str:
 
 
 REVIEW_BUCKET = "review-photos"
-MAX_REVIEW_PHOTO_BYTES = 8 * 1024 * 1024
+MAX_REVIEW_PHOTO_BYTES = UPLOAD_CEILING_BYTES
 
 
 def validate_review_photo(data: bytes) -> str:
@@ -207,7 +218,7 @@ def upload_review_photo(user_id: uuid.UUID, data: bytes) -> str:
 # --------------------------------------------------------------------------
 
 RECEIPT_BUCKET = "review-receipts"
-MAX_RECEIPT_BYTES = 8 * 1024 * 1024
+MAX_RECEIPT_BYTES = UPLOAD_CEILING_BYTES
 
 
 def validate_receipt(data: bytes) -> str:

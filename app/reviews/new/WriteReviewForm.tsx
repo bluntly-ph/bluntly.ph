@@ -20,6 +20,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
+import { prepareImageForUpload } from "@/lib/image";
 
 type Product = { id: string; canonical_name: string | null; category: string | null };
 type Verdict = "yes_absolutely" | "it_depends" | "hard_pass";
@@ -828,8 +829,17 @@ function ReceiptField({
     setBusy(true);
     setError(null);
     try {
+      // Shrink before sending: the platform refuses a body over ~4.5MB with a
+      // bare 413, and a phone photo of a receipt is routinely larger. Kept at a
+      // higher resolution than the proof photo because a moderator has to read
+      // the small print on it.
+      const prepared = await prepareImageForUpload(file, "document");
+      if (prepared.error) {
+        setError(prepared.error);
+        return;
+      }
       const body = new FormData();
-      body.append("file", file);
+      body.append("file", prepared.file);
       const res = await fetch("/api/bff/api/v1/reviews/receipt", {
         method: "POST",
         body,
@@ -937,8 +947,14 @@ function PhotoField({
     setBusy(true);
     setError(null);
     try {
+      // See ReceiptField: the real ceiling is the platform's, not the API's.
+      const prepared = await prepareImageForUpload(file, "photo");
+      if (prepared.error) {
+        setError(prepared.error);
+        return;
+      }
       const body = new FormData();
-      body.append("file", file);
+      body.append("file", prepared.file);
       const res = await fetch("/api/bff/api/v1/reviews/photo", {
         method: "POST",
         body,
