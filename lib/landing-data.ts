@@ -7,6 +7,7 @@ import {
   Dress,
   Eye,
   GameController,
+  Headphones,
   HairDryer,
   Heartbeat,
   House,
@@ -40,6 +41,7 @@ export type Category = {
 /** The "What people are reading" tab row, in the frame's order. Trending leads. */
 export const CATEGORIES: Category[] = [
   { slug: "trending", label: "Trending", icon: TrendUp },
+  { slug: "audio", label: "Audio", icon: Headphones },
   { slug: "automotive", label: "Automotive", icon: CarProfile },
   { slug: "beauty", label: "Beauty", icon: HairDryer },
   { slug: "electronics-tech", label: "Electronics & Tech", icon: Circuitry },
