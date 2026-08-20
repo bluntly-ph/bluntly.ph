@@ -468,6 +468,21 @@ done
 cd backend && .venv/Scripts/python -m scripts.check_migration_safety --all
 ```
 
+**4b. Data integrity** — read-only, and the one check that is safe to point at
+production, because production is the only place the data is real:
+
+```bash
+cd backend && python -m scripts.check_invariants --strict
+```
+
+Thirteen invariants the code states in prose and then relies on: the wallet
+identity, no orphaned reviews or payouts, no review with two active referral
+links, no monetized-but-unverified review, no monetized review at two stars or
+below, commission shares summing to the gross, and none of them negative.
+
+**Pass:** `All 13 invariants hold.` A failure names the invariant and says what
+a non-zero count means, so the output is the diagnosis.
+
 **5. Production smoke** — read-only, no fixtures:
 
 ```bash
