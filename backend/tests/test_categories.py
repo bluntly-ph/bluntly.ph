@@ -83,3 +83,43 @@ def test_the_api_refuses_a_category_the_frontend_cannot_render():
     from app.schemas.product import ProductCreate
     with pytest.raises(ValidationError):
         ProductCreate(name="x", category="widgets")
+
+
+class TestReadIsForgivingWhereWriteIsStrict:
+    """Filtering must find rows written before the vocabulary had an owner.
+
+    Until 0027 is applied everywhere, `?category=electronics-tech` has to match
+    products still stored as `electronics` - otherwise the category page is
+    empty and the reader is given no reason why.
+    """
+
+    def test_the_canonical_slug_finds_the_old_spelling(self):
+        from app.core.categories import spellings_for
+        assert "electronics" in spellings_for("electronics-tech")
+
+    def test_the_old_spelling_finds_the_canonical_rows(self):
+        from app.core.categories import spellings_for
+        assert "electronics-tech" in spellings_for("electronics")
+
+    def test_a_category_with_no_aliases_matches_only_itself(self):
+        from app.core.categories import spellings_for
+        assert spellings_for("beauty") == ["beauty"]
+
+    def test_an_unknown_slug_matches_nothing_rather_than_raising(self):
+        """A bad slug in the URL is a reader's typo, not a server error."""
+        from app.core.categories import spellings_for
+        assert spellings_for("sporting-goods") == ["sporting-goods"]
+
+    def test_no_category_means_no_filter(self):
+        from app.core.categories import spellings_for
+        assert spellings_for("") == [] and spellings_for("   ") == []
+
+    def test_the_feed_query_uses_the_alias_set(self):
+        """Pins the wiring, not just the helper - the bug was in the wiring."""
+        import inspect
+
+        from app.services import review_service
+        src = inspect.getsource(review_service)
+        assert "spellings_for(category)" in src, (
+            "the feed no longer filters through the alias set; a product stored "
+            "under a legacy spelling will vanish from its category page")

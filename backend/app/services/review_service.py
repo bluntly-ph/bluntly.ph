@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.categories import spellings_for
 from app.core.config import settings
 from app.core.errors import NotFoundError
 from app.models.enums import EarnEligibleStatus, VerificationStatus
@@ -174,7 +175,9 @@ def list_feed(
     if category or q:
         stmt = stmt.join(Product, Review.product_id == Product.id)
         if category:
-            stmt = stmt.where(Product.category == category)
+            # Alias-tolerant: rows written before the vocabulary had an owner
+            # still hold the old spelling. See app/core/categories.py.
+            stmt = stmt.where(Product.category.in_(spellings_for(category)))
         if q:
             like = f"%{q.strip()}%"
             stmt = stmt.where(

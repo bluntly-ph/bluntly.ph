@@ -73,3 +73,23 @@ def normalize_category(value: str | None) -> str | None:
     if slug in ALIASES:
         return ALIASES[slug]
     raise UnknownCategory(value)
+
+
+def spellings_for(value: str) -> list[str]:
+    """Every stored spelling that should match a requested category.
+
+    Filtering is deliberately forgiving where writing is strict. A row written
+    before the vocabulary had an owner still holds its old spelling, and until
+    0027 has been applied everywhere, asking for `electronics-tech` has to find
+    the products stored as `electronics` - otherwise the category page is empty
+    and the reader has no idea why.
+
+    An unrecognised value returns itself, so an unknown category matches
+    nothing instead of raising. A reader typing a bad slug into the URL should
+    see no results, not a 500.
+    """
+    slug = (value or "").strip().lower()
+    if not slug:
+        return []
+    canonical = CATEGORIES.get(slug) and slug or ALIASES.get(slug) or slug
+    return sorted({canonical, slug, *(w for w, r in ALIASES.items() if r == canonical)})
