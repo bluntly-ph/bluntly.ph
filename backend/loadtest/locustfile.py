@@ -141,7 +141,7 @@ class Submitter(HttpUser):
         self.headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
         p = self.client.post("/api/v1/products", headers=self.headers,
                              json={"name": f"LoadTest {uuid.uuid4().hex[:8]}",
-                                   "category": "electronics"},
+                                   "category": "electronics-tech"},
                              name="/products [POST]")
         self.product_id = p.json()["id"] if p.ok else None
 

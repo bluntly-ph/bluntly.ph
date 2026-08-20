@@ -82,7 +82,7 @@ def _register(c: httpx.Client, email: str) -> str:
 
 
 def _make_review(c: httpx.Client, h: dict, *, stars: int, photo: bool, src: bool = True) -> tuple[str, str]:
-    body = {"name": f"Prod {uuid.uuid4().hex[:6]}", "category": "electronics"}
+    body = {"name": f"Prod {uuid.uuid4().hex[:6]}", "category": "electronics-tech"}
     if src:
         body["source_url"] = "https://shopee.ph/x-i.1.2"
     pid = c.post("/api/v1/products", headers=h, json=body).json()["id"]
@@ -385,7 +385,7 @@ def concurrency(base_url: str, at: str, mt: str) -> None:
     ah = {"Authorization": f"Bearer {at}"}
     c = _client(base_url)
     pid = c.post("/api/v1/products", headers=ah,
-                 json={"name": "Burst", "category": "electronics"}).json()["id"]
+                 json={"name": "Burst", "category": "electronics-tech"}).json()["id"]
     c.close()
 
     def hit(kind: str) -> int:

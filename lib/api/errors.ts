@@ -87,8 +87,3 @@ export class ApiError extends Error {
     return out;
   }
 }
-
-/** Narrowing helper so callers can branch without instanceof churn. */
-export function isApiError(value: unknown): value is ApiError {
-  return value instanceof ApiError;
-}

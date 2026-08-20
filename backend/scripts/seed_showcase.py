@@ -61,10 +61,10 @@ AUTHORS = [
 
 # (uuid, product_id, canonical_name, brand, category)
 PRODUCTS = [
-    (_p(1), "show_jisulife", "Jisulife Life9 Handheld Fan", "Jisulife", "electronics"),
-    (_p(2), "show_macbook", "Apple MacBook Air M2 (13-inch)", "Apple", "electronics"),
-    (_p(3), "show_akko", "Akko 5075B Plus Mechanical Keyboard", "Akko", "electronics"),
-    (_p(4), "show_anker", "Anker 737 Power Bank (24000mAh)", "Anker", "electronics"),
+    (_p(1), "show_jisulife", "Jisulife Life9 Handheld Fan", "Jisulife", "electronics-tech"),
+    (_p(2), "show_macbook", "Apple MacBook Air M2 (13-inch)", "Apple", "electronics-tech"),
+    (_p(3), "show_akko", "Akko 5075B Plus Mechanical Keyboard", "Akko", "electronics-tech"),
+    (_p(4), "show_anker", "Anker 737 Power Bank (24000mAh)", "Anker", "electronics-tech"),
     (_p(5), "show_cerave", "CeraVe Foaming Facial Cleanser", "CeraVe", "beauty"),
     (_p(6), "show_airism", "Uniqlo AIRism Crew Neck Tee", "Uniqlo", "fashion-accessories"),
 ]

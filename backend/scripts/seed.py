@@ -72,7 +72,7 @@ def seed() -> None:
         if not db.query(Product).filter_by(product_id="prd_powerbank_10k").first():
             p = Product(product_id="prd_powerbank_10k", canonical_name="Aukey 10000mAh Power Bank",
                         brand="Aukey", line="Basix", key_spec="10000mAh", descriptor="Power Bank",
-                        category="electronics", status=ProductStatus.canonicalized)
+                        category="electronics-tech", status=ProductStatus.canonicalized)
             db.add(p)
             db.flush()
             db.add(ProductPlatform(product_id=p.id, platform=Platform.shopee,
@@ -82,7 +82,7 @@ def seed() -> None:
         if not db.query(Product).filter_by(source_url="https://shopee.ph/pending-example").first():
             db.add(Product(source_url="https://shopee.ph/pending-example",
                            status=ProductStatus.pending, submitted_by=SHOPPER_ID,
-                           category="electronics"))
+                           category="electronics-tech"))
 
         db.commit()
         print("Seed complete: badges, moderator, shopper, sample + pending products.")
