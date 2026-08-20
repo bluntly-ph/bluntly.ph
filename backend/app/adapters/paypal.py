@@ -92,6 +92,37 @@ def _token(client: httpx.Client) -> str:
     return resp.json()["access_token"]
 
 
+def _provider_faults_become_paypal_error(fn):
+    """Turn transport and parse faults into PayPalError.
+
+    payout_service catches exactly PayPalError/PayPalNotConfigured and leaves
+    the batch `scheduled` so it can be retried. Anything else - a timeout, a
+    connection reset, a 200 carrying malformed JSON - escapes that handler and
+    surfaces as a 500, which loses the retry and misreports the cause. A
+    provider being slow or wrong is an expected condition for an integration,
+    not an application bug.
+
+    The re-raised message deliberately carries no response body: an OAuth
+    payload is the one place a credential could be echoed back to us.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except (PayPalError, PayPalNotConfigured):
+            raise
+        except httpx.HTTPError as exc:
+            raise PayPalError(f"PayPal unreachable: {type(exc).__name__}") from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PayPalError(
+                f"PayPal returned an unusable response ({type(exc).__name__})") from exc
+
+    return wrapper
+
+
+@_provider_faults_become_paypal_error
 def submit_batch(sender_batch_id: str, items: list[PayoutItem]) -> BatchResult:
     """POST /v1/payments/payouts. Raises PayPalNotConfigured / PayPalError."""
     if not is_configured():
@@ -134,6 +165,7 @@ def submit_batch(sender_batch_id: str, items: list[PayoutItem]) -> BatchResult:
                        batch_status=header.get("batch_status", BATCH_PENDING))
 
 
+@_provider_faults_become_paypal_error
 def get_batch(payout_batch_id: str) -> dict:
     """GET /v1/payments/payouts/{id} -> {batch_status, items: {sender_item_id: status}}."""
     if not is_configured():

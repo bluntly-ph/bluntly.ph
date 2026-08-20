@@ -401,3 +401,123 @@ def test_live_provider_requires_credentials_and_non_sandbox_url():
     issues = " ".join(s.production_issues())
     assert "PAYPAL_CLIENT_ID" in issues
     assert "sandbox" in issues
+
+
+# --------------------------------------------------------------------------
+# Provider fault handling (PayPal acceptance readiness, no credentials needed)
+#
+# payout_service catches exactly PayPalError/PayPalNotConfigured and leaves the
+# batch `scheduled` so it can be retried. Anything escaping that handler is a
+# 500 that loses the retry and misreports the cause, so these pin the
+# translation rather than the happy path.
+# --------------------------------------------------------------------------
+
+def _configured(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "paypal_client_id", "cid", raising=False)
+    monkeypatch.setattr(settings, "paypal_secret", "sec", raising=False)
+
+
+def test_provider_timeout_becomes_a_paypal_error(monkeypatch):
+    import httpx
+
+    from app.adapters import paypal
+    _configured(monkeypatch)
+
+    class _Boom:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, *a, **k): raise httpx.ReadTimeout("timed out")
+        def get(self, *a, **k): raise httpx.ReadTimeout("timed out")
+
+    monkeypatch.setattr(paypal.httpx, "Client", lambda **k: _Boom())
+    with pytest.raises(paypal.PayPalError) as exc:
+        paypal.submit_batch("b1", [])
+    assert "unreachable" in str(exc.value).lower()
+    with pytest.raises(paypal.PayPalError):
+        paypal.get_batch("b1")
+
+
+def test_connection_error_becomes_a_paypal_error(monkeypatch):
+    import httpx
+
+    from app.adapters import paypal
+    _configured(monkeypatch)
+
+    class _Boom:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, *a, **k): raise httpx.ConnectError("refused")
+        def get(self, *a, **k): raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(paypal.httpx, "Client", lambda **k: _Boom())
+    with pytest.raises(paypal.PayPalError):
+        paypal.submit_batch("b2", [])
+
+
+def test_oauth_200_without_a_token_becomes_a_paypal_error(monkeypatch):
+    """A 200 carrying no access_token used to raise KeyError and escape."""
+    from app.adapters import paypal
+    _configured(monkeypatch)
+
+    class _Resp:
+        status_code = 200
+        def json(self): return {"scope": "…", "expires_in": 300}   # no access_token
+
+    class _Client:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, *a, **k): return _Resp()
+        def get(self, *a, **k): return _Resp()
+
+    monkeypatch.setattr(paypal.httpx, "Client", lambda **k: _Client())
+    with pytest.raises(paypal.PayPalError):
+        paypal.submit_batch("b3", [])
+
+
+def test_malformed_json_body_becomes_a_paypal_error(monkeypatch):
+    from app.adapters import paypal
+    _configured(monkeypatch)
+
+    class _TokenResp:
+        status_code = 200
+        def json(self): return {"access_token": "t"}
+
+    class _BadResp:
+        status_code = 200
+        def json(self): raise ValueError("not json")
+
+    class _Client:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, url, **k): return _TokenResp() if "oauth2" in url else _BadResp()
+        def get(self, *a, **k): return _BadResp()
+
+    monkeypatch.setattr(paypal.httpx, "Client", lambda **k: _Client())
+    with pytest.raises(paypal.PayPalError) as exc:
+        paypal.submit_batch("b4", [])
+    assert "unusable" in str(exc.value).lower() or "malformed" in str(exc.value).lower()
+
+
+def test_provider_errors_never_echo_the_credential(monkeypatch):
+    """The OAuth payload is the one place a secret could come back to us."""
+    from app.adapters import paypal
+    _configured(monkeypatch)
+
+    class _Resp:
+        status_code = 401
+        def json(self): return {"error": "invalid_client", "client_id": "cid",
+                                "client_secret": "sec"}
+
+    class _Client:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, *a, **k): return _Resp()
+        def get(self, *a, **k): return _Resp()
+
+    monkeypatch.setattr(paypal.httpx, "Client", lambda **k: _Client())
+    with pytest.raises((paypal.PayPalError, paypal.PayPalNotConfigured)) as exc:
+        paypal.submit_batch("b5", [])
+    message = str(exc.value)
+    assert "sec" not in message.split("HTTP")[0] or "client_secret" not in message
+    assert "invalid_client" not in message, "provider body leaked into the error"
