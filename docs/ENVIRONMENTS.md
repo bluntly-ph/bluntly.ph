@@ -136,9 +136,24 @@ are applied by hand), so requiring an explicit choice breaks no automation.
 
 ```bash
 cp backend/.env.test.example backend/.env.test
-# fill in the two FROM DASHBOARD values, then:
+# fill in the two FROM DASHBOARD values, then ONE command:
+cd backend && .venv/Scripts/python -m scripts.bootstrap_test_env
+```
+
+`bootstrap_test_env` does the whole blocked branch in the right order —
+validate the target, refuse production, migrate to head, verify the revision,
+run pytest, run milestone verification, report. Ordering is the part people get
+wrong, and this project has already had two production incidents from running
+the right command against the wrong target, so the environment check is the
+first thing it does and nothing else runs if it fails.
+
+Until the credential is supplied it stops with `NOT READY` and touches nothing.
+The individual commands still work if you want them separately:
+
+```bash
 cd backend && .venv/Scripts/python -m alembic -x test=1 upgrade head
 cd backend && .venv/Scripts/python -m pytest
+cd backend && .venv/Scripts/python -m scripts.verify_milestones
 ```
 
 **The database password must come from the dashboard.** This is the one step

@@ -1,0 +1,134 @@
+"""One command that takes the isolated test project from nothing to a verdict.
+
+Everything downstream of the Supabase credential is automated, so the moment
+`backend/.env.test` carries a working connection string this runs the whole
+blocked branch without anyone having to remember the order:
+
+    validate target -> refuse production -> migrate to head -> verify revision
+    -> pytest -> milestone verification -> report
+
+Usage:
+    cd backend && python -m scripts.bootstrap_test_env
+    cd backend && python -m scripts.bootstrap_test_env --skip-milestones
+
+It exits non-zero if any stage fails, so it is usable as a gate.
+
+Why a script rather than a runbook: the ordering is the part people get wrong,
+and this project has already had two production incidents caused by running the
+right command against the wrong target. The environment check is not advisory
+here - it is the first thing that happens, and nothing else runs if it fails.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import time
+
+from app.core.env_guard import (
+    PRODUCTION_PROJECT_REF,
+    TEST_ENV_MARKER,
+    describe_target,
+    is_test_target,
+    production_signals,
+)
+
+PYTHON = sys.executable
+
+
+def _run(label: str, args: list[str]) -> tuple[bool, str]:
+    print(f"\n=== {label} ===")
+    started = time.time()
+    proc = subprocess.run([PYTHON, *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    out = (proc.stdout or "") + (proc.stderr or "")
+    tail = [ln for ln in out.splitlines() if ln.strip()][-6:]
+    for line in tail:
+        print(f"  {line}")
+    print(f"  -> exit {proc.returncode} in {time.time() - started:.1f}s")
+    return proc.returncode == 0, out
+
+
+def preflight() -> bool:
+    """Refuse anything that is not a declared, non-production test target."""
+    print("=== target ===")
+    print(f"  {describe_target()}")
+
+    signals = production_signals()
+    if signals:
+        print("\n  REFUSED: this is production.")
+        for s in signals:
+            print(f"    - {s}")
+        print("\n  Nothing was run. Point backend/.env.test at the test project.")
+        return False
+
+    if not is_test_target():
+        print(f"\n  REFUSED: no {TEST_ENV_MARKER} marker, so the target is not a")
+        print("  declared test environment. An unrecognised target is treated as")
+        print("  production on purpose.")
+        return False
+
+    # Positive confirmation, not just the absence of production signals.
+    from app.core.config import settings
+    from sqlalchemy.engine.url import make_url
+    url = make_url(settings.effective_database_url)
+    if PRODUCTION_PROJECT_REF in str(url):
+        print("\n  REFUSED: the migration URL references the production project.")
+        return False
+    if not url.host or url.host == "localhost":
+        print("\n  NOT READY: the connection string still points at localhost.")
+        print("  The Supabase credential has not been supplied yet - see")
+        print("  docs/ENVIRONMENTS.md. This is the one step that needs the owner.")
+        return False
+
+    print(f"  migrations -> {url.host}:{url.port}/{url.database}")
+    return True
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--skip-milestones", action="store_true",
+                    help="Stop after pytest.")
+    args = ap.parse_args()
+
+    if not preflight():
+        return 2
+
+    stages: list[tuple[str, bool]] = []
+
+    ok, _ = _run("migrate to head", ["-m", "alembic", "-x", "test=1", "upgrade", "head"])
+    stages.append(("migrate", ok))
+    if not ok:
+        print("\nStopping: the schema is not at head, so later results would be noise.")
+        return 1
+
+    ok, out = _run("verify schema revision", ["-m", "alembic", "-x", "test=1", "current"])
+    at_head = "head" in out.lower()
+    stages.append(("revision at head", ok and at_head))
+
+    ok, out = _run("pytest", ["-m", "pytest", "-q", "-p", "no:randomly"])
+    summary = next((ln for ln in out.splitlines()[::-1]
+                    if "passed" in ln or "failed" in ln), "no summary")
+    stages.append((f"pytest ({summary.strip()})", ok))
+
+    if not args.skip_milestones:
+        ok, out = _run("milestone verification", ["-m", "scripts.verify_milestones"])
+        claims = next((ln for ln in out.splitlines()[::-1]
+                       if "MILESTONE CLAIMS" in ln), "no summary")
+        stages.append((f"milestones ({claims.strip()})", ok))
+
+    print("\n=== summary ===")
+    for name, passed in stages:
+        print(f"  [{'PASS' if passed else 'FAIL'}] {name}")
+
+    failed = [n for n, p in stages if not p]
+    if failed:
+        print(f"\n{len(failed)} stage(s) failed.")
+        return 1
+    print("\nTest environment is fully verified.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

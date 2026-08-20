@@ -101,9 +101,8 @@ production. One-time setup:
 
 ```bash
 cp backend/.env.test.example backend/.env.test
-# fill the two FROM DASHBOARD values, then:
-cd backend && .venv/Scripts/python -m alembic -x test=1 upgrade head
-cd backend && .venv/Scripts/python -m pytest
+# fill the two FROM DASHBOARD values, then one command does the rest:
+cd backend && .venv/Scripts/python -m scripts.bootstrap_test_env
 ```
 
 Until the test database password is filled in, DB-backed tests **skip cleanly**
