@@ -90,6 +90,47 @@ It **fails closed**: a target that has not positively identified itself as a
 test environment is treated as production. Assuming "unknown means safe" is how
 a guard quietly stops guarding.
 
+### Precedence, and every way the app can start
+
+Two incidents came from this one area, and both had the same shape: something
+*reported* one environment while *resolving* another. The invariant:
+
+> Whatever reports the environment must read exactly what resolves it.
+
+Resolution order — **later wins**, and a real environment variable beats all
+three files:
+
+```
+../.env  →  backend/.env  →  backend/.env.test  →  os.environ
+```
+
+`KEY=` read from a file means **empty string**, not "fall through". That is how
+`.env.test` detaches from the production Supabase connection strings, and it is
+the mechanism the dev launcher lost when it injected variables instead (see
+below). `backend/tests/test_env_precedence.py` pins all of it.
+
+| Start path | Reads | Guarded by |
+|---|---|---|
+| `uvicorn app.main:app` (from `backend/`) | all three files | launcher, when started via `dev:all` |
+| `npm run dev:all` | all three, loaded by Settings | `scripts/dev.ps1` refuses production |
+| `pytest` | all three, `.env.test` winning | `conftest.py` aborts before importing `app` |
+| `alembic` | all three | `alembic/env.py`, needs `-x test=1` or `-x allow_production=1` |
+| `python -m scripts.*` | all three | `guard_cli()` in each script's `__main__` |
+| Playwright | whatever the dev server resolved | inherits the launcher's guard |
+| Docker compose | `../.env` **plus** explicit overrides | services pin `USE_SUPABASE=false` |
+| CI | repository secrets only | `guard` job asserts production is refused |
+| Vercel production | platform environment variables | n/a — production is the intended target |
+
+The two failures, so neither is repeated:
+
+1. The guard merged `.env.test` off disk while pydantic-settings did not read
+   it, so a stale file made the guard answer "test" for a process wired to
+   production. Fixed by making `.env.test` a real `env_file`.
+2. The launcher exported `.env.test` into the environment, and **PowerShell
+   deletes a variable assigned an empty string** — so every blanking line
+   vanished and pydantic fell back to production. Fixed by removing the
+   exporter entirely and relying on file precedence.
+
 ### Where it runs
 
 - **pytest** — `tests/conftest.py` loads `backend/.env.test` and runs the guard
