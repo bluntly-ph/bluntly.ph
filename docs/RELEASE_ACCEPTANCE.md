@@ -5,7 +5,7 @@ written so another competent engineer can execute it without reconstructing a
 plan. Each section states what unblocks it, the exact commands, what a pass
 looks like, and what to do when it fails.
 
-Four things are blocked on the owner and nothing else is. They are
+Five things are blocked on the owner and nothing else is, and **E is live** - do that one first. They are
 independent — do them in any order, or in parallel.
 
 | Blocker | Unblocks | Owner action |
@@ -13,7 +13,8 @@ independent — do them in any order, or in parallel.
 | **A. Test database** | 125 backend tests, 58 milestone checks, moderator a11y spec | a Supabase password *or* a Docker permission |
 | **B. GitHub `workflow` scope** | CI activation | re-authorize the credential |
 | **C. PayPal sandbox** | FR-6 contractual acceptance | sandbox client id + secret |
-| **D. Production env vars** | rate limiting, and every production self-check | set `APP_ENV` and `REDIS_URL` in Vercel |
+| **E. PostgREST containment** | **a live data exposure** | apply `0027`-`0029` to production |
+| **F. Production env vars** | rate limiting, and every production self-check | set `APP_ENV` and `REDIS_URL` in Vercel |
 
 > **The verdict cannot be `CONTRACT READY` until C is executed.** FR-6 makes
 > PayPal payouts contractual, so its acceptance has to actually happen — not be
@@ -164,7 +165,92 @@ refunded twice.
 
 ---
 
-## D. Production configuration
+## E. PostgREST containment — DO THIS FIRST
+
+**Status: live exposure until the migration is applied.** Found 2026-08-20.
+
+An anonymous caller holding the Supabase publishable key — public by design —
+can read table rows directly over PostgREST, past the API and every serializer
+in it. 17 of 28 tables carry a `USING (true)` SELECT policy, which returns
+every row *and every column*:
+
+    answers  badges  earn_eligible_votes  membership_tiers  price_history
+    product_platforms  products  questions  referral_links  request_upvotes
+    review_contracts  review_requests  review_versions  review_votes
+    reviews  user_badges  users
+
+Including `users.email`, `users.password_hash`, `users.payout_account`,
+`reviews.receipt_key` and `reviews.affiliate_link`.
+
+**Not exposed** (no SELECT policy, so RLS denies by default): `sessions`,
+`email_otps`, `payouts`, `commissions`, `moderation_logs`, `token_transactions`,
+`review_comments`, `review_comment_votes`, `affiliate_postbacks`,
+`honesty_fund_distributions`, `alembic_version`. Session records and OTP codes —
+the two that would turn a read into an account takeover — were never reachable.
+
+**Writes were not possible.** Every INSERT/UPDATE/DELETE policy tests
+`= auth.uid()`, which is NULL for an anonymous caller, so RLS refused them. The
+grant itself was `arwdDxtm` (ALL), and TRUNCATE is the one verb RLS does not
+filter — but PostgREST cannot emit one, so it stayed latent. `0029` removes the
+grant regardless.
+
+### Apply
+
+```bash
+cd backend && alembic -x allow_production=1 upgrade head     # 0027, 0028, 0029
+```
+
+Or, faster, in the Supabase SQL editor:
+
+```sql
+REVOKE ALL   ON ALL TABLES    IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL   ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL   ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON TABLES FROM anon, authenticated;
+```
+
+The default-privileges line matters as much as the others: Supabase re-grants
+every newly created table to `anon`, so without it the next migration that adds
+a table reopens this silently.
+
+### Verify — anonymous must be refused
+
+```bash
+KEY=<publishable key from the Supabase dashboard>
+for t in users reviews review_versions products questions; do
+  curl -s -o /dev/null -w "%{http_code} $t\n" \
+    -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+    "https://byobedbhodhvocgrkrse.supabase.co/rest/v1/$t?select=id&limit=1"
+done
+```
+
+**Pass:** every line `401` or `403`. A `200` with `[]` is **not** a pass — that
+means the query still ran and simply matched nothing. Ask for `select=id` only;
+there is no reason to pull a row to prove a door is shut.
+
+### Verify — the application is unaffected
+
+It should be entirely unaffected: the API connects as `postgres` via SQLAlchemy,
+storage uses the service-role key, and `get_publishable_client()` is never
+called. Confirm anyway, because this is a privilege change.
+
+```bash
+for u in / /search /categories /compare /questions /requests /membership \
+         /api/v1/reviews/feed?limit=6 /api/v1/products?limit=5 \
+         /api/v1/questions /api/v1/requests /api/v1/membership-tiers; do
+  curl -s -o /dev/null -w "%{http_code} $u\n" "https://www.bluntly.ph$u"
+done
+```
+
+**Pass:** all `200`. Then storage separately — public product images and review
+photos still load, the private receipt bucket still refuses anonymous reads, and
+a moderator can still open a receipt through `GET /api/v1/reviews/{id}/receipt`
+(signed, 300s TTL).
+
+---
+
+## F. Production configuration
 
 **Found by audit on 2026-08-20, and the only finding here that is live in
 production right now.**
@@ -210,7 +296,52 @@ being that it now says so loudly.
 
 ---
 
-## E. Final release verification
+## G. Security incident response — password-hash exposure
+
+`users.password_hash` was readable. The values are Argon2id, so they are not
+passwords, but they are authentication material and suitable for offline attack.
+The decision below is the owner's; this section gathers the evidence needed to
+make it.
+
+**Do not run a mass password reset unless the decision is made deliberately.**
+The repository has no forced-reset state today, so "reset everyone" is not a
+one-command operation and would lock real users out of accounts they can still
+reach safely.
+
+| Level | Action | When it is the right call |
+|---|---|---|
+| **1 — Containment only** | Apply E, monitor. | No evidence of access beyond the audit itself, and the affected population is small and known. |
+| **2 — Containment + notification** | Tell affected users what was exposed, without claiming password compromise. | Any real user's email, payout account or review identity was reachable. |
+| **3 — Containment + forced reset** | Invalidate sessions and require new passwords. | Evidence of actual third-party reads, or a population large enough that offline attack is worth someone's time. |
+
+### Evidence to gather before choosing
+
+- **How long was it open?** The permissive policies date from the RLS migration
+  that created `users_select_public`. `git log` that file; treat its merge date
+  as the start of exposure.
+- **How many real accounts?** Production holds a small number of real users
+  after the fixture cleanup. Count non-fixture rows before deciding — the
+  cleanup manifest distinguishes them.
+- **Was it actually read?** Supabase logs REST requests. Look for `/rest/v1/*`
+  entries that are not this audit, separated by user agent and timestamp. The
+  application's own traffic never appears there, because it does not use
+  PostgREST — so *any* REST entry is worth reading closely.
+- **Session invalidation.** If passwords are reset, existing JWTs stay valid
+  until expiry unless sessions are revoked too; the `sessions` table is the
+  lever, and it was never exposed.
+- **Payout accounts** were exposed and are a separate notification question from
+  passwords.
+
+### Owner decision to record
+
+> Whether to notify users, and at which level. Level 2 is the conventional
+> floor once real users' email and payout details were reachable, even absent
+> evidence of a third-party read. Level 3 is not indicated on current evidence
+> and is not supported by a safe mechanism in the codebase today.
+
+---
+
+## H. Final release verification
 
 Once A, B and C are done, in this order:
 

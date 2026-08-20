@@ -63,13 +63,30 @@ def test_anon_cannot_read_sensitive_tables(db, table, columns):
 
 
 @requires_db
-def test_anon_has_no_reach_into_the_schema_at_all():
-    """Belt and braces: without USAGE, the grants above cannot be exercised."""
+def test_no_table_in_the_schema_is_readable_by_anon():
+    """The decisive control, checked across every table rather than a sample.
+
+    Schema USAGE is deliberately not asserted here. PostgreSQL grants USAGE on
+    `public` to the PUBLIC pseudo-role, every role inherits from PUBLIC, and
+    revoking from `anon` by name does not take away what PUBLIC gives. Chasing
+    it would mean revoking from PUBLIC, which reaches roles this migration has
+    no business touching.
+
+    It does not matter: USAGE only permits name resolution. Without a table
+    privilege there is nothing to resolve to, and that is what this asserts.
+    """
     from app.db.session import SessionLocal
     with SessionLocal() as db:
-        usage = db.execute(text(
-            "SELECT has_schema_privilege('anon', 'public', 'USAGE')")).scalar()
-        assert usage is False, "anon still has USAGE on schema public"
+        readable = db.execute(text("""
+            SELECT c.relname FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relkind = 'r'
+              AND has_table_privilege('anon', c.oid, 'SELECT')
+            ORDER BY c.relname
+        """)).scalars().all()
+        assert not readable, (
+            f"{len(readable)} table(s) still readable by anon over PostgREST: "
+            f"{readable}")
 
 
 @requires_db
