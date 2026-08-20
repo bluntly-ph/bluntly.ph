@@ -7,6 +7,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import MembershipTier
+from app.services.earnings import MAX_REVIEWER_SHARE_BPS
 
 
 class TierOut(BaseModel):
@@ -25,7 +26,13 @@ class TierOut(BaseModel):
 class TierUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
-    revenue_share_bps: int | None = Field(default=None, ge=0, le=10000)
+    # Bounded by the domain constant, not by 10000. Above
+    # MAX_REVIEWER_SHARE_BPS the fixed 30% Honesty Fund leaves the platform
+    # share negative, and split_commission_tiered raises ValueError - so a
+    # tier saved at 8000 would make every commission for that tier throw,
+    # one import batch at a time, long after the change was made.
+    revenue_share_bps: int | None = Field(
+        default=None, ge=0, le=MAX_REVIEWER_SHARE_BPS)
     payout_priority: int | None = Field(default=None, ge=0)
     benefits: dict | None = None
     is_active: bool | None = None

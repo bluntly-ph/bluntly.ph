@@ -16,6 +16,8 @@ from app.models.membership import MembershipTierConfig
 from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.membership import AssignTierRequest, TierOut, TierUpdate
+from app.models.moderation import ModerationLog
+from app.models.enums import ModerationAction, ModerationTargetType
 
 router = APIRouter(tags=["membership"])
 
@@ -37,12 +39,30 @@ def get_tier(code: MembershipTier, db: Session = Depends(get_db)) -> TierOut:
 @router.patch("/membership-tiers/{code}", response_model=TierOut,
               summary="Update a tier's config (moderator)")
 def update_tier(code: MembershipTier, payload: TierUpdate, db: Session = Depends(get_db),
-                _: User = Depends(require_role("moderator"))) -> TierOut:
+                moderator: User = Depends(require_role("moderator"))) -> TierOut:
     tier = db.scalar(select(MembershipTierConfig).where(MembershipTierConfig.code == code))
     if tier is None:
         raise NotFoundError("Membership tier not found.", code="tier_not_found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    changes = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(tier, field) for field in changes}
+    for field, value in changes.items():
         setattr(tier, field, value)
+
+    # A tier's revenue_share_bps decides what every reviewer in it earns, and
+    # this endpoint could change it without leaving a trace - while a role
+    # change, which moves no money at all, was logged. Values are recorded
+    # before and after because "who raised the special tier" is the question
+    # somebody will actually be asking.
+    db.add(ModerationLog(
+        log_id=f"mlog_{uuid.uuid4().hex[:10]}",
+        target_type=ModerationTargetType.user, target_ref=moderator.id,
+        moderator_id=moderator.id, action=ModerationAction.override,
+        notes=f"membership tier config changed: {code.value}",
+        context={"tier": code.value,
+                 "from": {k: str(v) for k, v in before.items()},
+                 "to": {k: str(v) for k, v in changes.items()}},
+    ))
     db.commit()
     db.refresh(tier)
     return TierOut.model_validate(tier)

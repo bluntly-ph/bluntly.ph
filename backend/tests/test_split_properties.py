@@ -117,3 +117,38 @@ class TestTheFlatSplit:
             expected = (split["gross_amount"] * Decimal("0.30")).quantize(
                 CENT, rounding=ROUND_HALF_UP)
             assert split["honesty_fund_share"] == expected
+
+
+class TestTheTierConfigCannotExceedWhatTheSplitAccepts:
+    """Two bounds on one number, in two files, with nothing keeping them equal.
+
+    `TierUpdate.revenue_share_bps` was capped at 10000 — a round number, not the
+    domain's. `MAX_REVIEWER_SHARE_BPS` is 7000, above which
+    `split_commission_tiered` raises. A moderator could therefore save a tier at
+    8000, and nothing would fail until the next commission import for that tier,
+    which would throw a ValueError mid-batch some time later.
+    """
+
+    def test_the_schema_bound_is_the_domain_bound(self):
+        from app.schemas.membership import TierUpdate
+        field = TierUpdate.model_fields["revenue_share_bps"]
+        ceiling = next((getattr(m, "le", None) for m in field.metadata
+                        if getattr(m, "le", None) is not None), None)
+        assert ceiling == MAX_REVIEWER_SHARE_BPS, (
+            f"TierUpdate allows {ceiling} but the split accepts at most "
+            f"{MAX_REVIEWER_SHARE_BPS}; a tier saved above that throws on every "
+            f"commission for it")
+
+    @pytest.mark.parametrize("bps", [0, 3000, 3500, 4000, MAX_REVIEWER_SHARE_BPS])
+    def test_anything_the_schema_accepts_the_split_accepts(self, bps):
+        from app.schemas.membership import TierUpdate
+        assert TierUpdate(revenue_share_bps=bps).revenue_share_bps == bps
+        split_commission_tiered(Decimal("1234.56"), bps)  # must not raise
+
+    def test_the_schema_refuses_what_the_split_would_reject(self):
+        from pydantic import ValidationError
+
+        from app.schemas.membership import TierUpdate
+        for bad in (MAX_REVIEWER_SHARE_BPS + 1, 10000):
+            with pytest.raises(ValidationError):
+                TierUpdate(revenue_share_bps=bad)
