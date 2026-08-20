@@ -20,8 +20,9 @@ import { test, expect } from "@playwright/test";
 //
 // /moderate was checked by hand on 2026-08-20 and had two defects, both fixed:
 // its card titles followed the page h1 with no h2 between them, and the
-// proof-of-purchase control presented a ~14px hit area. Re-check those two by
-// hand when that page changes.
+// proof-of-purchase control presented a ~14px hit area. Those are now covered
+// by e2e/moderator-a11y.spec.ts, which is opt-in on E2E_MODERATOR_TOKEN and
+// skips until the isolated test environment exists.
 const PAGES = ["/", "/search", "/categories", "/requests", "/questions"] as const;
 
 /** WCAG 2.5.8 AA. 44px is the AAA//platform guideline; 24 is the hard floor. */
