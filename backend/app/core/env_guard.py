@@ -68,11 +68,15 @@ _REPO_ROOT = os.path.dirname(_BACKEND_DIR)
 # to describe the connection the app will actually open, so the test values are
 # only visible here once `load_test_env()` has put them in os.environ, which is
 # also the moment they start affecting Settings.
+_TEST_ENV_FILE = os.path.join(_BACKEND_DIR, ".env.test")
 _ENV_FILES = (
     os.path.join(_REPO_ROOT, ".env"),
     os.path.join(_BACKEND_DIR, ".env"),
+    # Last, matching Settings' own precedence. It belongs here now that
+    # pydantic reads it directly; while it did not, including it made the
+    # guard claim "test" for a process that resolved production.
+    _TEST_ENV_FILE,
 )
-_TEST_ENV_FILE = os.path.join(_BACKEND_DIR, ".env.test")
 
 
 def _read_env_file(path: str) -> dict[str, str]:
@@ -165,9 +169,11 @@ def is_test_target() -> bool:
     checks the connection. A stale marker left in a shell must not be able to
     unlock production.
     """
-    # os.environ only: the marker counts once it has actually been loaded, not
-    # because a file mentioning it exists somewhere on disk.
-    return bool(os.getenv(TEST_ENV_MARKER))
+    if os.getenv(TEST_ENV_MARKER):
+        return True
+    # Settings reads .env.test directly, so a marker in that file is in force
+    # for the process whether or not anything exported it.
+    return bool(_read_env_file(_TEST_ENV_FILE).get(TEST_ENV_MARKER))
 
 
 def describe_target() -> str:

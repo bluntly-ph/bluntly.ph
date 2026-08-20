@@ -26,10 +26,11 @@ def env(tmp_path, monkeypatch):
     test_env = tmp_path / ".env.test"
     for path in (root_env, backend_env, test_env):
         path.write_text("", encoding="utf-8")
-    # _ENV_FILES is exactly what Settings reads. .env.test is separate and only
-    # counts once load_test_env() has put it into os.environ.
-    monkeypatch.setattr(env_guard, "_ENV_FILES", (str(root_env), str(backend_env)))
+    # Mirrors production exactly: _ENV_FILES is what Settings reads, in Settings'
+    # order, with .env.test LAST so it wins.
     monkeypatch.setattr(env_guard, "_TEST_ENV_FILE", str(test_env))
+    monkeypatch.setattr(env_guard, "_ENV_FILES",
+                        (str(root_env), str(backend_env), str(test_env)))
     for key in env_guard._KEYS + (env_guard.TEST_ENV_MARKER,):
         monkeypatch.delenv(key, raising=False)
 
@@ -103,21 +104,25 @@ def test_declared_test_target_is_allowed(env):
     env_guard.require_non_production("pytest")  # must not raise
 
 
-def test_an_unloaded_env_test_file_does_not_make_the_guard_say_test(env):
-    """The corrected semantics, pinned.
+def test_env_test_on_disk_counts_because_settings_reads_it(env):
+    """The inverse of what this test used to assert, and the reason why.
 
-    An earlier version merged .env.test straight off disk, so merely having the
-    file made the guard report "test" while pydantic-settings - which does not
-    read it - still resolved PRODUCTION from the root .env. The guard has to
-    describe the connection the app will actually open.
+    It previously required that a `.env.test` on disk NOT affect the verdict,
+    because pydantic-settings did not read that file - only a launcher that
+    exported it into the environment did. That launcher silently failed:
+    PowerShell deletes a variable assigned an empty string, so every `KEY=`
+    blanking line vanished, pydantic fell back to the production .env, and the
+    dev stack announced "test" while connected to production.
+
+    `.env.test` is now a real env_file with the highest precedence, so the
+    guard reads it too. Same file, same precedence, one answer.
     """
     env("root", SUPABASE_URL=f"https://{PROD_REF}.supabase.co")
     env("test", BLUNTLY_TEST_ENV="1", SUPABASE_URL="https://safe.supabase.co")
-    # Not loaded yet -> still production, and still refused.
-    assert env_guard.is_test_target() is False
-    assert env_guard.production_signals()
-    with pytest.raises(ProductionTargetError):
-        env_guard.require_non_production("pytest")
+    assert env_guard.is_test_target() is True
+    assert env_guard.production_signals() == [], (
+        "the test file overrides the production root .env, as Settings does")
+    env_guard.require_non_production("pytest")
 
 
 def test_environment_variable_overrides_the_file(env, monkeypatch):

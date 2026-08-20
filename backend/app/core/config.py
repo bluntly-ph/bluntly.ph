@@ -40,8 +40,21 @@ def _to_sqlalchemy_pg_url(raw: str) -> str:
 class Settings(BaseSettings):
     # The frontend and backend share the repo-root .env; also read a local
     # backend/.env if present. Unknown keys (e.g. NEXT_PUBLIC_*) are ignored.
+    # Order matters: pydantic-settings gives LATER files priority, so
+    # backend/.env.test overrides the repo-root .env when it exists.
+    #
+    # It has to be a real env file rather than something a launcher injects.
+    # The dev launcher used to export .env.test into the environment instead,
+    # and that silently failed: PowerShell DELETES a variable assigned an empty
+    # string, so every `KEY=` blanking line did nothing and pydantic fell back
+    # to the production .env. The stack reported "test" and connected to
+    # production. Read from the file and `KEY=` means empty, which is the
+    # semantics the blanking lines were written for.
+    #
+    # .env.test is gitignored and never deployed, so this has no effect in
+    # production.
     model_config = SettingsConfigDict(
-        env_file=("../.env", ".env"),
+        env_file=("../.env", ".env", ".env.test"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,

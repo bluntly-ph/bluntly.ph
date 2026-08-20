@@ -93,25 +93,15 @@ if (-not (Test-Path $python)) {
 # Both processes are checked as ONE environment. A frontend on test with a
 # backend on production (or the reverse) is worse than either alone, because
 # every symptom points at the wrong half.
-# Load backend/.env.test into THIS process, so both child processes inherit it.
-# Without this the probe could report "test" while uvicorn still read the
-# repo-root .env and connected to production - the two must be one environment,
-# and a frontend on test with a backend on production is worse than either
-# alone because every symptom points at the wrong half.
-$envTest = Join-Path $root 'backend/.env.test'
-if (Test-Path $envTest) {
-    Get-Content $envTest | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith('#') -and $line.Contains('=')) {
-            $k, $v = $line.Split('=', 2)
-            # A variable already exported wins, so CI and one-off overrides hold.
-            if (-not [Environment]::GetEnvironmentVariable($k.Trim())) {
-                Set-Item -Path "env:$($k.Trim())" -Value $v.Trim()
-            }
-        }
-    }
-    Write-Host "  loaded backend/.env.test into the dev environment" -ForegroundColor DarkGray
-}
+# backend/.env.test is read directly by pydantic-settings (see
+# app/core/config.py), so nothing needs exporting here. An earlier version of
+# this script injected it into the environment instead, and that silently
+# failed: PowerShell DELETES a variable assigned an empty string, so every
+# `KEY=` blanking line vanished and pydantic fell back to the production .env.
+# The stack announced "test" and connected to production.
+#
+# The frontend reads the repo-root .env for its NEXT_PUBLIC_* values and calls
+# the API server-side, so both halves follow the same backend target.
 
 $probeScript = Join-Path $root 'backend\scripts\print_env_target.py'
 $targetProbe = & $python $probeScript 2>&1
