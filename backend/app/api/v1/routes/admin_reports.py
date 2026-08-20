@@ -64,8 +64,8 @@ def report_queue(
     target_type: ModerationTargetType | None = Query(
         default=None, description="Filter to one content type."
     ),
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> ReportQueueResponse:
     limit = min(limit, 100)
     logs = report_service.list_reports(

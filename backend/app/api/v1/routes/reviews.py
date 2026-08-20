@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, Request, UploadFile, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -265,7 +265,7 @@ def get_receipt(review_id: uuid.UUID, db: Session = Depends(get_db),
 def list_reviews(db: Session = Depends(get_db),
                  user: User | None = Depends(get_optional_user),
                  product_id: uuid.UUID | None = None,
-                 include_unpublished: bool = False, limit: int = 50,
+                 include_unpublished: bool = False, limit: int = Query(50, ge=1, le=100),
                  sort: Literal["newest", "wilson"] = "newest") -> list[ReviewOut]:
     stmt = select(Review).where(Review.is_removed.is_(False))
     if product_id is not None:
@@ -288,7 +288,7 @@ def list_reviews(db: Session = Depends(get_db),
 # being parsed as a review UUID (which would 422).
 @router.get("/feed", response_model=list[FeedItemOut],
             summary="Public feed: published reviews joined with author + product")
-def review_feed(db: Session = Depends(get_db), limit: int = 8,
+def review_feed(db: Session = Depends(get_db), limit: int = Query(8, ge=1, le=100),
                 product_id: uuid.UUID | None = None,
                 author_id: uuid.UUID | None = None, category: str | None = None,
                 q: str | None = None,

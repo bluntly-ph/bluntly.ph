@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -148,7 +148,7 @@ def canonicalize_product(product_id: uuid.UUID, payload: ProductCanonicalize,
 
 
 @router.get("", response_model=list[ProductOut], summary="List products")
-def list_products(db: Session = Depends(get_db), limit: int = 50,
+def list_products(db: Session = Depends(get_db), limit: int = Query(50, ge=1, le=100),
                   q: str | None = None,
                   include_low_trust: bool = False) -> list[ProductOut]:
     stmt = select(Product)
