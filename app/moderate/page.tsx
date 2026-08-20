@@ -31,9 +31,14 @@ export default async function ModeratePage() {
           Approve with an affiliate link to monetize, publish without one, or reject.
         </p>
 
-        <div className="mt-6">
+        <section className="mt-6">
+          {/* The pending queue had no heading of its own, so its card titles
+              (h3) followed the page h1 directly and skipped a level. The other
+              two sections already carry an h2; this gives the first one the
+              same structure rather than demoting the cards. */}
+          <h2 className="sr-only">Reviews awaiting moderation</h2>
           <ModerationQueue initial={pending} />
-        </div>
+        </section>
 
         <section className="mt-10">
           <h2 className="text-[18px] font-bold text-[var(--text-primary)]">

@@ -152,7 +152,9 @@ function ModerationCard({
             type="button"
             onClick={() => void openReceipt()}
             disabled={receiptBusy}
-            className="inline-flex items-center gap-1 text-[var(--accent-primary)] hover:underline disabled:opacity-60"
+            // -my/py so the 12px label still presents a 24px hit area
+            // (WCAG 2.5.8) without changing how the row looks.
+            className="-my-1.5 inline-flex items-center gap-1 py-1.5 text-[var(--accent-primary)] hover:underline disabled:opacity-60"
           >
             <Receipt size={12} />
             {receiptBusy ? "opening…" : "proof of purchase"}
