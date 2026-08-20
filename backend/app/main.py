@@ -65,11 +65,19 @@ async def _no_shared_cache_for_authenticated_responses(request, call_next):
     must not be shared even though the anonymous version of it may be.
     """
     response = await call_next(request)
-    # Authorization only: the browser never calls this API directly. The Next
-    # server holds the session cookie and forwards a bearer token (lib/dal.ts,
-    # and the BFF proxy for client mutations), so a credentialed request to the
-    # backend always carries that header.
-    authenticated = bool(request.headers.get("authorization"))
+    # Authorization is how a credentialed request reaches this API today: the
+    # browser never calls it directly, the Next server holds the session cookie
+    # and forwards a bearer token (lib/dal.ts, and the BFF proxy for client
+    # mutations). A cookie is treated as a signal too, because that arrangement
+    # is an architectural fact rather than a guarantee - the day something calls
+    # the API from a browser, this should already be right rather than quietly
+    # having stopped being right.
+    #
+    # It costs nothing. These responses are `max-age=0, must-revalidate`
+    # already, so no shared cache is holding them anyway, and the theme cookie
+    # means plenty of anonymous requests carry one.
+    authenticated = bool(request.headers.get("authorization")
+                         or request.headers.get("cookie"))
     if authenticated:
         response.headers["Cache-Control"] = "private, no-store"
         # Belt and braces for any cache keying on the header rather than the
