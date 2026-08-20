@@ -36,6 +36,17 @@ services:
     environment:
       # Override host-facing URLs with in-network service names.
       DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      # env_file above is the repo-root .env, which is PRODUCTION. It sets
+      # USE_SUPABASE=true, and when that is true `effective_database_url`
+      # IGNORES the DATABASE_URL below and uses the Supabase pooler instead -
+      # so this container would have connected to the live database despite
+      # naming a local one. These lines pin it back to the compose stack.
+      USE_SUPABASE: "false"
+      SUPABASE_CONNECTION_STRING: ""
+      SUPABASE_CONNECTION_STRING_SESSION_POOLER: ""
+      SUPABASE_CONNECTION_STRING_TRANSACTION_POOLER: ""
+      BLUNTLY_TEST_ENV: "1"
+      APP_ENV: test
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
@@ -59,6 +70,17 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      # env_file above is the repo-root .env, which is PRODUCTION. It sets
+      # USE_SUPABASE=true, and when that is true `effective_database_url`
+      # IGNORES the DATABASE_URL below and uses the Supabase pooler instead -
+      # so this container would have connected to the live database despite
+      # naming a local one. These lines pin it back to the compose stack.
+      USE_SUPABASE: "false"
+      SUPABASE_CONNECTION_STRING: ""
+      SUPABASE_CONNECTION_STRING_SESSION_POOLER: ""
+      SUPABASE_CONNECTION_STRING_TRANSACTION_POOLER: ""
+      BLUNTLY_TEST_ENV: "1"
+      APP_ENV: test
       REDIS_URL: redis://redis:6379/0
     depends_on:
       redis:
@@ -74,6 +96,17 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://bluntly:bluntly@postgres:5432/bluntly
+      # env_file above is the repo-root .env, which is PRODUCTION. It sets
+      # USE_SUPABASE=true, and when that is true `effective_database_url`
+      # IGNORES the DATABASE_URL below and uses the Supabase pooler instead -
+      # so this container would have connected to the live database despite
+      # naming a local one. These lines pin it back to the compose stack.
+      USE_SUPABASE: "false"
+      SUPABASE_CONNECTION_STRING: ""
+      SUPABASE_CONNECTION_STRING_SESSION_POOLER: ""
+      SUPABASE_CONNECTION_STRING_TRANSACTION_POOLER: ""
+      BLUNTLY_TEST_ENV: "1"
+      APP_ENV: test
       REDIS_URL: redis://redis:6379/0
     depends_on:
       redis:

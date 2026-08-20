@@ -132,6 +132,30 @@ alembic upgrade head                        # REFUSED — pick one
 Nothing in the deploy pipeline runs alembic (Vercel builds the app; migrations
 are applied by hand), so requiring an explicit choice breaks no automation.
 
+### Docker is a second route to the test database
+
+The repo already carries a full local stack (`backend/docker-compose.yml`:
+Postgres + Redis + api, plus a `verify` overlay). On this machine Docker's
+engine is running — it owns port 5432 — but the CLI is permission-denied on
+`npipe:////./pipe/dockerDesktopLinuxEngine`, so the stack cannot be driven.
+
+That makes **two independent owner routes** to unblocking the DB-backed tests,
+and the Docker one may be cheaper:
+
+1. Supabase test project credential (see below), or
+2. fix Docker Desktop permissions, then
+   `cd backend && docker compose up -d postgres` and point
+   `backend/.env.test` at `postgresql+psycopg://bluntly:bluntly@localhost:5432/bluntly`.
+
+**The compose files carried a latent production hazard until 2026-08-20.** They
+load `env_file: ../.env` — production — which sets `USE_SUPABASE=true`, and
+when that is true `effective_database_url` **ignores** the `DATABASE_URL` the
+compose file sets and uses the production Supabase pooler instead. So
+`docker compose up` and the `verify` overlay (which runs the fixture-writing
+milestone verifier) would both have reached the live database while naming a
+local one. All four services now pin `USE_SUPABASE=false`, blank the Supabase
+connection strings, and declare themselves a test target.
+
 ### Setting up the test environment
 
 ```bash
