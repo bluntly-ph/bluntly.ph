@@ -112,3 +112,34 @@ def test_resend_never_puts_the_code_in_the_error(monkeypatch):
     with pytest.raises(email_adapter.EmailSendError) as exc:
         email_adapter.send_otp_email("someone@example.com", "918273")
     assert "918273" not in str(exc.value), "the one-time code reached the error string"
+
+
+# --------------------------------------------------------------------------
+# Cache directives on authenticated responses
+# --------------------------------------------------------------------------
+
+def test_authenticated_responses_are_never_shared_cacheable(client):
+    """A per-user payload must not be marked `public`.
+
+    The platform default was `public, max-age=0, must-revalidate` on every
+    response, /auth/me included. must-revalidate makes exploitation unlikely,
+    but `public` on per-user data is the wrong signal and it only takes one CDN
+    rule or one lenient intermediary for it to become one user's data served to
+    another.
+    """
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer whatever"})
+    cache = resp.headers.get("cache-control", "")
+    assert "private" in cache and "no-store" in cache, cache
+    assert "public" not in cache, cache
+    assert "Authorization" in resp.headers.get("vary", "")
+
+
+def test_anonymous_responses_keep_their_cacheability(client):
+    """The fix must key on credentials, not on the path.
+
+    The same endpoints serve both audiences - the feed returns `my_vote` only
+    when a token is present - so an anonymous read stays cacheable while the
+    credentialed version of the same route does not.
+    """
+    resp = client.get("/health")
+    assert "no-store" not in (resp.headers.get("cache-control") or "")

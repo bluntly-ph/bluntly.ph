@@ -48,6 +48,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def _no_shared_cache_for_authenticated_responses(request, call_next):
+    """Mark any response produced for an authenticated caller as private.
+
+    The platform's default was `public, max-age=0, must-revalidate` on every
+    response, including `/auth/me`. `max-age=0` plus `must-revalidate` means a
+    shared cache has to revalidate before reuse, so this was unlikely to be
+    exploitable - but `public` on a per-user payload is the wrong signal to
+    send, and it only takes one CDN rule or one lenient intermediary for it to
+    become one user's data served to another.
+
+    Keyed on the request carrying credentials rather than on the path, because
+    the same endpoints serve both anonymous and authenticated readers: the
+    review feed returns `my_vote` when a token is present, and that response
+    must not be shared even though the anonymous version of it may be.
+    """
+    response = await call_next(request)
+    # Authorization only: the browser never calls this API directly. The Next
+    # server holds the session cookie and forwards a bearer token (lib/dal.ts,
+    # and the BFF proxy for client mutations), so a credentialed request to the
+    # backend always carries that header.
+    authenticated = bool(request.headers.get("authorization"))
+    if authenticated:
+        response.headers["Cache-Control"] = "private, no-store"
+        # Belt and braces for any cache keying on the header rather than the
+        # directive.
+        response.headers["Vary"] = "Authorization, Cookie"
+    return response
+
+
 register_exception_handlers(app)
 
 # Health + public referral redirect at root (no auth, no version prefix).
