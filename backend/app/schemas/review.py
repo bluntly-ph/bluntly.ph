@@ -6,9 +6,10 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.models.enums import EarnEligibleStatus, Verdict, VerificationStatus, VoteDirection
+from app.schemas.urls import web_url_or_none
 
 
 class VoteIn(BaseModel):
@@ -36,6 +37,14 @@ class ReviewCreate(BaseModel):
     pros: list[str] = Field(default_factory=list, max_length=10)
     cons: list[str] = Field(default_factory=list, max_length=10)
     photo_url: str | None = None
+
+    # http(s) only. The route also proves the object is this author's upload
+    # (_own_photo_or_403), which is the stronger check - but a scheme guard at
+    # the boundary costs nothing and does not depend on a route remembering.
+    @field_validator("photo_url")
+    @classmethod
+    def _only_web_photo(cls, value: str | None) -> str | None:
+        return web_url_or_none(value, field="Photo links")
     # Object key from POST /reviews/receipt, not a URL. The route verifies the
     # key was uploaded by this caller before it is stored.
     receipt_key: str | None = None
@@ -55,6 +64,14 @@ class ReviewUpdate(BaseModel):
     pros: list[str] | None = Field(default=None, max_length=10)
     cons: list[str] | None = Field(default=None, max_length=10)
     photo_url: str | None = None
+
+    # http(s) only. The route also proves the object is this author's upload
+    # (_own_photo_or_403), which is the stronger check - but a scheme guard at
+    # the boundary costs nothing and does not depend on a route remembering.
+    @field_validator("photo_url")
+    @classmethod
+    def _only_web_photo(cls, value: str | None) -> str | None:
+        return web_url_or_none(value, field="Photo links")
     receipt_key: str | None = None
     price_paid: Decimal | None = None
     change_note: str | None = None
@@ -84,6 +101,14 @@ class ReviewOut(BaseModel):
     pros: list | None = None
     cons: list | None = None
     photo_url: str | None = None
+
+    # http(s) only. The route also proves the object is this author's upload
+    # (_own_photo_or_403), which is the stronger check - but a scheme guard at
+    # the boundary costs nothing and does not depend on a route remembering.
+    @field_validator("photo_url")
+    @classmethod
+    def _only_web_photo(cls, value: str | None) -> str | None:
+        return web_url_or_none(value, field="Photo links")
     # Deliberately NO receipt locator on any response model.
     #
     # This schema is returned by GET /reviews and GET /reviews/{id}, both of

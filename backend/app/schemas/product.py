@@ -9,6 +9,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.categories import CATEGORIES, normalize_category
+from app.schemas.urls import web_url_or_none
 from app.models.enums import Platform, ProductStatus
 
 
@@ -32,6 +33,13 @@ class ProductCreate(BaseModel):
     # enforces it by role, because a moderator adding a product directly has no
     # marketplace listing to point at.
     source_url: str | None = Field(default=None, max_length=2048)
+
+    # The moderator queue renders this as a clickable link (ModerationQueue.tsx),
+    # so it is a submitter-chosen string that a moderator activates.
+    @field_validator("source_url")
+    @classmethod
+    def _only_web_source(cls, value: str | None) -> str | None:
+        return web_url_or_none(value, field="Listing links")
 
     # A category the frontend cannot render is worse than none: the product
     # simply vanishes from category navigation, silently. See app/core/categories.py.

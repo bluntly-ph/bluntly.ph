@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.urls import web_url_or_none
 from app.models.enums import RequestStatus
 
 
@@ -16,6 +17,11 @@ class RequestCreate(BaseModel):
     product_id: uuid.UUID | None = None
     # A marketplace link for humans. Stored, shown, NEVER fetched (no scraping).
     source_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("source_url")
+    @classmethod
+    def _only_web_source(cls, value: str | None) -> str | None:
+        return web_url_or_none(value, field="Listing links")
 
 
 class FulfillRequest(BaseModel):
