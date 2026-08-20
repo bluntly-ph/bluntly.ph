@@ -81,12 +81,26 @@ def _call(api_path: str, extra: dict[str, Any], *, timeout: float = 30.0) -> dic
     except httpx.HTTPError as exc:
         raise LazadaError(f"Lazada request failed: {exc}") from exc
     if response.status_code >= 400:
-        raise LazadaError(f"Lazada HTTP {response.status_code}: {response.text[:300]}")
-    body = response.json()
+        # The body is not included: the signed request carries app_key and a
+        # signature, and an error response can echo request context back. The
+        # status is what an operator acts on; the body is in Lazada's console.
+        raise LazadaError(f"Lazada HTTP {response.status_code}")
+    # A 200 carrying a non-JSON body is a provider fault, and it has to arrive
+    # as LazadaError like every other failure here - callers catch that, not
+    # JSONDecodeError. Same class of bug as the PayPal OAuth parse.
+    try:
+        body = response.json()
+    except Exception as exc:  # noqa: BLE001
+        raise LazadaError("Lazada returned a non-JSON response") from exc
     # Their envelope reports failure in-band with a 200.
     code = str(body.get("code", "0"))
     if code not in ("0", "", "None"):
-        raise LazadaError(f"Lazada error {code}: {body.get('message') or body}")
+        # `or body` would fall back to dumping the whole payload whenever the
+        # provider omits a message - which is exactly the case where the body
+        # is least predictable. Code plus message, or code alone.
+        message = body.get("message")
+        raise LazadaError(f"Lazada error {code}: {message}" if message
+                          else f"Lazada error {code}")
     return body
 
 

@@ -76,6 +76,11 @@ def send_otp_email(to: str, code: str) -> None:
     except httpx.HTTPError as exc:
         raise EmailSendError(f"Resend unreachable: {exc}") from exc
     if response.status_code >= 400:
-        # Never include the code here — this string reaches logs and trackers.
-        raise EmailSendError(
-            f"Resend rejected the send ({response.status_code}): {response.text}")
+        # Never include the code here - this string reaches logs and trackers.
+        #
+        # And never the provider's body either. It echoes the recipient address
+        # back, and otp_service logs this message alongside the address it
+        # already records, so the body duplicated PII into the log for every
+        # failed send. The status is what an operator can act on; the body is
+        # in the provider's own dashboard.
+        raise EmailSendError(f"Resend rejected the send (HTTP {response.status_code})")
