@@ -145,6 +145,24 @@ deployment. A destructive-first migration took the API down on 2026-08-19;
 `main` auto-deploys to Vercel. Migrations are **not** part of the deploy — they
 are applied by hand, deliberately, which is why they need an explicit target.
 
+## Operational scripts
+
+All of these refuse production unless the entry named below says otherwise, and
+each prints the environment it resolved before doing anything.
+
+| Command (from `backend/`) | What it does |
+|---|---|
+| `python -m scripts.bootstrap_test_env` | Whole test branch in one gated command: validate target → migrate → verify revision → pytest → milestone verification |
+| `python -m scripts.check_migration_safety --all` | Flags contracting migrations and the rollout each implies. **Run before every migration** |
+| `python -m scripts.print_env_target` | Prints the resolved environment and `SAFE`/`PRODUCTION`. Used by the dev launcher |
+| `python -m scripts.mint_e2e_moderator` | Throwaway moderator for `e2e/moderator-a11y.spec.ts`. Test environment only, no override |
+| `python -m scripts.cleanup_fixtures` | Removes `@example.com` test fixtures. Dry-run by default; needs `--export DIR --apply --allow-production` |
+| `python -m scripts.hide_test_content` | Hides test content without deleting. Accepts `--allow-production` |
+| `python -m scripts.seed_product_images --from-file …` | One-off product image seeding from a checked-in URL map. Accepts `--allow-production` |
+| `python -m scripts.migrate_receipts --copy` / `--purge` | Receipt storage migration. Accepts `--allow-production` |
+| `python -m scripts.verify_milestones` | 58 behavioural milestone checks. **Writes fixtures and does not clean up** — test environment only |
+| `python -m scripts.reset_and_seed` | `TRUNCATE`s every content table. **No production override at all** |
+
 ## Deeper documentation
 
 | Document | What it covers |
