@@ -23,14 +23,18 @@ Laban Konsyumer Inc., evaluated against ISO/IEC 25010:2011.
 pointed at it.** On 2026-08-19 the full test suite was run against production
 and created hundreds of fixture reviews on the live site.
 
-Automated commands are now blocked from production in code
-(`backend/app/core/env_guard.py`). Two things still deserve your attention:
+Production is now refused in code (`backend/app/core/env_guard.py`) for
+pytest, every writing script, Alembic, **and** the local dev launcher:
 
-- **`npm run dev:all` reads the repo-root `.env`, which is production.**
-  Clicking around the local app writes to the live database. The guard covers
-  automated commands; running the app is a deliberate act.
-- **`alembic` refuses to run without an explicit target.** Use
-  `-x test=1` or `-x allow_production=1`.
+- **`npm run dev:all` stops** if it resolves to production, and uses
+  `backend/.env.test` when that file exists. `-AllowProduction` is the
+  deliberate escape hatch for read-only debugging.
+- **`alembic` refuses without an explicit target.** Use `-x test=1` or
+  `-x allow_production=1`.
+
+Do not assume the guard is decorative: it has already caught three real
+mistakes, including a launcher that announced "test" while connected to
+production because PowerShell deletes a variable assigned an empty string.
 
 Full detail, including the expand→contract migration rules, is in
 [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md). Read it before your first
@@ -44,7 +48,7 @@ migration.
 |---|---|
 | Frontend | Next.js 16 App Router (Turbopack), React 19, TypeScript, Tailwind v4 bridged to design tokens |
 | Backend | FastAPI + SQLAlchemy + Alembic, deployed as a Vercel Python function |
-| Database | PostgreSQL 17 on Supabase (`ap-southeast-1`), 29 tables, RLS on every table |
+| Database | PostgreSQL 17 on Supabase (`ap-southeast-1`), 28 tables, RLS on every table |
 | Auth | **App-native**, not Supabase Auth (ADR-010/011): passwordless email OTP, Argon2id, HS256 JWT |
 | Storage | Supabase Storage — three public buckets plus a **private** `review-receipts` |
 | Jobs | Celery: PII retention, nightly Wilson re-decay, monthly Honesty Fund |
@@ -79,8 +83,8 @@ cp .env.example .env                       # frontend + shared
 cp backend/.env.example backend/.env       # backend (optional; root .env is read too)
 ```
 
-`Settings` reads `../.env` then `backend/.env`; real environment variables win
-over both. Never commit an `.env` — only the `.example` templates are tracked,
+`Settings` reads `../.env`, then `backend/.env`, then `backend/.env.test` —
+later files win, and real environment variables win over all of them. Never commit an `.env` — only the `.example` templates are tracked,
 via explicit `!` negations at the end of `.gitignore`.
 
 ## Local development
@@ -91,8 +95,9 @@ npm run dev:all      # Next + FastAPI together
 npm run dev:stop
 ```
 
-Open http://localhost:3000. **Note the warning above: this targets production
-by default.**
+Open http://localhost:3000. With `backend/.env.test` present this targets the
+test project; without it, the launcher refuses to start rather than silently
+using production.
 
 ## Test environment
 
