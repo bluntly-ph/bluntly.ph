@@ -124,18 +124,7 @@ jobs:
         if: steps.gate.outputs.configured == 'true'
         working-directory: backend
         run: pip install -e ".[dev]" || pip install -r requirements.txt
-      - name: Migrate the test database
-        if: steps.gate.outputs.configured == 'true'
-        working-directory: backend
-        env:
-          BLUNTLY_TEST_ENV: "1"
-          APP_ENV: test
-          USE_SUPABASE: "true"
-          SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.TEST_SUPABASE_SECRET_KEY }}
-          SUPABASE_CONNECTION_STRING_SESSION_POOLER: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
-        run: python -m alembic -x test=1 upgrade head
-      - name: pytest (full)
+      - name: Migrate, test, and verify milestones
         if: steps.gate.outputs.configured == 'true'
         working-directory: backend
         env:
@@ -147,7 +136,11 @@ jobs:
           SUPABASE_CONNECTION_STRING_SESSION_POOLER: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
           EMAIL_PROVIDER: console
           JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789ab
-        run: python -m pytest -q
+        # One gated command: validate the target, refuse production, migrate to
+        # head, verify the revision, run pytest, run milestone verification.
+        # It exits non-zero on any stage, and stops before touching anything if
+        # the target is not a declared non-production test environment.
+        run: python -m scripts.bootstrap_test_env
 
   frontend:
     name: Frontend
