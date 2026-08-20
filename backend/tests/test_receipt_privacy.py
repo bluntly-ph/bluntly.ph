@@ -316,3 +316,101 @@ def test_no_public_review_schema_declares_a_receipt_locator():
         model = getattr(rs, name)
         leaked = set(model.model_fields) & set(FORBIDDEN_KEYS)
         assert not leaked, f"{name} exposes {leaked}"
+
+
+# --------------------------------------------------------------------------
+# Receipt-view audit logging (owner-approved privacy/security enhancement)
+# --------------------------------------------------------------------------
+
+def _audit_rows(review_id: str) -> list:
+    from sqlalchemy import text
+
+    from app.db.session import SessionLocal
+    with SessionLocal() as db:
+        return db.execute(text(
+            "SELECT moderator_id::text, action::text, target_ref::text, context "
+            "FROM moderation_logs WHERE action = 'receipt_view' AND target_ref = :r"
+        ), {"r": review_id}).mappings().all()
+
+
+@requires_db
+def test_moderator_receipt_view_is_audited_without_any_locator(client):
+    """A moderator opening evidence leaves a record of WHO and WHICH REVIEW.
+
+    And nothing else. The object key, the signed URL and anything off the
+    receipt are precisely what must not end up in a log that outlives the
+    request.
+    """
+    author_id, author_token, _ = register_and_token(client)
+    _, stranger_token, _ = register_and_token(client)
+    mod_id, mod_token, _ = register_and_token(client, role="moderator")
+    ah = _auth(author_token)
+
+    product_id = client.post("/api/v1/products", headers=ah,
+                             json={"name": f"Audit {uuid.uuid4().hex[:8]}",
+                                   "category": "electronics"}).json()["id"]
+    key = storage.upload_receipt(uuid.UUID(author_id), JPEG)
+    review_id = client.post("/api/v1/reviews", headers=ah, json={
+        "product_id": product_id, "title": "Receipt audit fixture",
+        "discussion": "Fixture for the receipt-view audit regression suite.",
+        "verdict": "it_depends", "star_rating": 3, "receipt_key": key}).json()["id"]
+
+    try:
+        assert _audit_rows(review_id) == [], "nothing viewed yet"
+
+        # Anonymous: refused, and must not produce a successful-access record.
+        assert client.get(f"/api/v1/reviews/{review_id}/receipt").status_code == 401
+        assert _audit_rows(review_id) == [], "a refused request must not be audited"
+
+        # Unrelated user: refused, still no record.
+        assert client.get(f"/api/v1/reviews/{review_id}/receipt",
+                          headers=_auth(stranger_token)).status_code == 404
+        assert _audit_rows(review_id) == [], "a 404 must not be audited"
+
+        # The author reading their OWN evidence is ordinary use, not moderation.
+        assert client.get(f"/api/v1/reviews/{review_id}/receipt",
+                          headers=ah).status_code == 200
+        assert _audit_rows(review_id) == [], "author self-access is not a moderation event"
+
+        # The moderator: exactly one record.
+        got = client.get(f"/api/v1/reviews/{review_id}/receipt", headers=_auth(mod_token))
+        assert got.status_code == 200
+        rows = _audit_rows(review_id)
+        assert len(rows) == 1, f"expected exactly one audit row, got {len(rows)}"
+        row = rows[0]
+        assert row["moderator_id"] == mod_id
+        assert row["target_ref"] == review_id
+        assert row["action"] == "receipt_view"
+
+        # No locator anywhere in the record.
+        blob = str(dict(row))
+        assert key not in blob, "the object key leaked into the audit row"
+        assert storage.RECEIPT_BUCKET not in blob
+        assert "token=" not in blob, "a signed URL leaked into the audit row"
+        assert "http" not in blob.lower(), "a URL leaked into the audit row"
+
+        # A second view is a second access and is recorded as one.
+        client.get(f"/api/v1/reviews/{review_id}/receipt", headers=_auth(mod_token))
+        assert len(_audit_rows(review_id)) == 2, "each access is its own event"
+
+        # Authorization itself is unchanged by the logging.
+        assert client.get(f"/api/v1/reviews/{review_id}/receipt").status_code == 401
+        assert client.get(f"/api/v1/reviews/{review_id}/receipt",
+                          headers=_auth(stranger_token)).status_code == 404
+    finally:
+        from sqlalchemy import text
+
+        from app.db.session import SessionLocal
+        with SessionLocal() as db:
+            db.execute(text("DELETE FROM moderation_logs WHERE target_ref = :r"),
+                       {"r": review_id})
+            db.commit()
+        _delete_review(review_id)
+        storage.delete_receipt_object(key)
+
+
+def test_receipt_view_is_a_declared_moderation_action():
+    """Structural: the enum value exists, so the migration cannot be forgotten."""
+    from app.models.enums import ModerationAction
+
+    assert ModerationAction.receipt_view.value == "receipt_view"

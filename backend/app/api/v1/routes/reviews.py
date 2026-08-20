@@ -21,7 +21,13 @@ from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.comment import ReviewComment
-from app.models.enums import MemberRole, ModerationTargetType, VoteDirection
+from app.models.moderation import ModerationLog
+from app.models.enums import (
+    MemberRole,
+    ModerationAction,
+    ModerationTargetType,
+    VoteDirection,
+)
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
@@ -216,6 +222,24 @@ def get_receipt(review_id: uuid.UUID, db: Session = Depends(get_db),
         # The row points at an object that is no longer in the bucket.
         raise NotFoundError("No proof of purchase on this review.",
                             code="receipt_not_found")
+
+    # Audit AFTER authorization and AFTER the object is known to exist, so a
+    # refused or empty request never writes a successful-access record. Only a
+    # moderator is logged: an author opening their own evidence is not a
+    # moderation action, and recording it would turn the audit trail into a
+    # log of ordinary use.
+    if _is_moderator(user) and user.id != review.author_id:
+        db.add(ModerationLog(
+            log_id=f"mlog_{uuid.uuid4().hex[:10]}",
+            moderator_id=user.id,
+            action=ModerationAction.receipt_view,
+            target_type=ModerationTargetType.review,
+            target_ref=review.id,
+            # Deliberately no context: the object key, the signed URL and
+            # anything off the receipt are exactly what must not be recorded.
+        ))
+        db.commit()
+
     return ReceiptAccess(url=url, expires_in=ttl)
 
 

@@ -122,6 +122,11 @@ class ModerationAction(str, enum.Enum):
     affiliate_link_revoke = "affiliate_link_revoke"
     publish = "publish"
     unpublish = "unpublish"
+    # Privacy/security enhancement (owner-approved, not contractually required):
+    # a moderator opening private proof of purchase leaves an audit trail. The
+    # record carries WHO and WHICH REVIEW and nothing else - never the object
+    # key, the signed URL, or anything from the receipt itself.
+    receipt_view = "receipt_view"
 
 
 class ModerationReason(str, enum.Enum):
