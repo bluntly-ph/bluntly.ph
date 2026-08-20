@@ -141,3 +141,30 @@ def register_and_token(client, role: str = "user") -> tuple[str, str, str]:
             db.close()
         token = create_access_token(uuid.UUID(uid), role)
     return uid, token, email
+
+
+def owned_photo_url(headers: dict) -> str:
+    """A proof-photo URL the caller in `headers` genuinely owns.
+
+    Reviews used to accept any string as `photo_url`, and since
+    verification_status is derived from it being non-null, that made `verified`
+    self-assertable - which also unlocks earning eligibility (FR-6) and makes
+    FR-8's first fraud layer free to bypass. Ownership is enforced now, so
+    fixtures have to hold a real one.
+
+    Derived rather than uploaded: hitting Supabase Storage in every review
+    fixture would make the suite slow and network-dependent for a value the
+    server only pattern-matches. `upload_review_photo` writes
+    `<REVIEW_BUCKET>/<user_id>/<uuid>.<ext>`, and that shape is what is checked.
+    """
+    import uuid as _uuid
+
+    from fastapi.testclient import TestClient
+
+    from app.core.config import settings
+    from app.main import app
+    from app.services.storage import REVIEW_BUCKET
+
+    uid = TestClient(app).get("/api/v1/auth/me", headers=headers).json()["id"]
+    base = (settings.supabase_url or "https://test.supabase.co").rstrip("/")
+    return f"{base}/storage/v1/object/public/{REVIEW_BUCKET}/{uid}/{_uuid.uuid4().hex}.jpg"

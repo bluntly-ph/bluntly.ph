@@ -81,7 +81,14 @@ class Harness:
                 "discussion": f"Milestone verification review {uuid.uuid4().hex[:6]}.",
                 "verdict": "yes_absolutely" if stars >= 3 else "hard_pass"}
         if photo:
-            body["photo_url"] = "https://example.com/p.jpg"
+            # Must be a photo this caller genuinely owns: `verified` is derived
+            # from photo_url, so the API rejects an arbitrary string (FR-3,
+            # FR-8 layer 1). Derived rather than uploaded - the server
+            # pattern-matches the owning prefix.
+            uid = self.c.get("/api/v1/auth/me", headers=h).json()["id"]
+            base = (settings.supabase_url or "https://test.supabase.co").rstrip("/")
+            body["photo_url"] = (f"{base}/storage/v1/object/public/"
+                                 f"review-photos/{uid}/{uuid.uuid4().hex}.jpg")
         return self.c.post("/api/v1/reviews", headers=h, json=body).json()["id"]
 
 

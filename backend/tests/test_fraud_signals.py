@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid as _uuid
 
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 from tests.test_votes_api import make_published_review
 
 
@@ -43,7 +43,7 @@ def test_duplicate_content_flags_with_duplicate_of(client):
     def make(discussion: str) -> str:
         body = {"product_id": pid, "title": "Review", "discussion": discussion,
                 "verdict": "yes_absolutely", "star_rating": 4,
-                "photo_url": "https://example.com/proof.jpg"}
+                "photo_url": owned_photo_url(ah)}
         return client.post("/api/v1/reviews", headers=ah, json=body).json()["id"]
 
     original = make(long_body)
@@ -160,7 +160,7 @@ def test_fraud_signals_never_mutate_review_state(client):
         return client.post("/api/v1/reviews", headers=ah, json={
             "product_id": pid, "title": "Dup", "discussion": discussion,
             "verdict": "yes_absolutely", "star_rating": 4,
-            "photo_url": "https://example.com/proof.jpg"}).json()["id"]
+            "photo_url": owned_photo_url(ah)}).json()["id"]
 
     first = make(body_text)
     assert client.post(f"/api/v1/admin/reviews/{first}/publish", headers=mh).status_code == 200

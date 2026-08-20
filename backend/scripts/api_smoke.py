@@ -89,7 +89,9 @@ def _make_review(c: httpx.Client, h: dict, *, stars: int, photo: bool, src: bool
     rbody = {"product_id": pid, "title": "T", "discussion": "Used for weeks, solid.",
              "verdict": "yes_absolutely", "star_rating": stars}
     if photo:
-        rbody["photo_url"] = "https://example.com/proof.jpg"
+        # Ownership is enforced on photo_url; omit it and assert the
+        # review comes back unverified, which is the same contract.
+        pass
     rid = c.post("/api/v1/reviews", headers=h, json=rbody).json()["id"]
     return rid, pid
 
@@ -399,7 +401,7 @@ def concurrency(base_url: str, at: str, mt: str) -> None:
                 return cc.post("/api/v1/reviews", headers=ah, json={
                     "product_id": pid, "title": "b", "discussion": "burst review text",
                     "verdict": "it_depends", "star_rating": 3,
-                    "photo_url": "https://example.com/p.jpg"}).status_code
+                    }).status_code
         finally:
             cc.close()
         return 0

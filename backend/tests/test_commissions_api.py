@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.services.earnings import split_commission_tiered
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 SHOPEE_URL = "https://shopee.ph/product/abc-i.123.456"
 HEADER = "click_ref,order_ref,gross_amount,currency,order_status,platform"
@@ -70,7 +70,7 @@ def make_click(client, author_headers, mod_headers, *, name: str) -> tuple[str, 
                       json={"name": name, "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Great", "discussion": f"{name} held up well.",
             "verdict": "yes_absolutely", "star_rating": 4,
-            "photo_url": "https://example.com/proof.jpg"}
+            "photo_url": owned_photo_url(author_headers)}
     rid = client.post("/api/v1/reviews", headers=author_headers, json=body).json()["id"]
     attach = client.post(f"/api/v1/admin/reviews/{rid}/referral-link", headers=mod_headers,
                          json={"url": SHOPEE_URL, "platform": "shopee"})

@@ -69,6 +69,29 @@ def upload_avatar(user_id: uuid.UUID, data: bytes) -> str:
     return bucket.get_public_url(path)
 
 
+def review_photo_belongs_to(url: str, user_id: uuid.UUID) -> bool:
+    """True only if `url` is a review photo THIS user uploaded through us.
+
+    FR-3 makes the product photograph the thing that turns a review
+    "verified", and FR-8 layer 1 states the deterrent plainly: faking a review
+    should cost at least what the product costs. Both collapse if the field is
+    just a string - `photo_url: "https://anything"` self-certifies a review as
+    verified, which also unlocks earning eligibility under FR-6.
+
+    So the value has to be one of our own objects, in the public review bucket,
+    under the submitting user's prefix. `upload_review_photo` writes exactly
+    `.../<REVIEW_BUCKET>/<user_id>/<uuid>.<ext>`, so the check is the same
+    shape as `receipt_key_belongs_to`.
+    """
+    if not url:
+        return False
+    marker = f"/{REVIEW_BUCKET}/"
+    if marker not in url:
+        return False
+    path = url.split(marker, 1)[1].split("?", 1)[0]
+    return path.split("/", 1)[0] == str(user_id) if "/" in path else False
+
+
 def delete_avatar_object(url: str) -> None:
     """Best-effort removal of a previously uploaded object.
 

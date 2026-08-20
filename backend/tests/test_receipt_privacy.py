@@ -25,7 +25,7 @@ import pytest
 
 from app.core.errors import AppError
 from app.services import storage
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
@@ -201,7 +201,7 @@ def test_receipt_locator_never_reaches_an_unauthorized_caller(client):
         "product_id": product_id, "title": "Receipt privacy fixture",
         "discussion": "Fixture for the receipt privacy regression suite.",
         "verdict": "it_depends", "star_rating": 3,
-        "photo_url": "https://example.com/proof.jpg", "receipt_key": key})
+        "photo_url": owned_photo_url(ah), "receipt_key": key})
     assert created.status_code == 201, created.text
     review_id = created.json()["id"]
     stolen_id = None
@@ -414,3 +414,60 @@ def test_receipt_view_is_a_declared_moderation_action():
     from app.models.enums import ModerationAction
 
     assert ModerationAction.receipt_view.value == "receipt_view"
+
+
+# --------------------------------------------------------------------------
+# Proof-photo forgery (FR-3 verification, FR-8 layer 1)
+# --------------------------------------------------------------------------
+
+def test_review_photo_ownership_rules():
+    """`verified` must not be self-assertable with an arbitrary string.
+
+    review_service derives verification_status from photo_url being non-null,
+    and verified is what unlocks earning eligibility (FR-6). If any string
+    counts, FR-8's first fraud layer - "faking a review should cost at least
+    what the product costs" - is free to bypass.
+    """
+    mine, theirs = uuid.uuid4(), uuid.uuid4()
+    base = f"https://x.supabase.co/storage/v1/object/public/{storage.REVIEW_BUCKET}"
+
+    assert storage.review_photo_belongs_to(f"{base}/{mine}/abc.jpg", mine) is True
+    # Someone else's upload.
+    assert storage.review_photo_belongs_to(f"{base}/{theirs}/abc.jpg", mine) is False
+    # Not ours at all - the plain forgery.
+    assert storage.review_photo_belongs_to("https://example.com/anything.jpg", mine) is False
+    assert storage.review_photo_belongs_to("", mine) is False
+    assert storage.review_photo_belongs_to("not-a-url", mine) is False
+    # Right host, wrong bucket: avatars are public and self-uploadable, so an
+    # avatar must not double as proof of purchase.
+    avatars = base.replace(storage.REVIEW_BUCKET, storage.AVATAR_BUCKET)
+    assert storage.review_photo_belongs_to(f"{avatars}/{mine}/a.jpg", mine) is False
+    # A query string must not smuggle the prefix past the check.
+    assert storage.review_photo_belongs_to(f"{base}/{theirs}/a.jpg?u={mine}", mine) is False
+
+
+@requires_db
+def test_a_forged_proof_photo_cannot_make_a_review_verified(client):
+    _, token, _ = register_and_token(client)
+    headers = _auth(token)
+    product_id = client.post("/api/v1/products", headers=headers,
+                             json={"name": f"Forge {uuid.uuid4().hex[:8]}",
+                                   "category": "electronics"}).json()["id"]
+    body = {"product_id": product_id, "title": "forged proof",
+            "discussion": "Attempting to self-certify as verified with a made-up photo URL.",
+            "verdict": "yes_absolutely", "star_rating": 5,
+            "photo_url": "https://example.com/not-my-photo.jpg"}
+    resp = client.post("/api/v1/reviews", headers=headers, json=body)
+    assert resp.status_code == 403, (
+        f"an arbitrary photo_url was accepted (HTTP {resp.status_code}) - "
+        "verified status is forgeable")
+    assert resp.json().get("code") == "photo_not_owned"
+
+    # Without a photo the review is accepted and correctly unverified.
+    body.pop("photo_url")
+    ok = client.post("/api/v1/reviews", headers=headers, json=body)
+    assert ok.status_code == 201
+    try:
+        assert ok.json()["verification_status"] == "unverified"
+    finally:
+        _delete_review(ok.json()["id"])

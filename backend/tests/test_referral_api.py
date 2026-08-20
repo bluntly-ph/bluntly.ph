@@ -3,7 +3,7 @@ attribution redirect, RBAC (integration)."""
 
 from __future__ import annotations
 
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 SHOPEE_URL = "https://shopee.ph/product/abc-i.123.456"
 
@@ -19,7 +19,7 @@ def _make_review(client, headers, *, stars: int = 4, photo: bool = True,
     body = {"product_id": pid, "title": "Great", "discussion": "Used it for weeks; solid.",
             "verdict": "yes_absolutely", "star_rating": stars}
     if photo:
-        body["photo_url"] = "https://example.com/proof.jpg"
+        body["photo_url"] = owned_photo_url(headers)
     rid = client.post("/api/v1/reviews", headers=headers, json=body).json()["id"]
     return rid, pid
 

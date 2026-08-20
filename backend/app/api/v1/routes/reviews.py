@@ -48,6 +48,7 @@ from app.services import report_service, review_service, vote_service
 from app.services.ai_critique import get_provider
 from app.services.storage import (
     receipt_key_belongs_to,
+    review_photo_belongs_to,
     signed_receipt_url,
     upload_receipt,
     upload_review_photo,
@@ -68,6 +69,21 @@ def _visible_or_404(review: Review, user: User | None) -> Review:
     if review.published_at is None and not _can_view_unpublished(review, user):
         raise NotFoundError("Review not found.", code="review_not_found")
     return review
+
+
+def _own_photo_or_403(url: str | None, user: User) -> str | None:
+    """Reject a proof photo this caller did not upload through us.
+
+    Without this the field is self-asserted: any string makes a review
+    `verified` (review_service derives it from photo_url being non-null), and
+    verified is what unlocks earning eligibility. That would make FR-8's first
+    fraud layer free to bypass.
+    """
+    if url is None or review_photo_belongs_to(url, user.id):
+        return url
+    raise ForbiddenError(
+        "A proof photo must be one you uploaded through /reviews/photo.",
+        code="photo_not_owned")
 
 
 def _own_receipt_key_or_400(key: str | None, user: User) -> str | None:
@@ -132,6 +148,7 @@ def _comment_counts(db: Session, review_ids: list[uuid.UUID]) -> dict[uuid.UUID,
 @router.post("", response_model=ReviewOut, status_code=201, summary="Submit a review")
 def create_review(payload: ReviewCreate, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> ReviewOut:
+    _own_photo_or_403(payload.photo_url, user)
     _own_receipt_key_or_400(payload.receipt_key, user)
     review = review_service.create_review(db, user.id, payload)
     return ReviewOut.model_validate(review)
@@ -324,6 +341,7 @@ def update_review(review_id: uuid.UUID, payload: ReviewUpdate,
     if review.author_id != user.id and user.role != MemberRole.moderator:
         raise ForbiddenError("Only the author or a moderator may edit this review.",
                              code="not_review_owner")
+    _own_photo_or_403(payload.photo_url, user)
     _own_receipt_key_or_400(payload.receipt_key, user)
     review = review_service.update_review(db, review, user.id, payload)
     return ReviewOut.model_validate(review)

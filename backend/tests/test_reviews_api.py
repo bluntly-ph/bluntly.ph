@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 
 def _auth(token: str) -> dict:
@@ -22,7 +22,7 @@ def test_review_submission_and_versioning(client):
     created = client.post("/api/v1/reviews", headers=headers, json={
         "product_id": product_id, "title": "Solid pick", "discussion": "Used daily for a month.",
         "verdict": "yes_absolutely", "star_rating": 4, "pros": ["battery"], "cons": ["case"],
-        "photo_url": "https://example.com/proof.jpg"})
+        "photo_url": owned_photo_url(headers)})
     assert created.status_code == 201, created.text
     review = created.json()
     review_id = review["id"]

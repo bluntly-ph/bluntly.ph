@@ -7,7 +7,7 @@ import uuid as _uuid
 from sqlalchemy import func, select
 
 from app.services.trust import helpfulness_score
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 
 def _auth(token: str) -> dict:
@@ -21,7 +21,7 @@ def make_published_review(client, author_headers, mod_headers, *, stars: int = 4
                       json={"name": name, "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Solid", "discussion": f"Weeks of use; {name}.",
             "verdict": "yes_absolutely", "star_rating": stars,
-            "photo_url": "https://example.com/proof.jpg"}
+            "photo_url": owned_photo_url(author_headers)}
     rid = client.post("/api/v1/reviews", headers=author_headers, json=body).json()["id"]
     resp = client.post(f"/api/v1/admin/reviews/{rid}/publish", headers=mod_headers)
     assert resp.status_code == 200, resp.text
@@ -110,7 +110,7 @@ def test_wilson_sort_and_author_helpfulness(client):
     def make(title: str) -> str:
         body = {"product_id": pid, "title": title, "discussion": f"Story of {title}.",
                 "verdict": "yes_absolutely", "star_rating": 4,
-                "photo_url": "https://example.com/proof.jpg"}
+                "photo_url": owned_photo_url(ah)}
         rid = client.post("/api/v1/reviews", headers=ah, json=body).json()["id"]
         assert client.post(f"/api/v1/admin/reviews/{rid}/publish",
                            headers=mh).status_code == 200

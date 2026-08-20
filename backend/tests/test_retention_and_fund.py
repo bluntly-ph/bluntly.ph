@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.models.commission import Commission
 from app.models.honesty_fund import HonestyFundDistribution
-from tests.conftest import register_and_token, requires_db
+from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 
 def _auth(token: str) -> dict:
@@ -87,7 +87,7 @@ def _honesty_review(client, mod_headers, *, price: str, name: str) -> tuple[str,
     body = {"product_id": pid, "title": "Disappointing", "price_paid": price,
             "discussion": f"{name}: broke fast; honest warning.",
             "verdict": "hard_pass", "star_rating": 2,
-            "photo_url": "https://example.com/proof.jpg"}
+            "photo_url": owned_photo_url(ah)}
     rid = client.post("/api/v1/reviews", headers=ah, json=body).json()["id"]
     resp = client.post(f"/api/v1/admin/reviews/{rid}/publish", headers=mod_headers)
     assert resp.status_code == 200
