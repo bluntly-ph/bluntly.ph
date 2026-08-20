@@ -167,6 +167,7 @@ each prints the environment it resolved before doing anything.
 
 | Document | What it covers |
 |---|---|
+| [`docs/RELEASE_ACCEPTANCE.md`](docs/RELEASE_ACCEPTANCE.md) | **Start here for release.** Blocked-to-verdict runbook: test DB, CI, PayPal, final verification, rollback |
 | [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) | Environment map, test isolation, migration safety |
 | [`docs/01-bluntly-ph-PRD.md`](docs/01-bluntly-ph-PRD.md) | Requirements (FR-1…FR-9), NFRs, open ambiguities |
 | [`docs/MILESTONES.md`](docs/MILESTONES.md) | M1–M3 scope and verification |
