@@ -5,7 +5,7 @@ written so another competent engineer can execute it without reconstructing a
 plan. Each section states what unblocks it, the exact commands, what a pass
 looks like, and what to do when it fails.
 
-Three things are blocked on the owner and nothing else is. They are
+Four things are blocked on the owner and nothing else is. They are
 independent — do them in any order, or in parallel.
 
 | Blocker | Unblocks | Owner action |
@@ -13,6 +13,7 @@ independent — do them in any order, or in parallel.
 | **A. Test database** | 125 backend tests, 58 milestone checks, moderator a11y spec | a Supabase password *or* a Docker permission |
 | **B. GitHub `workflow` scope** | CI activation | re-authorize the credential |
 | **C. PayPal sandbox** | FR-6 contractual acceptance | sandbox client id + secret |
+| **D. Production env vars** | rate limiting, and every production self-check | set `APP_ENV` and `REDIS_URL` in Vercel |
 
 > **The verdict cannot be `CONTRACT READY` until C is executed.** FR-6 makes
 > PayPal payouts contractual, so its acceptance has to actually happen — not be
@@ -163,7 +164,53 @@ refunded twice.
 
 ---
 
-## D. Final release verification
+## D. Production configuration
+
+**Found by audit on 2026-08-20, and the only finding here that is live in
+production right now.**
+
+Fourteen consecutive failed logins from one address returned 401 and never 429,
+against a configured limit of ten per minute. Login, register, OTP request, OTP
+verify, voting, reporting and commenting are all unthrottled.
+
+Two settings are involved, and both are absent from the repository:
+
+| Variable | Effect of it being unset |
+|---|---|
+| `REDIS_URL` | The limiter reaches for `localhost`, fails, and allows. It is designed to fail open so a Redis outage cannot break login — but with nothing configured, open is the *normal* mode. |
+| `APP_ENV` | `production_issues()` refuses to start the app on a wildcard CORS origin, a localhost Redis, a placeholder PII salt or a weak postback secret — and `main.py` only runs it when `APP_ENV=production`. The app is up, so that check is not running. |
+
+### What the code now does about it
+
+Migration `0028` adds `rate_limit_counters`, and the limiter tries Redis first,
+Postgres second, and only falls open if both are unreachable — logged at
+`warning` rather than `info`. Postgres was chosen over provisioning Redis
+because it is already the system of record and already on the request path; a
+counter does not justify a second piece of paid infrastructure.
+
+**This does nothing until `0028` is applied.** Until then the table is missing,
+the fallback returns nothing, and the limiter still allows — the only change
+being that it now says so loudly.
+
+### Steps
+
+1. Apply the migrations: `cd backend && alembic -x allow_production=1 upgrade head`
+   (brings production to `0028`; `0027` also relabels the product categories).
+2. Confirm the limiter enforces — eleven failed logins for a nonexistent
+   account from one address should produce a `429`:
+   ```bash
+   for i in $(seq 1 12); do
+     curl -s -o /dev/null -w "%{http_code} " -X POST        -d "username=probe-$(uuidgen)@example.invalid&password=x"        https://www.bluntly.ph/api/v1/auth/login
+   done; echo
+   ```
+3. Optionally set `REDIS_URL` in Vercel to restore the faster primary path.
+4. **Last**, once every value in `.env.example` is real in Vercel, set
+   `APP_ENV=production`. Do this last deliberately: the app will refuse to boot
+   if any check fails, and that refusal is the point.
+
+---
+
+## E. Final release verification
 
 Once A, B and C are done, in this order:
 
