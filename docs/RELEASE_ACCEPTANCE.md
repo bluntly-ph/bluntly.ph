@@ -383,6 +383,48 @@ reach safely.
 - **Payout accounts** were exposed and are a separate notification question from
   passwords.
 
+### Evidence gathered 2026-08-20
+
+**Access logs — checked.** Supabase logs every PostgREST request with path,
+method, status and user agent (`edge_logs`). Querying the full available window
+for `/rest/v1/*`:
+
+> **Every request was the audit's own.** All 17 entries carry the user agent
+> `rt/1`, which is the one this audit set. Nothing else appears.
+
+This is unusually clean evidence because **the application produces no
+PostgREST traffic at all** — it connects as `postgres` via SQLAlchemy and uses
+the service-role key for storage. So the baseline is zero, and any entry is
+anomalous by definition. There is no need to separate application noise from
+third-party access; there is no application noise.
+
+**The caveat that matters:** the log window is capped at 24 hours, and the
+exposure predates that by however long the permissive policies have existed.
+This shows no third-party access *recently*. It cannot show none *ever*. If
+longer retention is available on the plan, widen the window before deciding —
+that is the single piece of evidence that would move this between levels.
+
+**Supabase's own advisor would not have caught this.** `get_advisors(security)`
+flags the 11 tables that have RLS enabled and *no* policy — the safe ones —
+as INFO, and says nothing about the 17 returning `password_hash` and `email`,
+because from its perspective a table with a policy is a table that is handled.
+Worth knowing before relying on it as a control.
+
+### Recommendation on this evidence
+
+**Level 2 — containment plus notification.** Level 1 understates it: real
+users' email addresses and payout accounts were reachable by anyone with a key
+Supabase gives out freely, for an unknown but not-short period, and that is
+worth telling people about regardless of whether anyone looked.
+
+Level 3 is not indicated. There is no evidence of a third-party read, the
+hashes are Argon2id, `sessions` and `email_otps` were never exposed so no
+session material leaked, and the repository has no forced-reset mechanism — so
+executing it would mean building one under incident pressure and locking real
+users out of accounts that are not known to be compromised.
+
+Revisit if wider log retention shows REST traffic that is not `rt/1`.
+
 ### Owner decision to record
 
 > Whether to notify users, and at which level. Level 2 is the conventional
