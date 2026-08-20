@@ -6,6 +6,28 @@ migrated by `backend/alembic/versions/`. This reflects the schema **as actually
 migrated**; deviations from the original Data Dictionary are in
 [`DEVIATIONS.md`](./DEVIATIONS.md).
 
+## Current state (2026-08-20)
+
+**28 tables, at revision `0025_receipt_view_audit`.** The sections below narrate
+how the schema grew milestone by milestone and stop at M3; this is where it
+actually stands.
+
+Migrations after the M3 narrative:
+
+| Revision | Change | Class |
+|---|---|---|
+| `0019`–`0022` | product images, affiliate postbacks, review comments, drop `review_requests.bounty` | mixed |
+| `0023_receipt_object_key` | `reviews.receipt_url` → `receipt_key`; strips the locator from 675 version snapshots | **contracting** |
+| `0024_drop_seller_reviews` | drops `seller_reviews` + `users.seller_trust_score` / `seller_aggregates` | **contracting** |
+| `0025_receipt_view_audit` | adds `moderation_action.receipt_view` | additive |
+
+`0023` and `0024` each caused a brief production outage by being applied ahead
+of compatible code — see `docs/ENVIRONMENTS.md` for the expand→contract rule and
+`scripts/check_migration_safety.py`, which flags both.
+
+Production row counts after the 2026-08-20 fixture cleanup: 14 users, 15
+reviews, 16 products, 6 publicly visible reviews, 0 orphaned rows.
+
 ## Enum types (`app/models/enums.py`)
 `member_role`(user/seller/moderator) · `member_type`(shopper/seller/moderator) ·
 `language`(en/fil/tl-x-taglish) · `product_status`(pending/canonicalized/rejected) ·
