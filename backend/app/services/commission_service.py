@@ -39,6 +39,7 @@ from app.models.user import User
 from app.services import report_formats
 from app.services.contract_service import reviewer_bps_for_review
 from app.services.earnings import MAX_REVIEWER_SHARE_BPS, split_commission_tiered
+from app.services import wallet
 
 EXPECTED_HEADER = ["click_ref", "order_ref", "gross_amount", "currency",
                    "order_status", "platform"]
@@ -223,7 +224,7 @@ def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
                 session.order_ref = row.order_ref
             if row.order_status:
                 session.order_status = row.order_status
-        reviewer.wallet_balance = reviewer.wallet_balance + split["reviewer_share"]
+        wallet.adjust(db, reviewer.id, split["reviewer_share"])
         db.flush()
         _award_commission_tokens(db, commission)
         imported += 1

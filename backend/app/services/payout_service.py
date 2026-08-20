@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,7 @@ from app.models.membership import MembershipTierConfig
 from app.models.moderation import ModerationLog
 from app.models.payout import Payout
 from app.models.user import User
+from app.services import wallet
 
 log = get_logger("payouts")
 
@@ -59,6 +60,27 @@ def current_method() -> PayoutMethod:
 
 def batch_id_for(when: date) -> str:
     return f"batch_{when:%Y%m}"
+
+
+
+def _locked(db: Session, payout: Payout) -> Payout:
+    """Re-read a payout FOR UPDATE so its state check cannot race.
+
+    Every transition here guards on the current status - "only a scheduled
+    payout can be cancelled". Read outside a lock, two concurrent callers both
+    see `scheduled`, both pass the guard, and both refund. The guard reads like
+    a state machine while behaving like a suggestion.
+
+    `populate_existing` matters: without it the identity map hands back the
+    same stale instance that was checked a moment ago, and the lock buys
+    nothing.
+    """
+    return db.execute(
+        select(Payout)
+        .where(Payout.id == payout.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
 
 
 def schedule_payouts(db: Session, when: date | None = None,
@@ -105,7 +127,7 @@ def schedule_payouts(db: Session, when: date | None = None,
             skipped_existing += 1
             continue
         # Reserve the money immediately.
-        user.wallet_balance = user.wallet_balance - amount
+        wallet.adjust(db, user.id, -amount)
         created.append(payout)
 
     db.add(ModerationLog(
@@ -194,6 +216,7 @@ def refresh_batch(db: Session, batch: str) -> dict:
 
 def mark_paid(db: Session, payout: Payout, provider_ref: str | None = None,
               commit: bool = True) -> Payout:
+    payout = _locked(db, payout)
     if payout.status not in (PayoutStatus.scheduled, PayoutStatus.processing):
         raise _conflict("Only a scheduled or processing payout can be marked paid.",
                         "payout_not_payable")
@@ -210,14 +233,13 @@ def mark_paid(db: Session, payout: Payout, provider_ref: str | None = None,
 def mark_failed(db: Session, payout: Payout, reason: str,
                 commit: bool = True) -> Payout:
     """Failure refunds the reserved wallet money — the user keeps their earnings."""
+    payout = _locked(db, payout)
     if payout.status not in (PayoutStatus.scheduled, PayoutStatus.processing):
         raise _conflict("Only a scheduled or processing payout can fail.",
                         "payout_not_failable")
     payout.status = PayoutStatus.failed
     payout.failure_reason = reason
-    user = db.get(User, payout.user_id)
-    if user is not None:
-        user.wallet_balance = user.wallet_balance + payout.amount
+    wallet.adjust(db, payout.user_id, payout.amount)
     if commit:
         db.commit()
         db.refresh(payout)
@@ -226,13 +248,12 @@ def mark_failed(db: Session, payout: Payout, reason: str,
 
 def cancel(db: Session, payout: Payout) -> Payout:
     """Admin cancel — only while still scheduled (nothing has been submitted)."""
+    payout = _locked(db, payout)
     if payout.status != PayoutStatus.scheduled:
         raise _conflict("Only a scheduled payout can be cancelled.",
                         "payout_not_cancellable")
     payout.status = PayoutStatus.cancelled
-    user = db.get(User, payout.user_id)
-    if user is not None:
-        user.wallet_balance = user.wallet_balance + payout.amount
+    wallet.adjust(db, payout.user_id, payout.amount)
     db.commit()
     db.refresh(payout)
     return payout
@@ -240,6 +261,7 @@ def cancel(db: Session, payout: Payout) -> Payout:
 
 def retry(db: Session, payout: Payout) -> Payout:
     """Re-schedule a failed payout: re-reserve the money into a fresh batch."""
+    payout = _locked(db, payout)
     if payout.status != PayoutStatus.failed:
         raise _conflict("Only a failed payout can be retried.", "payout_not_retryable")
     user = db.get(User, payout.user_id)
@@ -252,7 +274,7 @@ def retry(db: Session, payout: Payout) -> Payout:
     payout.provider_ref = None
     payout.batch_id = f"{batch_id_for(today)}_retry_{uuid.uuid4().hex[:6]}"
     payout.scheduled_for = today
-    user.wallet_balance = user.wallet_balance - payout.amount
+    wallet.adjust(db, payout.user_id, -payout.amount)
     db.commit()
     db.refresh(payout)
     return payout

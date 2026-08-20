@@ -24,6 +24,7 @@ from app.models.enums import ContractStatus, ModerationAction, ModerationTargetT
 from app.models.moderation import ModerationLog
 from app.models.review import Review
 from app.models.user import User
+from app.services import wallet
 
 
 def _now() -> datetime:
@@ -161,7 +162,7 @@ def accept_buyout(db: Session, contract: ReviewContract, user: User) -> ReviewCo
         raise _conflict("There is no pending buyout offer.", "no_pending_buyout")
     amount = contract.buyout_offer_amount
     reviewer = db.get(User, user.id)
-    reviewer.wallet_balance = reviewer.wallet_balance + amount
+    wallet.adjust(db, reviewer.id, amount)
     contract.status = ContractStatus.bought_out
     contract.buyout_accepted_at = _now()
     db.add(ModerationLog(

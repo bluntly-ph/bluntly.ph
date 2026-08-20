@@ -31,6 +31,7 @@ from app.models.review import Review
 from app.models.user import User
 from app.models.vote import ReviewVote
 from app.services.trust import gate_vote_weight, honesty_score
+from app.services import wallet
 
 log = get_logger("honesty_fund")
 
@@ -113,7 +114,7 @@ def distribute(db: Session, cycle_month: date | None = None,
         ))
         if payout > 0 and review.author_id is not None:
             author = db.get(User, review.author_id)
-            author.wallet_balance = author.wallet_balance + payout
+            wallet.adjust(db, author.id, payout)
         recipients += 1
 
     db.add(ModerationLog(
