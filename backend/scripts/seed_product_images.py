@@ -184,6 +184,79 @@ def resolve_image(url: str) -> bytes | None:
     return _get(image_url, MAX_IMAGE_BYTES)
 
 
+
+# A card thumbnail is never displayed above ~400 CSS pixels, so 800 covers a
+# 2x screen with room to spare.
+MAX_IMAGE_EDGE = 800
+JPEG_QUALITY = 85
+
+
+def _uses_transparency(img) -> bool:
+    """Whether the image actually has transparent pixels, not merely a channel.
+
+    Press images are frequently RGBA with an alpha channel that is opaque
+    everywhere - a photo on white, saved with a channel it never uses. Treating
+    "has a channel" as "needs PNG" kept one of these at 172 KB when the same
+    picture is 40 KB as a JPEG, for transparency that does not exist.
+    """
+    if img.mode not in ("RGBA", "LA", "P"):
+        return False
+    if img.mode == "P":
+        return "transparency" in img.info
+    alpha = img.getchannel("A")
+    smallest, _ = alpha.getextrema()
+    return smallest < 255
+
+
+def downscale(data: bytes) -> bytes:
+    """Shrink a source image to something a thumbnail actually needs.
+
+    Manufacturers publish press images. One of these arrived at 1801x1800 and
+    887 KB, for a card that renders it a few hundred pixels wide - and the
+    homepage carries five of them, so the first page of a review site aimed at
+    Filipino mobile shoppers was moving well over a megabyte of images nobody
+    could see the detail in.
+
+    Encodes to JPEG when the image has nothing transparent to lose, which is
+    the case for a product photo on white, and keeps PNG when it does. Returns
+    the original unchanged if anything goes wrong: a slightly heavy image is a
+    much better outcome than a missing one.
+    """
+    try:
+        import io
+
+        from PIL import Image
+    except ImportError:
+        return data
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.load()
+            has_alpha = _uses_transparency(img)
+            longest = max(img.size)
+            if longest <= MAX_IMAGE_EDGE and not (not has_alpha and img.format == "PNG"):
+                return data
+
+            if longest > MAX_IMAGE_EDGE:
+                scale = MAX_IMAGE_EDGE / longest
+                img = img.resize(
+                    (round(img.width * scale), round(img.height * scale)),
+                    Image.LANCZOS)
+
+            out = io.BytesIO()
+            if has_alpha:
+                img.save(out, format="PNG", optimize=True)
+            else:
+                img.convert("RGB").save(out, format="JPEG",
+                                        quality=JPEG_QUALITY, optimize=True)
+            shrunk = out.getvalue()
+    except Exception:  # noqa: BLE001 - a broken decode must not lose the image
+        return data
+
+    # Only take the new one if it is actually smaller.
+    return shrunk if len(shrunk) < len(data) else data
+
+
 def _load_map(path: str) -> list[tuple[str, str]]:
     """`canonical_name<TAB>page_url` pairs from a checked-in TSV.
 
@@ -212,6 +285,11 @@ def _apply(db, product: Product, url: str, dry_run: bool) -> bool:
     if data is None:
         print("  -> no usable og:image (moderator will supply)")
         return False
+    original = len(data)
+    data = downscale(data)
+    if len(data) != original:
+        print(f"  -> {original:,}b downscaled to {len(data):,}b "
+              f"({100 - round(100 * len(data) / original)}% smaller)")
     if dry_run:
         print(f"  -> would upload {len(data)} bytes")
         return True
