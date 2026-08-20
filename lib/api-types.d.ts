@@ -2064,15 +2064,23 @@ export interface components {
             key_spec?: string | null;
             /** Descriptor */
             descriptor?: string | null;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @description Product category. One of the slugs in `backend/app/core/categories.py`, which the frontend renders as chips on /categories. Null means uncategorised.
+             * @enum {unknown}
+             */
+            category?: "audio" | "automotive" | "beauty" | "electronics-tech" | "fashion-accessories" | "food" | "gaming" | "health-fitness" | "home-appliances" | "home-living" | "kids-toys" | "office-productivity" | "sports-outdoors" | "pets" | null;
         };
         /** ProductCreate */
         ProductCreate: {
             /** Name */
             name: string;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @description Product category. One of the slugs in `backend/app/core/categories.py`, which the frontend renders as chips on /categories. Null means uncategorised.
+             * @enum {unknown}
+             */
+            category?: "audio" | "automotive" | "beauty" | "electronics-tech" | "fashion-accessories" | "food" | "gaming" | "health-fitness" | "home-appliances" | "home-living" | "kids-toys" | "office-productivity" | "sports-outdoors" | "pets" | null;
             /** Brand */
             brand?: string | null;
             /** Source Url */

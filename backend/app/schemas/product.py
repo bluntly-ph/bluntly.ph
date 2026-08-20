@@ -8,13 +8,25 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.core.categories import normalize_category
+from app.core.categories import CATEGORIES, normalize_category
 from app.models.enums import Platform, ProductStatus
+
+
+# Published in the OpenAPI schema so the contract states what a category may
+# be. The server also accepts the legacy spellings in `ALIASES` and normalises
+# them, which is deliberately more lenient than what is documented here.
+CATEGORY_FIELD = Field(
+    default=None,
+    description=("Product category. One of the slugs in "
+                 "`backend/app/core/categories.py`, which the frontend renders "
+                 "as chips on /categories. Null means uncategorised."),
+    json_schema_extra={"enum": [*CATEGORIES, None]},
+)
 
 
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    category: str | None = None
+    category: str | None = CATEGORY_FIELD
     brand: str | None = None
     # Required in practice for reviewer submissions (BUG-020) — the route
     # enforces it by role, because a moderator adding a product directly has no
@@ -42,7 +54,7 @@ class ProductCanonicalize(BaseModel):
     product_line: str = Field(min_length=1, max_length=160)
     key_spec: str | None = Field(default=None, max_length=120)
     descriptor: str | None = Field(default=None, max_length=120)
-    category: str | None = None
+    category: str | None = CATEGORY_FIELD
 
 
     # A category the frontend cannot render is worse than none: the product
