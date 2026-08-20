@@ -377,9 +377,20 @@ reach safely.
   entries that are not this audit, separated by user agent and timestamp. The
   application's own traffic never appears there, because it does not use
   PostgREST — so *any* REST entry is worth reading closely.
-- **Session invalidation.** If passwords are reset, existing JWTs stay valid
-  until expiry unless sessions are revoked too; the `sessions` table is the
-  lever, and it was never exposed.
+- **Session invalidation — there is no lever.** Identity is a stateless JWT
+  with a 24-hour expiry (`access_token_expire_minutes`), and the API has no
+  logout or revocation endpoint: `logout()` clears the httpOnly cookie in the
+  browser and nothing else. A token already issued stays valid for up to 24
+  hours whatever happens to the password.
+
+  The `sessions` table is **not** auth sessions — it is affiliate click
+  tracking with a PII retention schedule. Do not reach for it expecting
+  revocation.
+
+  This is what makes level 3 awkward rather than merely disruptive: a forced
+  reset would not evict anyone holding a current token, so it buys less than it
+  appears to while costing every real user their access. If revocation is
+  wanted, it is a piece of work to plan, not a step in an incident.
 - **Payout accounts** were exposed and are a separate notification question from
   passwords.
 
@@ -419,9 +430,10 @@ worth telling people about regardless of whether anyone looked.
 
 Level 3 is not indicated. There is no evidence of a third-party read, the
 hashes are Argon2id, `sessions` and `email_otps` were never exposed so no
-session material leaked, and the repository has no forced-reset mechanism — so
-executing it would mean building one under incident pressure and locking real
-users out of accounts that are not known to be compromised.
+session material leaked, and the repository has neither a forced-reset
+mechanism nor token revocation — so executing it would mean building both under
+incident pressure, locking real users out of accounts that are not known to be
+compromised, and still leaving every already-issued token valid for 24 hours.
 
 Revisit if wider log retention shows REST traffic that is not `rt/1`.
 
