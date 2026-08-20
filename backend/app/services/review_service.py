@@ -15,6 +15,7 @@ from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
+from app.services.storage import review_photo_belongs_to
 
 # Fields captured in each version snapshot.
 #
@@ -28,6 +29,31 @@ VERSIONED_FIELDS = (
     "anti_target_audience", "star_rating", "pros", "cons", "photo_url",
     "price_paid",
 )
+
+
+def _verification_for(photo_url: str | None,
+                      author_id: uuid.UUID) -> VerificationStatus:
+    """Verified only when the proof photo is an object this author uploaded.
+
+    FR-3 makes a proof photo the thing that verifies a review, so "is this
+    field non-empty" was never the real question - "did this author upload
+    this object" is. Before, any string in `photo_url` earned the badge, so a
+    reviewer could paste someone else's photo, or a URL to nothing at all, and
+    be verified for it.
+
+    The route checks ownership too and returns 403, which is the better answer
+    for a caller who got it wrong. This exists because the decision belongs
+    next to its precondition: a seed script, an admin path or a new endpoint
+    that reaches the service directly must not be able to mint a verified
+    review, and one day one of them will.
+
+    Unverified rather than an exception: the service's job is to say what it
+    can vouch for. Refusing to vouch is a complete answer, and it cannot be
+    turned into an exploit by a caller that ignores it.
+    """
+    if photo_url and review_photo_belongs_to(photo_url, author_id):
+        return VerificationStatus.verified
+    return VerificationStatus.unverified
 
 
 def _snapshot(review: Review) -> dict:
@@ -88,9 +114,9 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
         photo_url=payload.photo_url,
         receipt_key=payload.receipt_key,
         price_paid=payload.price_paid,
-        # Proof photo at submission => verified (FR-3).
-        verification_status=(VerificationStatus.verified if payload.photo_url
-                             else VerificationStatus.unverified),
+        # Proof photo at submission => verified (FR-3), but only if the
+        # photo is genuinely this author's upload. See _verification_for.
+        verification_status=_verification_for(payload.photo_url, author.id),
         review_id=f"rev_{uuid.uuid4().hex[:10]}",
         current_version=1,
         # Publication gate (M2 slice 1): hidden + auto-queued for the moderator.
@@ -125,9 +151,9 @@ def update_review(db: Session, review: Review, editor_id: uuid.UUID,
     if not changed:
         return review  # no-op edit: don't create an empty version
 
-    # Re-derive verification from the (possibly changed) photo.
-    review.verification_status = (VerificationStatus.verified if review.photo_url
-                                  else VerificationStatus.unverified)
+    # Re-derive verification from the (possibly changed) photo, ownership
+    # included - an edit must not be a way in either.
+    review.verification_status = _verification_for(review.photo_url, review.author_id)
     # A rejected review that gets edited is re-queued for moderation (still hidden).
     if review.earn_eligible_status == EarnEligibleStatus.rejected:
         review.earn_eligible_status = EarnEligibleStatus.pending
