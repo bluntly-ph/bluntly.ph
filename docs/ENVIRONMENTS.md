@@ -129,6 +129,22 @@ alembic -x allow_production=1 upgrade head  # production, deliberately
 alembic upgrade head                        # REFUSED — pick one
 ```
 
+**`.env.test` outranks the flag.** Because it is the highest-precedence env
+file, `-x allow_production=1` cannot reach production while that file exists —
+the resolved target is simply the test project, and the migration runs there.
+To migrate production, move `backend/.env.test` aside first:
+
+```bash
+mv backend/.env.test backend/.env.test.hold
+cd backend && .venv/Scripts/python -m alembic -x allow_production=1 upgrade head
+mv backend/.env.test.hold backend/.env.test
+```
+
+That is deliberate rather than a wrinkle to smooth over: the flag says "I
+accept production if that is what this resolves to", not "switch me to
+production". Anyone who has a test environment configured has to take a
+visible step to leave it.
+
 Nothing in the deploy pipeline runs alembic (Vercel builds the app; migrations
 are applied by hand), so requiring an explicit choice breaks no automation.
 
