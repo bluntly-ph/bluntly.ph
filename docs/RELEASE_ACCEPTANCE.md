@@ -278,21 +278,72 @@ counter does not justify a second piece of paid infrastructure.
 the fallback returns nothing, and the limiter still allows — the only change
 being that it now says so loudly.
 
-### Steps
+### Readiness table
 
-1. Apply the migrations: `cd backend && alembic -x allow_production=1 upgrade head`
-   (brings production to `0028`; `0027` also relabels the product categories).
-2. Confirm the limiter enforces — eleven failed logins for a nonexistent
-   account from one address should produce a `429`:
+`main.py` refuses to boot when `production_issues()` returns anything — but it
+only consults that list when `APP_ENV` is exactly `production`. The app is
+running, so **none of these checks are running**.
+
+Several of them test the configured *string*, not observable behaviour, so
+external probing cannot fully predict the result. Where a row says "needs
+dashboard", that is why — not an oversight.
+
+| Check | Verified from outside? | Would `APP_ENV=production` pass? | Owner action | Security consequence of it failing |
+|---|---|---|---|---|
+| `JWT_SECRET` ≥ 32 chars | Partly — tokens issue and verify, so it is set; length unknowable | Likely | Confirm length | Forgeable sessions |
+| `USE_SUPABASE` + connection string | **Yes** — production serves database-backed pages | **Pass** | None | No database |
+| `DATABASE_URL` not localhost | n/a — `USE_SUPABASE=true` | **Pass** | None | — |
+| `CORS_ORIGINS` has no `*` | **Yes** — no preflight reflects an origin, no wildcard | Likely | Confirm string | Any site reads authenticated responses |
+| `CORS_ORIGINS` not localhost | Behaviour safe; string unknown | Needs dashboard | Confirm string | Production browser origin refused |
+| `REDIS_URL` not localhost | **Yes — FAILS.** 14 failed logins, no 429 | **FAIL** | **Set `REDIS_URL`, or apply `0028`** | **Auth brute-force protection absent — live now** |
+| `PII_HASH_SALT` not placeholder | No | Needs dashboard | Confirm set | Hashed identifiers become guessable |
+| `PAYOUT_PROVIDER=paypal_live` creds | n/a — provider is not live (FR-6 blocked on sandbox creds) | **Pass** | None | — |
+| `PAYPAL_BASE_URL` not sandbox when live | n/a — same | **Pass** | None | — |
+| `LAZADA_POSTBACK_SECRET` ≥ 32 | Partly — the endpoint answers 403 anonymously, so something is enforced | Needs dashboard | Confirm length | Anyone guessing the path fabricates conversions |
+| `EMAIL_PROVIDER` not console | **Yes** — Resend delivers (202 to real domains) | **Pass** | None | Every OTP silently fails; codes land in logs |
+| `RESEND_API_KEY` set | **Yes** — same evidence | **Pass** | None | OTP delivery fails |
+
+**One proven failure, several unknowable from outside.** Do not set
+`APP_ENV=production` before resolving them: the app would raise at import and
+the deployment would stop serving.
+
+### Answer it without guessing
+
+```bash
+cd backend && python -m scripts.check_production_config
+```
+
+Run it where the production values live — a Vercel shell, or locally with the
+production environment exported. It evaluates the same `production_issues()`
+list that `main.py` uses and prints **descriptions only, never values**, so the
+output is safe to paste into a ticket. `--strict` exits non-zero when the app
+would refuse to boot, which makes it usable as a deploy gate.
+
+### Safe sequence
+
+Ordered so that no step can take production down:
+
+1. **Configure** every value the table marks as needing the dashboard.
+2. **Verify without changing `APP_ENV`** — `check_production_config` must print
+   `READY`. This is the whole point of the script: the check runs, the flag
+   does not move, and nothing can fail to boot.
+3. **Apply `0028`** if `REDIS_URL` is to stay unset — the Postgres fallback is
+   inert until its table exists.
+4. **Set `APP_ENV=production`** and deploy.
+5. **Verify boot** — `curl -s -o /dev/null -w "%{http_code}" https://www.bluntly.ph/api/v1/reviews/feed?limit=1`
+   must be `200`. A failure to boot shows as a 500 from every route, and the
+   fix is to unset `APP_ENV` and re-run step 2.
+6. **Verify the controls are now on** — twelve failed logins for a nonexistent
+   account from one address must produce a `429`:
    ```bash
    for i in $(seq 1 12); do
-     curl -s -o /dev/null -w "%{http_code} " -X POST        -d "username=probe-$(uuidgen)@example.invalid&password=x"        https://www.bluntly.ph/api/v1/auth/login
+     curl -s -o /dev/null -w "%{http_code} " -X POST \
+       -d "username=probe-$RANDOM@example.invalid&password=x" \
+       https://www.bluntly.ph/api/v1/auth/login
    done; echo
    ```
-3. Optionally set `REDIS_URL` in Vercel to restore the faster primary path.
-4. **Last**, once every value in `.env.example` is real in Vercel, set
-   `APP_ENV=production`. Do this last deliberately: the app will refuse to boot
-   if any check fails, and that refusal is the point.
+   **Pass:** at least one `429` in the last two. All `401` means the limiter is
+   still open — check that `0028` is applied and `rate_limit_counters` exists.
 
 ---
 
