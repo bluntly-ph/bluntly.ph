@@ -96,8 +96,9 @@ unreachable from IPv4 networks.
 ## 6. Data model (25 tables, `public` schema, all RLS-enabled)
 
 Core: `users` (profile + `role`/`membership_tier`/`reputation`/`wallet`/
-`token_balance`/`seller_trust_score` — **seller_trust_score withdrawn 2026-07-28,
-see §8b note**), `badges`, `user_badges`, `products`
+`token_balance`; `seller_trust_score` was **dropped from the schema** by
+`0024_drop_seller_reviews` on 2026-08-19, along with `seller_aggregates` — with
+their source table gone they could only hold stale numbers, see §8b), `badges`, `user_badges`, `products`
 (+ `trust_score`), `product_platforms` (`is_monetizable`), `price_history`,
 `reviews`, `review_versions`, **`referral_links`**, **`review_votes`** (equal-weight
 community votes, M2 s2), `questions`, `answers`, `seller_reviews`
@@ -181,8 +182,9 @@ outbound click is attributed.
   Public surface: `GET /users/{id}/trust`.
 - **Product & seller trust ratings**: `products.trust_score` = decayed Wilson over
   published reviews' stars ≥ 4 (updated with product aggregates on
-  publish/unpublish/edit); `users.seller_trust_score` = decayed Wilson over
-  seller-review `would_recommend` + per-dimension aggregates in JSONB. Visibility
+  publish/unpublish/edit); `users.seller_trust_score` was a decayed Wilson over
+  seller-review `would_recommend`, with per-dimension aggregates in JSONB —
+  **both columns dropped 2026-08-19** (`0024_drop_seller_reviews`). Visibility
   thresholds are env-config, default OFF; a filtered product stays fetchable by id
   with `low_trust: true`; seller profiles are flagged, never hidden.
   > **Withdrawn 2026-07-28 (owner decision).** Seller trust ratings were built and
