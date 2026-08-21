@@ -112,6 +112,24 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
      "The Honesty Fund pools commissions by cycle_month equality, so a "
      "mid-month value can never be matched by a cycle and its share is never "
      "distributed."),
+
+    ("tables readable by anon over PostgREST",
+     "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+     "WHERE n.nspname = 'public' AND c.relkind = 'r' "
+     "AND has_table_privilege('anon', c.oid, 'SELECT')",
+     "0029 revoked this. A table appearing here was almost certainly created "
+     "through the Supabase dashboard rather than by a migration: dashboard DDL "
+     "runs as supabase_admin, whose default privileges still grant new tables "
+     "to anon - and only supabase_admin can change that, which neither the "
+     "postgres role nor the SQL editor can do. Migrations run as postgres and "
+     "are unaffected. Revoke it, and prefer migrations for new tables."),
+
+    ("tables readable by the authenticated role",
+     "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+     "WHERE n.nspname = 'public' AND c.relkind = 'r' "
+     "AND has_table_privilege('authenticated', c.oid, 'SELECT')",
+     "Same cause as above. The application authenticates as postgres and never "
+     "as this role, so anything reachable here is reachable around the API."),
 )
 
 

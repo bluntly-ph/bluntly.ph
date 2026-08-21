@@ -165,9 +165,35 @@ refunded twice.
 
 ---
 
-## E. PostgREST containment — DO THIS FIRST
+## E. PostgREST containment — ✅ APPLIED AND VERIFIED
 
-**Status: live exposure until the migration is applied.** Found 2026-08-20.
+**Closed 2026-08-21.** Migrations `0027`–`0030` applied to production; schema
+now matches repository head at `0030_tier_share_bounds`.
+
+Verified after application:
+
+| Check | Before | After |
+|---|---|---|
+| Tables readable by `anon` | 28 | **0** |
+| Tables readable by `authenticated` | 28 | **0** |
+| Tables readable by `postgres` (the app) | 28 | 29 |
+| Tables readable by `service_role` (storage) | 28 | 29 |
+| Anonymous PostgREST, 8 sampled tables | `200` with rows | **`401 permission denied`** |
+| Application pages + API, 17 checks | — | all pass |
+| Public product image | served | served |
+| Private receipt bucket | refused | refused |
+
+**One residual, and it cannot be fixed from here.** `supabase_admin`'s default
+privileges still grant new tables to `anon`, and only `supabase_admin` may
+change them — neither the `postgres` role nor the SQL editor can. Migrations
+run as `postgres` and are unaffected, so anything created the normal way is
+clean. A table created through the **dashboard UI** would not be.
+
+`check_invariants` now covers exactly this: two checks assert that no table in
+`public` is readable by `anon` or `authenticated`. A dashboard-created table
+shows up there immediately.
+
+The original finding, kept for the record:
 
 An anonymous caller holding the Supabase publishable key — public by design —
 can read table rows directly over PostgREST, past the API and every serializer
