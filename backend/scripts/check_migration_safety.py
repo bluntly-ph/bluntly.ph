@@ -116,10 +116,29 @@ def applied_revision() -> str | None:
             probe.dispose()
 
 
+def _strip_prose(src: str) -> str:
+    """Remove comments and docstrings so prose cannot look like a statement.
+
+    `0029_revoke_postgrest_access` was reported as `[TRUNCATE] Data destruction
+    does not belong in a migration`. It destroys nothing — it revokes grants,
+    and the word appears in a *comment* explaining that TRUNCATE is the one
+    privilege `ALL` does not imply. `TRUNCATE` is also a privilege name, so it
+    shows up legitimately in any GRANT or REVOKE list.
+
+    A scanner that reads its own explanatory comments as evidence produces
+    findings nobody can act on, and a report that cries wolf is one people stop
+    reading — which is worse than not having it, because the real finding
+    arrives in the same list.
+    """
+    # Blank out docstrings first (they can contain `#`), then line comments.
+    without_docstrings = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', '""', src)
+    return re.sub(r"#[^\n]*", "", without_docstrings)
+
+
 def scan(path: pathlib.Path) -> list[tuple[str, str]]:
     src = path.read_text(encoding="utf-8", errors="replace")
     # Ignore the downgrade() body: reversing an expand is expected to contract.
-    upgrade = src.split("def downgrade")[0]
+    upgrade = _strip_prose(src.split("def downgrade")[0])
     return [(label, why) for pattern, label, why in PATTERNS if pattern.search(upgrade)]
 
 
