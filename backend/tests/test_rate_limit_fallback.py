@@ -52,14 +52,19 @@ def test_postgres_takes_over_when_redis_is_absent(monkeypatch):
 def test_postgres_allows_a_request_inside_the_window(monkeypatch):
     _redis_is_down(monkeypatch)
     monkeypatch.setattr(rate_limit, "_count_in_postgres", lambda k, w: (3, 55))
-    rate_limit.enforce_rate_limit(_Req(), "login", max_requests=10)  # no raise
+    # Returning None is the whole contract for an allowed request; asserting it
+    # says so, rather than leaving "it did not raise" to be inferred from the
+    # absence of an error.
+    assert rate_limit.enforce_rate_limit(_Req(), "login", max_requests=10) is None
 
 
 def test_both_stores_down_still_allows(monkeypatch):
     """Availability wins as a last resort. A counter must never break login."""
     _redis_is_down(monkeypatch)
     monkeypatch.setattr(rate_limit, "_count_in_postgres", lambda k, w: None)
-    rate_limit.enforce_rate_limit(_Req(), "login", max_requests=1)  # no raise
+    # max_requests=1 would refuse if any counter were consulted, so allowing
+    # here is specifically the fail-open path and not an accident of the limit.
+    assert rate_limit.enforce_rate_limit(_Req(), "login", max_requests=1) is None
 
 
 def test_both_stores_down_is_logged_loudly(monkeypatch):
