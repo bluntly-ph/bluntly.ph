@@ -66,6 +66,45 @@ def _median(values: list[Decimal]) -> Decimal:
     return (ordered[mid - 1] + ordered[mid]) / Decimal(2)
 
 
+def panel_from(rows) -> PricePanel:
+    """Build the panel from observations. No database, on purpose.
+
+    FR-2's rule — a price range appears only once at least
+    `MIN_INDEPENDENT_OBSERVATIONS` *different people* have reported one — is the
+    contractual heart of this feature, and while it lived inside `get_panel` it
+    could only be tested against a live Postgres. Every test of it therefore
+    skipped in any environment without one, which is most of them.
+
+    Takes anything with `submitted_by`, `price`, `observed_at` and `platform`,
+    so a test can pass plain objects and exercise the rule directly.
+    """
+    total = len(rows)
+    # Distinct submitters, not rows. One person reporting three times is one
+    # observation of the market, and a row whose author has been deleted
+    # (`submitted_by` NULL) cannot be shown to be independent of anything.
+    independent = len({r.submitted_by for r in rows if r.submitted_by is not None})
+
+    if independent < MIN_INDEPENDENT_OBSERVATIONS:
+        # Deliberately no prices in this branch. Returning them "just for the
+        # UI to hide" would put unvalidated numbers on the wire, and the panel
+        # threshold exists precisely because one or two observations are not
+        # yet meaningful.
+        return PricePanel(observation_count=total, independent_count=independent,
+                          sufficient=False)
+
+    prices = [r.price for r in rows]
+    return PricePanel(
+        observation_count=total,
+        independent_count=independent,
+        sufficient=True,
+        low=min(prices),
+        high=max(prices),
+        median=_median(prices),
+        latest_observed_at=max(r.observed_at for r in rows),
+        platforms=tuple(sorted({r.platform.value for r in rows})),
+    )
+
+
 def submit_observation(db: Session, product_id: uuid.UUID, user_id: uuid.UUID,
                        platform: Platform, price: Decimal,
                        observed_at: date, variant: str | None) -> PriceHistory:
@@ -94,29 +133,7 @@ def get_panel(db: Session, product_id: uuid.UUID) -> PricePanel:
     rows = db.scalars(
         select(PriceHistory).where(PriceHistory.product_id == product_id)
     ).all()
-
-    total = len(rows)
-    independent = len({r.submitted_by for r in rows if r.submitted_by is not None})
-
-    if independent < MIN_INDEPENDENT_OBSERVATIONS:
-        # Deliberately no prices in this branch. Returning them "just for the
-        # UI to hide" would put unvalidated numbers on the wire, and the panel
-        # threshold exists precisely because one or two observations are not
-        # yet meaningful.
-        return PricePanel(observation_count=total, independent_count=independent,
-                          sufficient=False)
-
-    prices = [r.price for r in rows]
-    return PricePanel(
-        observation_count=total,
-        independent_count=independent,
-        sufficient=True,
-        low=min(prices),
-        high=max(prices),
-        median=_median(prices),
-        latest_observed_at=max(r.observed_at for r in rows),
-        platforms=tuple(sorted({r.platform.value for r in rows})),
-    )
+    return panel_from(rows)
 
 
 def panels_for(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, PricePanel]:
