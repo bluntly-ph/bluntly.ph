@@ -356,7 +356,43 @@ dashboard", that is why — not an oversight.
 | `EMAIL_PROVIDER` not console | **Yes** — Resend delivers (202 to real domains) | **Pass** | None | Every OTP silently fails; codes land in logs |
 | `RESEND_API_KEY` set | **Yes** — same evidence | **Pass** | None | OTP delivery fails |
 
-### Answered 2026-08-21 — zero refusals. `APP_ENV` is the only thing left.
+### ✅ COMPLETE 2026-08-21 — `APP_ENV=production` is live
+
+`PRODUCTION_CONFIG = COMPLETE`. Do not revisit.
+
+```
+vercel env update APP_ENV production --value production --sensitive --yes
+vercel redeploy <last-ready-production-url> --target production
+```
+
+`redeploy` rather than `vercel --prod`: it rebuilds the exact same commit with
+the new environment, so the deployment cannot pick up anything that happens to
+be sitting in a local working tree.
+
+Confirmed from the running process, not from the dashboard:
+
+```json
+{"message": "production readiness", "app_env": "production",
+ "is_production": true, "would_boot_as_production": true,
+ "refusal_count": 0, "refusals": [], "warnings": ["REDIS_URL ..."]}
+{"message": "startup", "env": "production", "use_supabase": true, ...}
+```
+
+Post-flip verification, with every production check now actually executing:
+
+| Check | Result |
+|---|---|
+| `/`, `/login`, `/search`, `/questions`, `/requests`, `/categories`, API feed | all `200` |
+| Rate limiting | 10 × `401`, 11th `429` `problem+json` — unchanged under production config |
+| PostgREST anon on `users` / `reviews` / `sessions` | `401` |
+| Private receipt bucket, unsigned public read | `400` |
+| API docs (`/docs`, `/redoc`, `/openapi.json`, `/api/*`) | `404` — not routed to the backend, despite `ENABLE_DOCS=true` |
+
+The one warning is `REDIS_URL` pointing at localhost, which is non-blocking by
+design: the limiter runs on the Postgres fallback from migration `0028`, proven
+enforcing above.
+
+### The evaluation that preceded it
 
 **The earlier prediction on this page was wrong and is corrected here.** It said
 `CORS_ORIGINS` was the one refusal standing in the way. That came from

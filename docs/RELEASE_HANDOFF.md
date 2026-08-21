@@ -259,8 +259,9 @@ re-authorised. What follows is only what genuinely remains.
 
 | Item | Marker | Exact action required |
 |---|---|---|
-| **`APP_ENV=production`** | `OWNER ACTION — one command` | Safe to run now: the live process reports `refusal_count: 0`. `vercel env update APP_ENV production --value production --sensitive --yes` then `vercel --prod`. I was blocked from mutating a production environment variable and did not work around it |
-| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | Neither value is retrievable through any API. Supabase → `bluntly-ph-test` → *Settings → Database → Reset database password* (session pooler URI) and *Settings → API* (service_role key), then `gh secret set TEST_SUPABASE_SESSION_POOLER` and `gh secret set TEST_SUPABASE_SECRET_KEY` — both read from the prompt, so neither is ever typed into chat. `TEST_SUPABASE_URL` is already set |
+| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | The last engineering-owned item. See below |
+| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | Neither value is retrievable through any API — a DB password can only be *reset*, never read. Supabase → `bluntly-ph-test` → *Settings → Database → Reset database password* (session pooler URI) and *Settings → API* (service_role key), then `gh secret set TEST_SUPABASE_SESSION_POOLER` and `gh secret set TEST_SUPABASE_SECRET_KEY` — both read from the prompt, so neither is ever typed into chat. `TEST_SUPABASE_URL` is already set. This is the only thing standing between the suite and 0 skips |
+| **BUG-030 badge wording** | `OWNER / PRODUCT DECISION` | The UI says "Verified purchase"; the contract means "a photograph was attached", which is materially weaker. Options are documented in `BUG-030-verification-semantics.md`: soften the badge, or raise the bar to require a receipt. **Not changed unilaterally** — it is a public trust claim |
 | **PayPal sandbox** | `PAYPAL_SANDBOX = BLOCKED_EXTERNAL_ZIENT` | Zient to provide sandbox credentials. The acceptance sequence runs automatically once they are in the authorised environment |
 | **FR-8 layer 3** | `OWNER DECISION REQUIRED` | Select a reverse-image-search provider. The PRD names none. No paid service will be procured without approval — see the decision brief below |
 
@@ -268,6 +269,7 @@ re-authorised. What follows is only what genuinely remains.
 
 | Was | Now |
 |---|---|
+| `APP_ENV=staging`, production checks off | **`APP_ENV=production` — live and verified.** The running process reports `is_production: true`, `refusal_count: 0`. Rate limiting, PostgREST denial and the private receipt boundary all re-verified with the checks executing |
 | `GITHUB_CI = BLOCKED_AUTH` | **Active and green.** `gh auth refresh -h github.com -s workflow` granted the scope; the workflow runs on every push and has already caught a real regression |
 | Vercel connector unusable | **Usable.** The official CLI is authenticated and linked to the existing `bluntly-ph` project. The MCP still 404s on the project, but the CLI is the supported path |
 | `CORS_ORIGINS` blocks `APP_ENV` | **False alarm, corrected.** That came from the repo's `.env`, which does not set it. Vercel sets it correctly. Real refusal count is **0** |
@@ -289,41 +291,43 @@ behaviour — signals surface to the moderator and never auto-block. Layer 3's
 absence therefore degrades the *quantity* of signal on a card, not the
 correctness of any decision.
 
-### `APP_ENV=production` — validated, one command away
+### `APP_ENV=production` — ✅ LIVE. `PRODUCTION_CONFIG = COMPLETE`
 
 **Correcting the previous handoff.** It named `CORS_ORIGINS` as the blocker.
 That was measured against the repository's `.env`, which does not set
 `CORS_ORIGINS` at all and so falls back to a localhost default. Vercel sets it
 correctly. Production was never misconfigured — the measurement was.
 
-Ground truth, read out of the running production process:
+Applied, then confirmed from the running process rather than the dashboard:
 
 ```json
-{"message": "production readiness", "app_env": "staging",
- "is_production": false, "would_boot_as_production": true,
+{"message": "production readiness", "app_env": "production",
+ "is_production": true, "would_boot_as_production": true,
  "refusal_count": 0, "refusals": [],
  "warnings": ["REDIS_URL points at localhost ..."]}
 ```
 
-`APP_ENV` is **`staging`**, which is the only reason the production checks are
-not running. Zero refusals; one non-blocking warning.
+Redeployed with `vercel redeploy <url> --target production` rather than
+`vercel --prod`, so the deployment rebuilt the exact same commit with the new
+environment instead of uploading whatever sat in a local working tree.
 
-```bash
-vercel env update APP_ENV production --value production --sensitive --yes
-vercel --prod          # env changes need a redeploy to take effect
-```
+Post-flip, with every production check now actually executing: all public
+routes `200`; rate limiting still 10 × `401` then `429`; PostgREST anon still
+`401`; the private receipt bucket still refuses an unsigned read; and the API
+docs are `404` on every path despite `ENABLE_DOCS=true`, because the backend
+root is not routed. The single warning is `REDIS_URL`, non-blocking by design —
+the limiter runs on the Postgres fallback from `0028`, proven enforcing.
 
 **Why this could not be checked from outside.** Every variable on the Vercel
 project is marked *sensitive*, and sensitive variables are write-only:
 `vercel env pull` writes the literal `[SENSITIVE]`, `vercel env run` supplies
 empty strings, `vercel env ls` shows `Hidden`. A local checker run against
 either reports on a configuration that does not exist — it produced three
-phantom refusals here. So `main.py` now evaluates `production_issues()` on
-every boot whatever `APP_ENV` says and logs the verdict; descriptions only,
-never values. The answer comes from the one process that holds the real values.
-
-That also removes the hazard the old sequence carried: nothing has to be
-flipped to find out what would happen.
+phantom refusals here. So `main.py` evaluates `production_issues()` on every
+boot whatever `APP_ENV` says and logs the verdict; descriptions only, never
+values. The answer comes from the one process that holds the real values, which
+is also what removed the hazard in the old sequence: nothing had to be flipped
+to find out what would happen.
 
 ---
 
