@@ -9,6 +9,7 @@ from __future__ import annotations
 import anyio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_v1_router
 from app.api.v1.routes import health, redirect
@@ -47,6 +48,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def _reject_nul_in_query_string(request, call_next):
+    """A NUL byte in the query string is a 500 waiting to happen.
+
+    `?q=%00` reaches a text column, and PostgreSQL cannot store NUL in text -
+    psycopg raises before the query is even sent. That escaped as a bare 500
+    with no problem+json body, which is both an unhandled error and the one
+    response shape this API promises never to produce.
+
+    Rejected centrally rather than sanitised per parameter, because it can
+    never be meaningful: no search term, slug or identifier legitimately
+    contains a NUL, and a middleware cannot forget the parameter somebody adds
+    next week.
+    """
+    raw = request.scope.get("query_string", b"")
+    if b"%00" in raw.lower() or bytes([0]) in raw:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "type": "https://bluntly.ph/problems/invalid_query",
+                "title": "Invalid query string",
+                "status": 422,
+                "detail": "A query parameter contained a NUL byte.",
+                "code": "invalid_query",
+            },
+            media_type="application/problem+json",
+        )
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def _no_shared_cache_for_authenticated_responses(request, call_next):

@@ -57,17 +57,45 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def db_available() -> bool:
-    """True when a real Postgres is reachable (integration tests)."""
-    from sqlalchemy import text
+#: Seconds to wait for the probe below. Small on purpose: this decides whether
+#: to *skip* tests, so being wrong costs a skipped suite, while being slow costs
+#: every run and every CI job.
+DB_PROBE_TIMEOUT_SECONDS = 3
 
-    from app.db.session import engine
+
+def db_available() -> bool:
+    """True when a real Postgres is reachable (integration tests).
+
+    Runs at import, because `requires_db` is a module-level marker - so anything
+    this blocks on blocks pytest *collection*, before a single test runs.
+
+    It therefore gets its own engine with an explicit connect timeout rather
+    than borrowing the application's. A refused connection fails in
+    milliseconds, which is why this was fine for a long time; a port that
+    silently drops packets instead does not fail at all, and the application
+    engine has no timeout to stop it waiting. The symptom is not a failure but
+    a hang: no output, no tests, nothing to read - and in CI, a job that sits
+    there until the runner kills it.
+    """
+    from sqlalchemy import create_engine, text
+
+    from app.core.config import settings
+
+    probe = None
     try:
-        with engine.connect() as conn:
+        probe = create_engine(
+            settings.effective_database_url,
+            connect_args={"connect_timeout": DB_PROBE_TIMEOUT_SECONDS},
+            pool_pre_ping=False,
+        )
+        with probe.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
     except Exception:  # noqa: BLE001
         return False
+    finally:
+        if probe is not None:
+            probe.dispose()
 
 
 requires_db = pytest.mark.skipif(
