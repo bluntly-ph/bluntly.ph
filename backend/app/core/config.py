@@ -13,6 +13,8 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from app.core.constants import PAYOUT_MINIMUM_PHP
+
 # Per-platform affiliate domain allowlist for referral-link validation (M2 slice 1).
 # Override via AFFILIATE_ALLOWED_DOMAINS as JSON. A pasted link's host must equal or
 # be a subdomain of one of these for the declared platform.
@@ -172,7 +174,12 @@ class Settings(BaseSettings):
     contract_term_months: int = 6         # auto-renews unless the reviewer opts out
 
     # --- Payouts (M3 slice 11) ---
-    payout_min_php: Decimal = Decimal("300.00")   # minimum wallet balance to schedule
+    # Default comes from the constant rather than being restated here. The same
+    # figure existed in both files, which is precisely the drift risk
+    # `core/constants.py` says it exists to remove — and an env override would
+    # have moved one and not the other, leaving two answers to "what is the
+    # minimum payout" with no way to tell which was live.
+    payout_min_php: Decimal = PAYOUT_MINIMUM_PHP  # minimum wallet balance to schedule
     payout_provider: str = "paypal_sandbox"       # paypal_sandbox | paypal_live | manual
     paypal_client_id: str = ""
     paypal_secret: str = ""

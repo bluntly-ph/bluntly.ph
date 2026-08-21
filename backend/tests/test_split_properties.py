@@ -152,3 +152,70 @@ class TestTheTierConfigCannotExceedWhatTheSplitAccepts:
         for bad in (MAX_REVIEWER_SHARE_BPS + 1, 10000):
             with pytest.raises(ValidationError):
                 TierUpdate(revenue_share_bps=bad)
+
+
+class TestTheEconomicConstantsAgreeAcrossSources:
+    """The same numbers live in several files. They must not drift.
+
+    `PAYOUT_MINIMUM_PHP` was declared in `core/constants.py` and restated as a
+    literal in `config.py` — identical, and one env override away from being two
+    different answers to "what is the minimum payout" with no way to tell which
+    one was live. `core/constants.py` says in its own docstring that it exists
+    to remove exactly that risk.
+    """
+
+    def test_the_three_baseline_shares_are_a_whole(self):
+        from app.core.constants import (
+            HONESTY_FUND_SHARE,
+            PLATFORM_SHARE,
+            REVIEWER_SHARE,
+        )
+        assert PLATFORM_SHARE + REVIEWER_SHARE + HONESTY_FUND_SHARE == Decimal("1.00")
+
+    def test_the_standard_tier_reproduces_the_baseline(self):
+        """3000 bps is not an arbitrary default — it *is* the 40/30/30 split."""
+        from app.core.constants import REVIEWER_SHARE
+        standard_bps = 3000
+        assert Decimal(standard_bps) / Decimal(10000) == REVIEWER_SHARE
+
+        split = split_commission_tiered(Decimal("1000.00"), standard_bps)
+        assert split["platform_share"] == Decimal("400.00")
+        assert split["reviewer_share"] == Decimal("300.00")
+        assert split["honesty_fund_share"] == Decimal("300.00")
+
+    def test_the_payout_minimum_has_one_source(self):
+        from app.core.config import settings
+        from app.core.constants import PAYOUT_MINIMUM_PHP
+        assert settings.payout_min_php == PAYOUT_MINIMUM_PHP, (
+            "config and constants disagree about the minimum payout")
+
+    @pytest.mark.parametrize("bps", [3000, 3500, 4000])
+    def test_a_tier_upgrade_costs_the_platform_never_the_fund(self, bps):
+        """The capstone invariant, stated as a test rather than a comment."""
+        from app.core.constants import HONESTY_FUND_SHARE
+        gross = Decimal("1000.00")
+        split = split_commission_tiered(gross, bps)
+        assert split["honesty_fund_share"] == gross * HONESTY_FUND_SHARE
+        assert split["reviewer_share"] == gross * Decimal(bps) / Decimal(10000)
+        assert split["platform_share"] == (
+            gross - split["reviewer_share"] - split["honesty_fund_share"])
+
+    def test_the_database_constraint_matches_the_code_constant(self):
+        """0030 writes the cap into the schema as a literal, on purpose.
+
+        A migration records what the database was told when it ran and must not
+        change meaning later because a constant moved. That leaves the two free
+        to drift, so this is what keeps them equal — if the code's cap changes,
+        the schema needs a new migration, and this test is the reminder.
+        """
+        import pathlib
+        import re
+
+        migration = (pathlib.Path(__file__).resolve().parents[1]
+                     / "alembic" / "versions" / "0030_tier_share_bounds.py")
+        src = migration.read_text(encoding="utf-8")
+        literal = int(re.search(r"^MAX_REVIEWER_SHARE_BPS = (\d+)", src, re.M).group(1))
+        assert literal == MAX_REVIEWER_SHARE_BPS, (
+            f"0030 constrains revenue_share_bps to {literal} but the code now "
+            f"caps it at {MAX_REVIEWER_SHARE_BPS}; the schema needs a new "
+            f"migration, not an edit to 0030")

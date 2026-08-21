@@ -9,7 +9,17 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-# --- Revenue split (FR-6): every commission splits 40/30/30. ---
+# --- Revenue split (FR-6). ---
+#
+# 40/30/30 is the BASELINE, not what every commission does. The live path is
+# `split_commission_tiered`, which takes the reviewer's share from
+# `membership_tiers.revenue_share_bps` — 3000 for standard, which reproduces
+# 40/30/30 exactly, and 3500 or 4000 for founding and special.
+#
+# What stays fixed across all of them is the Honesty Fund's 30%: a tier upgrade
+# comes out of the platform's share and never the fund's. That is the capstone
+# invariant, and it is why the platform absorbs the rounding remainder rather
+# than the fund.
 PLATFORM_SHARE = Decimal("0.40")
 REVIEWER_SHARE = Decimal("0.30")
 HONESTY_FUND_SHARE = Decimal("0.30")
