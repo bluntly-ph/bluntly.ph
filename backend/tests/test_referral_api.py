@@ -196,3 +196,56 @@ def test_edited_since_monetized_flag(client):
                  json={"title": "Great (revised)", "change_note": "typo"})
     queue = client.get("/api/v1/admin/review-queue", headers=mh).json()
     assert rid in [item["review"]["id"] for item in queue["edited_since_monetized"]]
+
+
+@requires_db
+def test_unpublish_returns_the_review_to_the_queue(client):
+    """Unpublishing must not strand the review where no moderator can find it.
+
+    `get_queue` selects `earn_eligible_status == pending AND published_at IS
+    NULL`. Unpublish used to clear only `published_at`, leaving the status at
+    `approved`, so the review vanished from the site and from the queue at the
+    same time. Production had two reviews in exactly that state when this was
+    found, one of them for eleven days, both put there by a moderator using a
+    documented control correctly.
+    """
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+    rid, _ = _make_review(client, ah, stars=4)
+
+    assert client.post(f"/api/v1/admin/reviews/{rid}/publish",
+                       headers=mh).status_code == 200
+    unpub = client.post(f"/api/v1/admin/reviews/{rid}/unpublish", headers=mh, json={})
+    assert unpub.status_code == 200, unpub.text
+
+    body = unpub.json()
+    assert body["published_at"] is None
+    assert body["earn_eligible_status"] == "pending"
+
+    from tests.conftest import find_pending_queue_item
+    assert find_pending_queue_item(client, mh, rid) is not None, \
+        "unpublished review is not in the moderation queue"
+
+    # And the moderator can still act on it: reject requires `pending`-and-down.
+    assert client.post(f"/api/v1/admin/reviews/{rid}/reject", headers=mh,
+                       json={"reason": "acceptance"}).status_code == 200
+
+
+@requires_db
+def test_unpublish_does_not_leave_a_paying_link(client):
+    """A monetized review taken down must stop attributing clicks."""
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+    rid, _ = _make_review(client, ah, stars=4)
+
+    client.post(f"/api/v1/admin/reviews/{rid}/referral-link", headers=mh,
+                json={"url": SHOPEE_URL, "platform": "shopee"})
+    assert client.get(f"/r/{rid}", follow_redirects=False).status_code == 302
+
+    assert client.post(f"/api/v1/admin/reviews/{rid}/unpublish", headers=mh,
+                       json={}).status_code == 200
+    assert client.get(f"/r/{rid}", follow_redirects=False).status_code == 404

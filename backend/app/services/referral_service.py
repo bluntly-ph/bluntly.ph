@@ -221,8 +221,22 @@ def unpublish(db: Session, review: Review, moderator_id: uuid.UUID,
               reason: str | None = None) -> Review:
     if review.published_at is None:
         raise _conflict("Review is not published.", "not_published")
+    previous = review.earn_eligible_status
     review.published_at = None
-    _audit(db, moderator_id, ModerationAction.unpublish, review.id, notes=reason)
+    # Back into the moderation queue, not into limbo. `get_queue` selects
+    # `pending` AND unpublished, so clearing `published_at` while leaving the
+    # status at `approved`/`monetized`/`honesty_fund` strands the review: gone
+    # from the site *and* absent from the queue, with nothing in the moderator
+    # UI that can reach it again. Two reviews were sitting in that state in
+    # production when this was found, the older one for eleven days.
+    #
+    # `pending` is also the honest description of what an unpublished review
+    # is - it needs a decision - and it is the one status `reject` and
+    # `publish_without_link` both accept, so the moderator who took it down can
+    # still act on it afterwards.
+    review.earn_eligible_status = EarnEligibleStatus.pending
+    _audit(db, moderator_id, ModerationAction.unpublish, review.id, notes=reason,
+           context={"previous_status": previous.value})
     recompute_product_aggregates(db, review.product_id)
     if review.author_id is not None:
         recompute_user_trust(db, review.author_id)
