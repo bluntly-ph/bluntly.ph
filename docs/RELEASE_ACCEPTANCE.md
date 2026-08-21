@@ -119,12 +119,25 @@ watching, and before CI existed that would have landed silently. Fixed in
 `TEST_SUPABASE_URL` is set. Two more are needed, and both live behind the
 Supabase dashboard because neither is retrievable through any API:
 
+**`TEST_SUPABASE_SESSION_POOLER` is a full connection URI, not a password.**
+The first attempt at this set the database password, because the wording below
+used to say "Reset database password → session pooler URI" as though they were
+one step. They are two different fields, a click apart, and the resulting
+failure was an opaque `Could not parse SQLAlchemy URL from given URL string`.
+`bootstrap_test_env` now names the mistake explicitly instead.
+
 ```bash
 # Supabase → project bluntly-ph-test (miysywhcdqkoniaibglx)
-#   Settings → Database → Reset database password  -> session pooler URI
-#   Settings → API      → service_role key
-gh secret set TEST_SUPABASE_SESSION_POOLER      # paste at the prompt
-gh secret set TEST_SUPABASE_SECRET_KEY          # paste at the prompt
+#
+#   1. Settings → Database → Reset database password   (gives the PASSWORD)
+#   2. Connect (top bar) → Session pooler              (gives the URI TEMPLATE)
+#      -> postgresql://postgres.miysywhcdqkoniaibglx:[YOUR-PASSWORD]@
+#         aws-N-ap-southeast-1.pooler.supabase.com:5432/postgres
+#      Substitute the password from step 1 into [YOUR-PASSWORD].
+#   3. Settings → API → service_role key               (the secret key)
+
+gh secret set TEST_SUPABASE_SESSION_POOLER      # the full URI from step 2
+gh secret set TEST_SUPABASE_SECRET_KEY          # the key from step 3
 ```
 
 `gh secret set` reads from the prompt or stdin, so neither value is ever typed

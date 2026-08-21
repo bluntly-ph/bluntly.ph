@@ -71,9 +71,29 @@ def preflight() -> bool:
 
     # Positive confirmation, not just the absence of production signals.
     from sqlalchemy.engine.url import make_url
+    from sqlalchemy.exc import ArgumentError
 
     from app.core.config import settings
-    url = make_url(settings.effective_database_url)
+    try:
+        url = make_url(settings.effective_database_url)
+    except ArgumentError:
+        # Almost always the same mistake: the *database password* was supplied
+        # where a full connection URI belongs. Supabase shows the two a click
+        # apart, and the raw SQLAlchemy failure for it is
+        # "Could not parse SQLAlchemy URL from given URL string", which does
+        # not point at the actual problem.
+        #
+        # Never print the value - it is a credential either way.
+        print("\n  NOT READY: the connection string could not be parsed as a URL.")
+        print("\n  This is usually a database *password* supplied where a full")
+        print("  connection URI is expected. The value must look like:")
+        print("\n    postgresql://postgres.<project-ref>:<password>"
+              "@aws-N-<region>.pooler.supabase.com:5432/postgres")
+        print("\n  In Supabase: the Connect button (top bar) -> Session pooler,")
+        print("  then substitute the password from Settings -> Database.")
+        print("  Set it in SUPABASE_CONNECTION_STRING_SESSION_POOLER (locally)")
+        print("  or the TEST_SUPABASE_SESSION_POOLER secret (CI).")
+        return False
     if PRODUCTION_PROJECT_REF in str(url):
         print("\n  REFUSED: the migration URL references the production project.")
         return False
