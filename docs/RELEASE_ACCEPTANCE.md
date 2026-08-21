@@ -289,7 +289,7 @@ Two settings are involved, and both are absent from the repository:
 
 | Variable | Effect of it being unset |
 |---|---|
-| `REDIS_URL` | The limiter reaches for `localhost`, fails, and allows. It is designed to fail open so a Redis outage cannot break login — but with nothing configured, open is the *normal* mode. |
+| `REDIS_URL` | ~~The limiter reaches for `localhost`, fails, and allows.~~ **Resolved 2026-08-21**: migration `0028` is applied and the Postgres fallback is verified enforcing — ten failed logins answer `401`, the eleventh answers `429`. Redis remains unconfigured; it is now a warning, not a refusal, so it no longer blocks `APP_ENV`. Configure it to restore the faster path. |
 | `APP_ENV` | `production_issues()` refuses to start the app on a wildcard CORS origin, a localhost Redis, a placeholder PII salt or a weak postback secret — and `main.py` only runs it when `APP_ENV=production`. The app is up, so that check is not running. |
 
 ### What the code now does about it
@@ -432,7 +432,22 @@ limiting open.
 Celery's timezone *is* correctly `Asia/Manila` with `enable_utc=True`, so the
 schedule itself is right. There is simply nothing running it.
 
-### The one with a live consequence
+### ✅ PII retention — run 2026-08-21
+
+Run through the authorized moderator path against production. Before: 226
+sessions, 30 holding a raw IP, **3 past their 30-day deadline**. The sweep
+returned `{"hashed": 3, "purged": 0}`. After: raw IPs 30 → 27, hashed 12 → 15,
+overdue **3 → 0**, session count unchanged at 226 and user agents untouched —
+exactly three rows changed, and only the overdue ones. A second run returned
+`{"hashed": 0, "purged": 0}`, confirming idempotency.
+
+The temporary QA moderator used for it was removed afterwards: users back to
+14, zero QA markers, zero orphaned reviews or sessions.
+
+Until a scheduler exists, this is the maintenance procedure — run it monthly,
+or whenever `check_invariants` reports sessions past their deadline.
+
+### The original finding
 
 Measured 2026-08-21: **225 sessions, 29 holding a raw IP, three already past
 their 30-day hashing deadline.** The 90-day deletions begin falling due from
