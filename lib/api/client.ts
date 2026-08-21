@@ -11,6 +11,15 @@ import { API_ORIGIN } from "./origin";
  * components go through the BFF route handler instead of importing this.
  */
 
+/**
+ * Deadline for every backend call. See `buildInit` for why it exists.
+ *
+ * Comfortably under the serverless function limit, so our own "backend
+ * unreachable" answer wins the race against the platform's error page, and far
+ * above the 150–350ms these calls actually take in production.
+ */
+const REQUEST_TIMEOUT_MS = 8_000;
+
 export type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   /** JSON body. Mutually exclusive with `form` and `body`. */
@@ -60,7 +69,17 @@ function buildInit(options: RequestOptions): RequestInit {
     method: options.method ?? "GET",
     headers,
     body,
-    signal: options.signal,
+    // A caller may pass its own signal; otherwise every request gets a deadline.
+    //
+    // Without one, `transportProblem` below can only fire for a refused
+    // connection — a backend that accepts and then never answers hangs the
+    // render until the platform kills the whole function, and the reader gets
+    // the platform's error page instead of ours. The app already knows how to
+    // say "backend unreachable"; it just could not reach that branch.
+    //
+    // Comfortably under the serverless limit so our message wins the race,
+    // and far above the 150–350ms these calls actually take.
+    signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   };
 
   // `cache` and `next.revalidate` are mutually exclusive, so this is either/or.
@@ -112,7 +131,27 @@ export async function apiFetch<T>(
   const isJson =
     contentType.includes("application/json") ||
     contentType.includes("application/problem+json");
-  const payload = isJson ? await response.json() : await response.text();
+  // A malformed body is a provider fault, not a caller error, and it must
+  // arrive as an ApiError like everything else — `response.json()` throws a
+  // bare SyntaxError, which would escape this layer and surface as an
+  // unhandled render error. The same discipline the backend adapters apply to
+  // their own providers.
+  let payload: unknown;
+  try {
+    payload = isJson ? await response.json() : await response.text();
+  } catch (cause) {
+    throw new ApiError({
+      type: "about:blank",
+      title: "Unreadable response",
+      status: 502,
+      detail:
+        cause instanceof Error
+          ? `The API returned a body that could not be read: ${cause.message}`
+          : "The API returned a body that could not be read.",
+      instance: path,
+      code: "bad_response_body",
+    });
+  }
 
   if (!response.ok) {
     // Every backend error is problem+json; anything else means we hit a proxy,
