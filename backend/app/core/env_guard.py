@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 # The production Supabase project. Public: it is in every image URL on the
 # live site. Hardcoded on purpose - deriving it from configuration would mean
@@ -56,27 +57,59 @@ _KEYS = (
     "APP_ENV",
 )
 
-# The same files pydantic-settings resolves for Settings, in the same order.
-# Relative to backend/app/core/ -> backend/ -> repo root.
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_REPO_ROOT = os.path.dirname(_BACKEND_DIR)
-# Exactly the files `Settings` reads, and no others.
-#
-# `.env.test` is deliberately NOT here. Including it made the guard lie: merely
-# having the file on disk made it report "test" while pydantic-settings - which
-# does not read it - still resolved production from the root .env. The guard has
-# to describe the connection the app will actually open, so the test values are
-# only visible here once `load_test_env()` has put them in os.environ, which is
-# also the moment they start affecting Settings.
+
+# Absolute, because `load_test_env()` is about a specific file on disk rather
+# than about whatever directory a process happens to be started from. Note this
+# is NOT the path used to decide what the target is - see `_settings_env_files`,
+# and the bug recorded in its docstring for why the distinction is load-bearing.
 _TEST_ENV_FILE = os.path.join(_BACKEND_DIR, ".env.test")
-_ENV_FILES = (
-    os.path.join(_REPO_ROOT, ".env"),
-    os.path.join(_BACKEND_DIR, ".env"),
-    # Last, matching Settings' own precedence. It belongs here now that
-    # pydantic reads it directly; while it did not, including it made the
-    # guard claim "test" for a process that resolved production.
-    _TEST_ENV_FILE,
-)
+
+# Exactly what `Settings.model_config` declares, and it matters that this stays
+# a literal copy of that tuple rather than anything derived.
+_SETTINGS_ENV_FILE_ENTRIES = ("../.env", ".env", ".env.test")
+
+
+def _settings_env_files() -> tuple[str, ...]:
+    """The env files `Settings` will actually read, resolved as pydantic
+    resolves them: **relative to the current working directory**.
+
+    This was a module-level constant built from this file's own location, and
+    that made the guard lie in the most dangerous direction available to it.
+    From the repo root `Settings` reads `<repo>/.env` - production - and never
+    opens `backend/.env.test`, because pydantic resolves `env_file` against the
+    process cwd. The guard, resolving absolutely, merged `backend/.env.test`
+    last anyway; that file blanks every `SUPABASE_CONNECTION_STRING*` and pins
+    `DATABASE_URL` to localhost. So `production_signals()` came back empty,
+    `is_test_target()` returned True off a marker in a file nothing had read,
+    and `require_non_production` cleared destructive work to run against the
+    live database while printing `target: test | db host: localhost`.
+
+    Mirroring pydantic exactly is the entire job. A guard that resolves
+    configuration differently from the code it guards is not a guard.
+    """
+    return tuple(os.path.abspath(entry) for entry in _SETTINGS_ENV_FILE_ENTRIES)
+
+
+def _resolved_connection() -> str:
+    """The database URL `Settings` resolved, when it has already resolved one.
+
+    Consults only an **already imported** config module and never imports it.
+    pydantic-settings reads `env_file` once, at import time, and
+    `load_test_env()` exists precisely to get values into os.environ before
+    that happens - so a guard that forced the import could pin the process to
+    the wrong configuration and manufacture the very mix-up it exists to catch.
+
+    When it is available it outranks every reconstruction below, because it is
+    not a reconstruction: it is the connection the process will really open.
+    """
+    module = sys.modules.get("app.core.config")
+    if module is None:
+        return ""
+    try:
+        return getattr(module.settings, "effective_database_url", "") or ""
+    except Exception:  # noqa: BLE001 - a broken config must not disable the guard
+        return ""
 
 
 def _read_env_file(path: str) -> dict[str, str]:
@@ -109,12 +142,17 @@ def _values() -> dict[str, str]:
     variables taking precedence - mirroring pydantic-settings' own order.
     """
     merged: dict[str, str] = {}
-    for path in _ENV_FILES:
+    for path in _settings_env_files():
         merged.update(_read_env_file(path))
     for key in _KEYS:
         from_environ = os.getenv(key)
         if from_environ is not None:
             merged[key.upper()] = from_environ
+    # Last word to the connection the process has actually resolved, so a
+    # reconstruction can never contradict the real thing.
+    resolved = _resolved_connection()
+    if resolved:
+        merged["DATABASE_URL"] = resolved
     return {k: (merged.get(k) or "").lower() for k in _KEYS}
 
 
@@ -171,9 +209,12 @@ def is_test_target() -> bool:
     """
     if os.getenv(TEST_ENV_MARKER):
         return True
-    # Settings reads .env.test directly, so a marker in that file is in force
-    # for the process whether or not anything exported it.
-    return bool(_read_env_file(_TEST_ENV_FILE).get(TEST_ENV_MARKER))
+    # A marker counts only when it sits in a `.env.test` that Settings will
+    # actually read from this working directory. Trusting `backend/.env.test`
+    # unconditionally let a process which had resolved production describe
+    # itself as a test target.
+    return any(_read_env_file(path).get(TEST_ENV_MARKER)
+               for path in _settings_env_files() if path.endswith(".env.test"))
 
 
 def describe_target() -> str:
@@ -184,18 +225,27 @@ def describe_target() -> str:
     scripts and to end up in terminal scrollback and CI logs.
     """
     values = _values()
-    raw = (values.get("SUPABASE_CONNECTION_STRING_SESSION_POOLER")
+    raw = (_resolved_connection().lower()
+           or values.get("SUPABASE_CONNECTION_STRING_SESSION_POOLER")
            or values.get("SUPABASE_CONNECTION_STRING")
            or values.get("DATABASE_URL") or "")
     host = "unknown"
     match = re.search(r"@([^/:?]+)", raw)
     if match:
         host = match.group(1)
+    # The ref must describe the same thing the host does: the connection this
+    # process will open. Reading SUPABASE_URL first printed the *test* project's
+    # ref beside the *production* host in one banner - and the pooler carries
+    # the ref in its username (`postgres.<ref>@...`), so the honest answer was
+    # available in the string already being displayed.
     ref = "unknown"
-    ref_match = re.search(r"([a-z]{20})\.supabase\.co", values.get("SUPABASE_URL", ""))
-    if ref_match:
-        ref = ref_match.group(1)
-    elif PRODUCTION_PROJECT_REF in raw:
+    for candidate in (raw, values.get("SUPABASE_URL", "")):
+        ref_match = (re.search(r"([a-z]{20})\.supabase\.co", candidate)
+                     or re.search(r"postgres\.([a-z]{20})", candidate))
+        if ref_match:
+            ref = ref_match.group(1)
+            break
+    if ref == "unknown" and PRODUCTION_PROJECT_REF in raw:
         ref = PRODUCTION_PROJECT_REF
     label = "PRODUCTION" if production_signals() else (
         "test" if is_test_target() else "unrecognised")

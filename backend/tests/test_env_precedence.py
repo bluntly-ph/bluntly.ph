@@ -41,7 +41,9 @@ def layout(tmp_path, monkeypatch):
         f.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(env_guard, "_TEST_ENV_FILE", str(test))
-    monkeypatch.setattr(env_guard, "_ENV_FILES", (str(root), str(backend), str(test)))
+    monkeypatch.setattr(env_guard, "_settings_env_files",
+                        lambda: (str(root), str(backend), str(test)))
+    monkeypatch.setattr(env_guard, "_resolved_connection", lambda: "")
     for key in env_guard._KEYS + (env_guard.TEST_ENV_MARKER,):
         monkeypatch.delenv(key, raising=False)
 
@@ -136,9 +138,15 @@ def test_the_documented_file_order_matches_the_code(layout):
     """
     declared = Settings.model_config.get("env_file")
     assert declared == ("../.env", ".env", ".env.test"), declared
-    # The guard's list is absolute paths, but must end with .env.test for the
-    # same reason: last file wins.
-    assert env_guard._ENV_FILES[-1] == env_guard._TEST_ENV_FILE
+    # The guard must copy those entries verbatim. This assertion used to check
+    # only that the guard's list ENDED with .env.test, which stayed true the
+    # whole time the two were drifting: the guard held absolute paths built
+    # from its own file location while pydantic resolved the same names against
+    # the process's cwd. From the repo root that meant the guard read a
+    # `backend/.env.test` that Settings never opened, blanking the production
+    # connection strings and clearing destructive work to run against the live
+    # database. Comparing the entries themselves is what closes that gap.
+    assert env_guard._SETTINGS_ENV_FILE_ENTRIES == declared
 
 
 class TestRefusalsAreSeparateFromWarnings:

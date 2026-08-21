@@ -26,11 +26,15 @@ def env(tmp_path, monkeypatch):
     test_env = tmp_path / ".env.test"
     for path in (root_env, backend_env, test_env):
         path.write_text("", encoding="utf-8")
-    # Mirrors production exactly: _ENV_FILES is what Settings reads, in Settings'
+    # Mirrors production exactly: these are what Settings reads, in Settings'
     # order, with .env.test LAST so it wins.
     monkeypatch.setattr(env_guard, "_TEST_ENV_FILE", str(test_env))
-    monkeypatch.setattr(env_guard, "_ENV_FILES",
-                        (str(root_env), str(backend_env), str(test_env)))
+    monkeypatch.setattr(env_guard, "_settings_env_files",
+                        lambda: (str(root_env), str(backend_env), str(test_env)))
+    # The real `Settings` is pointed wherever this developer's config points;
+    # these tests are about the guard's own resolution, so silence the
+    # already-imported-config shortcut and let the file layout above decide.
+    monkeypatch.setattr(env_guard, "_resolved_connection", lambda: "")
     for key in env_guard._KEYS + (env_guard.TEST_ENV_MARKER,):
         monkeypatch.delenv(key, raising=False)
 
@@ -171,3 +175,69 @@ def test_guard_cli_refuses_a_legitimate_script_without_the_flag(env):
         env_guard.guard_cli("hide_test_content", argv=[],
                             production_is_legitimate=True)
     assert exc.value.code == 1
+
+
+def test_env_files_resolve_against_the_working_directory(tmp_path, monkeypatch):
+    """The guard must read what Settings reads, and Settings reads cwd-relative.
+
+    Resolving from this module's own location instead meant `backend/.env.test`
+    counted for a process started in the repo root, where pydantic never opens
+    it. That file blanks the production connection strings, so the guard
+    reported `target: test | db host: localhost` for a live production
+    connection and cleared destructive work to run against it.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert env_guard._settings_env_files() == (
+        str(tmp_path.parent / ".env"), str(tmp_path / ".env"),
+        str(tmp_path / ".env.test"))
+
+
+def test_the_resolved_connection_outranks_the_files(env, monkeypatch):
+    """What Settings actually opened beats any reconstruction from env files.
+
+    The files are a guess at the target; an imported config object is the
+    target. When the two disagree the connection wins, so no arrangement of
+    `.env*` on disk can talk the guard out of a production database.
+    """
+    env("test", BLUNTLY_TEST_ENV="1", DATABASE_URL="postgresql://localhost/x")
+    assert env_guard.production_signals() == []
+    env_guard.require_non_production("a genuinely local run")  # must not raise
+
+    monkeypatch.setattr(
+        env_guard, "_resolved_connection",
+        lambda: f"postgresql://u:p@aws-0.pooler.supabase.com:5432/{PROD_REF}")
+
+    assert env_guard.production_signals(), \
+        "a production connection must be detected even when the files say test"
+    with pytest.raises(ProductionTargetError):
+        env_guard.require_non_production("wipe the database")
+
+
+def test_describe_target_reports_the_connection_not_the_files(env, monkeypatch):
+    """The printed banner is what a human trusts before running something."""
+    env("test", BLUNTLY_TEST_ENV="1", DATABASE_URL="postgresql://localhost/x")
+    monkeypatch.setattr(
+        env_guard, "_resolved_connection",
+        lambda: f"postgresql://u:secret@aws-0.pooler.supabase.com:5432/{PROD_REF}")
+
+    described = env_guard.describe_target()
+    assert described.startswith("PRODUCTION")
+    assert "localhost" not in described
+    assert "secret" not in described
+
+
+def test_the_reported_project_ref_matches_the_reported_host(env):
+    """One banner must not name the test project beside the production host.
+
+    The ref came from SUPABASE_URL while the host came from the connection
+    string, so a refused alembic run printed the production pooler host next to
+    the test project's ref. Anyone reading it to confirm what they were about
+    to touch got a contradiction.
+    """
+    env("root", SUPABASE_CONNECTION_STRING_SESSION_POOLER=
+        f"postgres://postgres.{PROD_REF}:pw@aws-0.pooler.supabase.com:5432/postgres")
+    env("test", SUPABASE_URL="https://miysywhcdqkoniaibglx.supabase.co")
+
+    described = env_guard.describe_target()
+    assert PROD_REF in described
+    assert "miysywhcdqkoniaibglx" not in described
