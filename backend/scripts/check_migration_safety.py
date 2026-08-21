@@ -60,22 +60,60 @@ PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\bDELETE\s+FROM\b", re.I), "DELETE FROM",
      "Row deletion in a migration is unreviewable and irreversible. Prefer a "
      "guarded script with a dry run."),
+    # Privilege regressions. 0029 revoked anon/authenticated from the public
+    # schema after a `USING (true)` policy exposed every column of 17 tables
+    # over PostgREST, `users.password_hash` among them. Nothing else would
+    # notice a migration handing it back.
+    (re.compile(r"\bGRANT\b[\s\S]{0,200}?\bTO\b[\s\S]{0,80}?"
+                r"\b(anon|authenticated|PUBLIC)\b", re.I),
+     "GRANT TO A PUBLIC ROLE",
+     "This reopens direct PostgREST access to application tables. If it is "
+     "genuinely wanted, grant it per column, and record why it is safe for "
+     "every column of that table."),
+    (re.compile(r"ALTER\s+DEFAULT\s+PRIVILEGES[\s\S]{0,200}?\bGRANT\b", re.I),
+     "DEFAULT PRIVILEGES GRANT",
+     "This makes every table created afterwards reachable, including ones "
+     "nobody has written yet. It is how the exposure comes back without "
+     "anyone touching a policy."),
     (re.compile(r"\bUPDATE\s+\w+\s+SET\b", re.I), "DATA REWRITE",
      "Fine when additive and backfilling, but it locks rows on a large table. "
      "Check the row count before applying to production."),
 )
 
 
-def applied_revision() -> str | None:
-    """The revision production/local is currently at, or None if unreachable."""
-    try:
-        from sqlalchemy import text
+#: Seconds to wait when asking the database where it is. Short on purpose: the
+#: answer only decides whether to scan every migration or the pending ones, so
+#: being wrong costs a longer report while being slow costs the whole run.
+REVISION_PROBE_TIMEOUT_SECONDS = 3
 
-        from app.db.session import engine
-        with engine.connect() as conn:
+
+def applied_revision() -> str | None:
+    """The revision production/local is currently at, or None if unreachable.
+
+    Its own engine, with an explicit connect timeout, rather than the
+    application's. A refused connection fails in milliseconds — which is why
+    this looked fine for a long time — but a port that silently drops packets
+    never fails at all, and the application engine has no timeout to stop it
+    waiting. Measured here: the tool sat for over six minutes and printed
+    nothing. Same fault as `tests/conftest.db_available`, same fix.
+    """
+    probe = None
+    try:
+        from sqlalchemy import create_engine, text
+
+        from app.core.config import settings
+        probe = create_engine(
+            settings.effective_database_url,
+            connect_args={"connect_timeout": REVISION_PROBE_TIMEOUT_SECONDS},
+            pool_pre_ping=False,
+        )
+        with probe.connect() as conn:
             return conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     except Exception:  # noqa: BLE001
         return None
+    finally:
+        if probe is not None:
+            probe.dispose()
 
 
 def scan(path: pathlib.Path) -> list[tuple[str, str]]:
