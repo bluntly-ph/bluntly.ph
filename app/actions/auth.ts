@@ -40,10 +40,42 @@ export type FormState = {
   retryAfterSeconds?: number;
 };
 
-/** A safe internal destination — never redirect to an attacker-supplied host. */
+/**
+ * A safe internal destination — never redirect to an attacker-supplied host.
+ *
+ * The previous version tested `startsWith("/") && !startsWith("//")`, which
+ * looks right and is not: browsers normalise backslashes to forward slashes
+ * per the URL spec, so `/\evil.com` passes both checks and then resolves to
+ * `https://evil.com/`. That makes
+ * `https://www.bluntly.ph/login?next=/\evil.com` a link that sends someone to
+ * an attacker's site *after* they successfully sign in — which is the most
+ * credible moment to show them a second login form.
+ *
+ * Resolving against a throwaway origin settles it instead of enumerating
+ * tricks: anything that escapes changes `origin`, whatever the syntax, and
+ * rebuilding the destination from the parsed parts drops control characters
+ * like the tab in `/\tevil.com` rather than passing them along.
+ */
+const INTERNAL_ONLY = "https://next.invalid";
+
 function safeNext(raw: FormDataEntryValue | null): string {
   const value = typeof raw === "string" ? raw : "";
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  if (!value.startsWith("/")) return "/";
+  try {
+    const resolved = new URL(value, INTERNAL_ONLY);
+    if (resolved.origin !== INTERNAL_ONLY) return "/";
+
+    const destination = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+
+    // Check the *output*, not just the input. `/..//evil.com` resolves to the
+    // pathname `//evil.com`, which is internal as a path and protocol-relative
+    // as a redirect target — so normalising can hand back something that
+    // escapes even though what went in did not.
+    if (!destination.startsWith("/") || destination.startsWith("//")) return "/";
+    return destination;
+  } catch {
+    return "/";
+  }
 }
 
 function toFormState(error: unknown): FormState {

@@ -84,7 +84,7 @@ export function SignupForm({
         <p className="mt-6 text-[12px] text-[var(--text-secondary)]">
           {purpose === "signup" ? "Already have an account? " : "New here? "}
           <Link
-            href={purpose === "signup" ? "/login" : "/signup"}
+            href={withNext(purpose === "signup" ? "/login" : "/signup", next)}
             className="text-[var(--accent-primary)] underline underline-offset-2"
           >
             {purpose === "signup" ? "Log in" : "Sign up"}
@@ -224,9 +224,23 @@ function CodeStep({
   );
 }
 
+/**
+ * Carry `?next=` across a hop between the two auth pages.
+ *
+ * The switch link at the bottom of the sheet was hardcoded to `/login` and
+ * `/signup`, so someone bounced from `/reviews/new` who chose "Sign up" rather
+ * than logging in arrived without a destination and landed on the home page
+ * afterwards, having lost what they were trying to do. `next` was preserved
+ * only in `FormError`, which appears solely after an `account_not_found` error
+ * — the one path where the user had *already* been told to switch.
+ */
+function withNext(href: string, next?: string): string {
+  return next ? `${href}?next=${encodeURIComponent(next)}` : href;
+}
+
 function FormError({ state, next }: { state: FormState; next?: string }) {
   if (!state.error || state.fieldErrors) return null;
-  const signupHref = next ? `/signup?next=${encodeURIComponent(next)}` : "/signup";
+  const signupHref = withNext("/signup", next);
   return (
     <p
       role="alert"
