@@ -321,29 +321,71 @@ dashboard", that is why — not an oversight.
 | `DATABASE_URL` not localhost | n/a — `USE_SUPABASE=true` | **Pass** | None | — |
 | `CORS_ORIGINS` has no `*` | **Yes** — no preflight reflects an origin, no wildcard | Likely | Confirm string | Any site reads authenticated responses |
 | `CORS_ORIGINS` not localhost | Behaviour safe; string unknown | Needs dashboard | Confirm string | Production browser origin refused |
-| `REDIS_URL` not localhost | **Yes — FAILS.** 14 failed logins, no 429 | **FAIL** | **Set `REDIS_URL`, or apply `0028`** | **Auth brute-force protection absent — live now** |
-| `PII_HASH_SALT` not placeholder | No | Needs dashboard | Confirm set | Hashed identifiers become guessable |
+| `REDIS_URL` not localhost | ~~14 failed logins, no 429~~ **Resolved 2026-08-21** | **Warning, not a refusal** | Optional — configure Redis for the fast path | Was: brute-force protection absent. `0028` applied and verified enforcing |
+| `PII_HASH_SALT` not placeholder | Partly — the retention sweep hashes successfully, so one is set; whether it is the placeholder is unknowable | Needs dashboard | Confirm set | Hashed identifiers become guessable |
+| Runtime uses the **transaction** pooler (:6543) | **Yes** — `runtime_database_url` resolves to `…pooler.supabase.com:6543` | **Pass** | None | Session pooler caps at ~4 clients; API 500s under load |
+| `THREADPOOL_TOKENS` ≤ DB pool capacity | **Yes** — 20 ≤ 20 (`DB_POOL_SIZE` 10 + `DB_MAX_OVERFLOW` 10) | **Pass** (exactly at the limit) | None | Surplus queues on the pool and 500s after `DB_POOL_TIMEOUT` |
 | `PAYOUT_PROVIDER=paypal_live` creds | n/a — provider is not live (FR-6 blocked on sandbox creds) | **Pass** | None | — |
 | `PAYPAL_BASE_URL` not sandbox when live | n/a — same | **Pass** | None | — |
 | `LAZADA_POSTBACK_SECRET` ≥ 32 | Partly — the endpoint answers 403 anonymously, so something is enforced | Needs dashboard | Confirm length | Anyone guessing the path fabricates conversions |
 | `EMAIL_PROVIDER` not console | **Yes** — Resend delivers (202 to real domains) | **Pass** | None | Every OTP silently fails; codes land in logs |
 | `RESEND_API_KEY` set | **Yes** — same evidence | **Pass** | None | OTP delivery fails |
 
-**One proven failure, several unknowable from outside.** Do not set
-`APP_ENV=production` before resolving them: the app would raise at import and
-the deployment would stop serving.
+### Evaluated 2026-08-21 — one refusal left
+
+Run against the developer's copy of the production values, with `APP_ENV`
+forced to `production` **locally only** (nothing in Vercel was touched), the
+report is:
+
+```
+1 warning(s) - these do NOT stop the app serving:
+  ~ REDIS_URL points at localhost ... (Postgres fallback, migration 0028)
+
+NOT READY - 1 issue(s).
+  - CORS_ORIGINS still points at localhost; a production browser origin
+    would be refused.
+```
+
+**`CORS_ORIGINS` is the single thing standing between here and
+`APP_ENV=production`.** It is unset in the repository, so it falls back to a
+default containing `localhost:3000`.
+
+It has gone unnoticed because it is currently harmless: the browser never calls
+the API cross-origin. The Next server holds the session cookie and proxies
+server-side, and a preflight from *any* origin — including `https://www.bluntly.ph`
+itself — answers `400`. So nothing is broken today. It would still refuse the
+boot, because the check tests the configured string rather than observed
+behaviour.
+
+Set it to the real origins:
+
+```
+CORS_ORIGINS=https://www.bluntly.ph,https://bluntly.ph
+```
+
+**Caveat worth stating plainly:** this was evaluated against the repo's `.env`,
+which is a developer's copy and is not guaranteed to match what Vercel holds.
+Confirm against the real thing before flipping the flag — that is what the
+`--env-file` flag below exists for.
 
 ### Answer it without guessing
 
 ```bash
-cd backend && python -m scripts.check_production_config
+vercel env pull prod.env --environment=production
+cd backend && python -m scripts.check_production_config --env-file ../prod.env --strict
+rm ../prod.env          # it holds real secrets
 ```
 
-Run it where the production values live — a Vercel shell, or locally with the
-production environment exported. It evaluates the same `production_issues()`
-list that `main.py` uses and prints **descriptions only, never values**, so the
-output is safe to paste into a ticket. `--strict` exits non-zero when the app
-would refuse to boot, which makes it usable as a deploy gate.
+It evaluates the same `production_issues()` list that `main.py` uses and prints
+**descriptions only, never values** — verified: with a connection string
+containing a marker secret, the marker appears zero times in the output — so
+the result is safe to paste into a ticket. `--strict` exits non-zero when the
+app would refuse to boot, which makes it usable as a deploy gate.
+
+`--env-file` matters because pydantic resolves `env_file` against the current
+working directory and only under fixed names; a pulled `prod.env` is not one of
+them, so without the flag the script would silently report on local
+configuration while appearing to describe production.
 
 ### Safe sequence
 

@@ -23,13 +23,55 @@ Exit codes: 0 ready, 1 not ready (with --strict), 2 could not evaluate.
 from __future__ import annotations
 
 import argparse
+import os
+
+
+def _load_env_file(path: str) -> int:
+    """Put a `vercel env pull` file into os.environ. Returns how many keys.
+
+    Real environment variables win, matching pydantic-settings, so an export in
+    the shell still overrides the file.
+
+    This has to happen before `app.core.config` is imported: pydantic reads its
+    `env_file` once, at import, and resolves it against the CURRENT WORKING
+    DIRECTORY. A pulled `.env.production` is not one of the names it looks for
+    under any cwd, so without this the script would cheerfully report on the
+    developer's local configuration while claiming to describe production —
+    the same class of mistake that let the production guard call a live
+    database "test".
+    """
+    loaded = 0
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            # `vercel env pull` quotes values; strip one matched pair.
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            if os.environ.setdefault(key.strip(), value) == value:
+                loaded += 1
+    return loaded
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--strict", action="store_true",
                     help="Exit non-zero when the app would refuse to boot.")
+    ap.add_argument("--env-file", metavar="PATH",
+                    help="Read production values from this file first, e.g. the "
+                         "output of `vercel env pull`. Values are never printed.")
     args = ap.parse_args()
+
+    if args.env_file:
+        try:
+            count = _load_env_file(args.env_file)
+        except OSError as exc:
+            print(f"could not read {args.env_file}: {exc}")
+            return 2
+        print(f"loaded {count} value(s) from {args.env_file} (values not shown)\n")
 
     try:
         from app.core.config import settings
