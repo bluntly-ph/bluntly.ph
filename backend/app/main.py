@@ -26,11 +26,36 @@ log = get_logger("app")
 # something already mitigated would keep every *other* production check switched
 # off, because they all hang on APP_ENV and nobody can set APP_ENV while one
 # stale refusal blocks it.
+_issues = settings.production_issues()
+_warnings = settings.production_warnings()
+
+# Report readiness on every boot, whatever APP_ENV happens to say.
+#
+# This exists because the question "would APP_ENV=production boot?" cannot be
+# answered from outside the deployment. Every environment variable on the
+# Vercel project is marked *sensitive*, which makes it write-only: `vercel env
+# pull` writes the literal `[SENSITIVE]` and `vercel env run` supplies empty
+# strings. Neither is the real value, so a local checker run against either
+# describes a configuration that does not exist. The real values are present in
+# exactly one place - this process - so this is the only place the question can
+# honestly be answered.
+#
+# Descriptions only, never values. That is a property of `production_issues()`
+# itself, whose whole purpose is to produce output safe to print into logs and
+# paste into a ticket.
+log.info("production readiness", extra={"extra_fields": {
+    "app_env": settings.app_env,
+    "is_production": settings.is_production,
+    "would_boot_as_production": not _issues,
+    "refusal_count": len(_issues),
+    "refusals": _issues,
+    "warnings": _warnings,
+}})
+
 if settings.is_production:
-    for _warning in settings.production_warnings():
+    for _warning in _warnings:
         log.warning("production configuration warning",
                     extra={"extra_fields": {"warning": _warning}})
-    _issues = settings.production_issues()
     if _issues:
         raise RuntimeError("Production configuration invalid:\n  - " + "\n  - ".join(_issues))
 
