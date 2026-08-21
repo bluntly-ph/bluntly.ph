@@ -539,14 +539,46 @@ Revisit if wider log retention shows REST traffic that is not `rt/1`.
 
 ## H. Final release verification
 
-Once A, B and C are done, in this order:
+The order matters: containment first, then configuration, then the suites that
+need them, then the verdict.
+
+| # | Step | Command | Pass looks like |
+|---|---|---|---|
+| 1 | Apply pending migrations | `cd backend && alembic -x allow_production=1 upgrade head` | production at `0030` |
+| 2 | Verify PostgREST sealed | §E "Verify — anonymous must be refused" | every table `401`/`403` |
+| 3 | Verify the app is unaffected | §E "Verify — the application is unaffected" | all `200` |
+| 4 | Validate production config | `python -m scripts.check_production_config` | `READY` |
+| 5 | Set `APP_ENV=production`, deploy | §F "Safe sequence" | boots, serves `200` |
+| 6 | Verify rate limiting | §F step 6 — twelve failed logins | at least one `429` |
+| 7 | Run the isolated DB suite | `python -m scripts.bootstrap_test_env` | ~669 passed, **0 skipped** |
+| 8 | Run the milestone verifier | `python -m scripts.verify_milestones` (Git Bash) | `58/58 verified` |
+| 9 | Run Ruff | `cd backend && python -m ruff check app/ scripts/ tests/` | `All checks passed!` |
+| 10 | Frontend verification | `npx tsc --noEmit && npm run lint && npm run build` | clean, every route emitted |
+| 11 | Data integrity | `python -m scripts.check_invariants --strict` | `All 15 invariants hold` |
+| 12 | Production smoke | steps 3b and 5–6 below | as stated there |
+| 13 | PayPal sandbox acceptance | §C, scenarios 1–8 | no double debit or refund |
+| 14 | Security matrix | step 6 below | every row holds |
+| 15 | **Verdict** | §"Contractual verdict" below | every FR resolved |
+
+Steps 1–6 are the ones currently outstanding. 7 and 8 are blocked on §A.
+13 is blocked on §C.
+
+### The commands in full
 
 ```bash
-# 1. Backend, with the isolated DB — expect 0 skips
+# 7. Backend, with the isolated DB — expect 0 skips
 cd backend && .venv/Scripts/python -m scripts.bootstrap_test_env
 
-# 2. Frontend
+# 9. Static analysis. Not optional: with the DB-backed half of the suite
+#    unavailable it is most of what stands between an edit and production, and
+#    a NameError in create_review reached production exactly that way.
+cd backend && .venv/Scripts/python -m ruff check app/ scripts/ tests/
+
+# 10. Frontend
 npx tsc --noEmit && npm run lint && npm run build
+
+# 11. Data integrity — read-only, safe against production
+cd backend && .venv/Scripts/python -m scripts.check_invariants --strict
 
 # 3. Browsers — SERIALLY. Five engines in parallel exhausted this host once and
 #    produced 180 spurious failures; serial runs are just as valid.
@@ -554,6 +586,7 @@ for p in chromium firefox webkit mobile-chrome mobile-safari; do
   npx playwright test --project=$p --workers=1
   npm run dev:stop
 done
+```
 
 **3b. Browsers against production** — the read-only specs can be pointed at a
 deployed origin, which is the only way to check that what is *deployed* renders.
