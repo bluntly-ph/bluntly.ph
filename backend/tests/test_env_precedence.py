@@ -139,3 +139,46 @@ def test_the_documented_file_order_matches_the_code(layout):
     # The guard's list is absolute paths, but must end with .env.test for the
     # same reason: last file wins.
     assert env_guard._ENV_FILES[-1] == env_guard._TEST_ENV_FILE
+
+
+class TestRefusalsAreSeparateFromWarnings:
+    """Refusing to boot is the strongest thing this config can do, so the bar
+    is "serving in this state is worse than not serving at all".
+
+    An unconfigured Redis used to clear that bar: it was the only throttle on
+    login brute force, and the limiter failed open silently. Migration 0028
+    changed the facts - the limiter now falls back to Postgres, verified
+    enforcing against production - so the refusal became stale. A stale refusal
+    is not harmless here: every other production check is gated on APP_ENV, and
+    nobody can set APP_ENV while one refusal blocks the boot.
+    """
+
+    def test_redis_is_a_warning_not_a_refusal(self, layout, monkeypatch):
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+        settings = layout.settings_for()
+        refusals = " ".join(settings.production_issues())
+        warnings = " ".join(settings.production_warnings())
+        assert "REDIS_URL" not in refusals, (
+            "an unconfigured Redis refuses the boot again; the Postgres "
+            "fallback from 0028 means it should only warn")
+        assert "REDIS_URL" in warnings
+
+    def test_the_genuinely_fatal_checks_still_refuse(self, layout, monkeypatch):
+        """The split must not have quietly demoted anything that matters."""
+        monkeypatch.setenv("JWT_SECRET", "short")
+        monkeypatch.setenv("CORS_ORIGINS", "*")
+        monkeypatch.setenv("PII_HASH_SALT", "dev-pii-salt")
+        refusals = " ".join(layout.settings_for().production_issues())
+        for expected in ("JWT_SECRET", "CORS_ORIGINS", "PII_HASH_SALT"):
+            assert expected in refusals, f"{expected} no longer refuses the boot"
+
+    def test_warnings_never_block_the_boot(self, layout):
+        """main.py logs warnings and serves; only issues raise."""
+        import pathlib
+        main = (pathlib.Path(__file__).resolve().parents[1]
+                / "app" / "main.py").read_text(encoding="utf-8")
+        assert "production_warnings()" in main, "warnings are never surfaced"
+        raising = main.split("_issues = settings.production_issues()")[1][:300]
+        assert "raise RuntimeError" in raising
+        assert "production_warnings" not in raising, (
+            "a warning can reach the raise, which makes it a refusal")

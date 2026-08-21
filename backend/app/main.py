@@ -21,7 +21,15 @@ configure_logging()
 log = get_logger("app")
 
 # Fail fast in production if hard requirements aren't met (JWT secret, DB, CORS).
+#
+# Refusals only. Warnings are logged and the app serves — refusing to boot over
+# something already mitigated would keep every *other* production check switched
+# off, because they all hang on APP_ENV and nobody can set APP_ENV while one
+# stale refusal blocks it.
 if settings.is_production:
+    for _warning in settings.production_warnings():
+        log.warning("production configuration warning",
+                    extra={"extra_fields": {"warning": _warning}})
     _issues = settings.production_issues()
     if _issues:
         raise RuntimeError("Production configuration invalid:\n  - " + "\n  - ".join(_issues))

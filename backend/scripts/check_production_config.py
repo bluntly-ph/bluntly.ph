@@ -42,6 +42,14 @@ def main() -> int:
     print(f"production checks running: {settings.is_production}\n")
 
     issues = settings.production_issues()
+    warnings = settings.production_warnings()
+
+    if warnings:
+        print(f"{len(warnings)} warning(s) - these do NOT stop the app serving:")
+        print()
+        for warning in warnings:
+            print(f"  ~ {warning}")
+        print()
 
     if not issues:
         print("READY - production_issues() is empty.")

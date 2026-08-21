@@ -318,9 +318,27 @@ class Settings(BaseSettings):
         """Connect kwargs for the APPLICATION (transaction pooler)."""
         return self._connect_args_for(self.runtime_database_url)
 
+    def production_warnings(self) -> list[str]:
+        """Things worth fixing that must NOT stop the app from serving.
+
+        Split out of `production_issues` when migration 0028 gave rate limiting
+        a Postgres fallback. Refusing to boot over a solved problem is worse
+        than the problem: every other production check is gated on APP_ENV, and
+        nobody can set APP_ENV while one stale refusal blocks it.
+        """
+        return self._production_report()[1]
+
     def production_issues(self) -> list[str]:
-        """Hard requirements before serving production traffic."""
+        """Hard requirements before serving production traffic.
+
+        Refusals only. A refusal means the app will not start, so the bar is
+        "serving traffic in this state is worse than not serving at all".
+        """
+        return self._production_report()[0]
+
+    def _production_report(self) -> tuple[list[str], list[str]]:
         issues: list[str] = []
+        warnings: list[str] = []
         if self.jwt_secret in ("", "dev-insecure-change-me") or len(self.jwt_secret) < 32:
             issues.append("JWT_SECRET must be a strong random value (>= 32 chars).")
         if self.use_supabase and not (self.supabase_connection_string_session_pooler
@@ -334,14 +352,27 @@ class Settings(BaseSettings):
         if "localhost" in self.cors_origins or "127.0.0.1" in self.cors_origins:
             issues.append("CORS_ORIGINS still points at localhost; a production "
                           "browser origin would be refused.")
-        # Redis is the ONLY throttle on login/register brute force — the OTP caps
-        # live in Postgres, but nothing else does. enforce_rate_limit fails open
-        # (core/rate_limit.py), so an unreachable Redis removes that protection
-        # silently rather than loudly.
+        # Redis used to be the ONLY throttle on login/register brute force, and
+        # an unreachable one removed that protection silently — so this refused
+        # to boot without it, correctly.
+        #
+        # Migration 0028 changed the facts. `enforce_rate_limit` now falls back
+        # to Postgres, verified enforcing against production on 2026-08-21: ten
+        # failed logins answered 401 and the eleventh answered 429, with Redis
+        # still unconfigured. Refusing to boot for a solved problem would be
+        # worse than the problem — it would keep every *other* production check
+        # switched off, because they all hang on APP_ENV, which nobody can set
+        # while this one blocks it.
+        #
+        # So an unset Redis is a warning, not a refusal. What would be a real
+        # refusal is having neither store, and that is not something this
+        # function can see: `rate_limit_counters` may exist by the time the app
+        # boots. `check_invariants` covers the table's absence instead.
         if "localhost" in self.redis_url or "127.0.0.1" in self.redis_url:
-            issues.append("REDIS_URL still points at localhost; rate limiting "
-                          "fails open, so auth brute-force protection would be "
-                          "absent in production.")
+            warnings.append("REDIS_URL points at localhost. Rate limiting runs "
+                            "on the Postgres fallback (migration 0028), which "
+                            "is slower than Redis but present. Configure Redis "
+                            "to restore the fast path.")
         if self.pii_hash_salt in ("", "dev-pii-salt"):
             issues.append("PII_HASH_SALT must be a strong random value in production.")
         if self.payout_provider == "paypal_live" and not (
@@ -385,7 +416,7 @@ class Settings(BaseSettings):
                 f"capacity ({pool_capacity} = DB_POOL_SIZE + DB_MAX_OVERFLOW). Sync "
                 "endpoints hold a connection for their whole life, so the surplus "
                 "would queue on the pool and 500 after DB_POOL_TIMEOUT under load.")
-        return issues
+        return issues, warnings
 
 
 @lru_cache
