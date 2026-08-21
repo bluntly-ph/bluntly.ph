@@ -568,8 +568,26 @@ PLAYWRIGHT_BASE_URL=https://www.bluntly.ph npx playwright test   e2e/responsive.
 **Pass:** 27 tests. Zero console errors, real content, styles applied, no
 horizontal scroll at 393px.
 
-**Only the read-only specs.** `route-guards.spec.ts` submits forms, and
-production is not a fixture.
+**Write specs are excluded automatically.** `playwright.config.ts` drops
+`route-guards.spec.ts` whenever `PLAYWRIGHT_BASE_URL` is not localhost — it
+submits forms, and production is not a fixture. Enforced in the config rather
+than left to whoever types the command, because a stray account is silent and
+permanent.
+
+**Chromium engines only.** Vercel's bot protection challenges Playwright's
+headless WebKit: every request returns **403** with a body linking to
+`vercel.link/security-checkpoint`. It is reputation-based, so it appears after
+a run or two of sustained traffic and then applies to every path — a run that
+passed an hour ago will fail wholesale.
+
+A 403 carrying `security-checkpoint` means the checkpoint, **not a broken
+site**. Verified: ordinary clients, including ones sending a Safari user agent,
+get 200 throughout. Real Safari users are unaffected; it is the headless
+fingerprint being challenged.
+
+Do not attempt to defeat it. Run production smoke on `chromium` and
+`mobile-chrome`, keep the volume low, and run `firefox`, `webkit` and
+`mobile-safari` against the local stack where the full matrix belongs anyway.
 
 # 4. Migration safety, before any further schema change
 cd backend && .venv/Scripts/python -m scripts.check_migration_safety --all

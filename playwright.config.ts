@@ -31,8 +31,20 @@ import { defineConfig, devices } from "@playwright/test";
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const IS_REMOTE = !BASE_URL.includes("localhost");
 
+/**
+ * Specs that submit forms or otherwise write. They are fine against a local or
+ * isolated stack and must never run against a deployed origin — production is
+ * not a fixture.
+ *
+ * Enforced here rather than left to whoever types the command, because the
+ * failure is silent and permanent: nobody notices a stray account until it
+ * turns up in a report months later.
+ */
+const WRITES = ["**/route-guards.spec.ts"];
+
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: IS_REMOTE ? WRITES : [],
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
