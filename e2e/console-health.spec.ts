@@ -64,9 +64,22 @@ for (const path of PAGES) {
 
 test("the home page renders real content, not an empty shell", async ({ page }) => {
   await page.goto("/");
+
   // Hydration failures and error boundaries both produce a near-empty body.
-  const text = (await page.locator("body").innerText()).trim();
-  expect(text.length, "home page body should not be effectively empty").toBeGreaterThan(200);
+  //
+  // Polled rather than read once. `goto` resolves on `load`, but the App Router
+  // streams the page: the shell arrives first and the content fills in after,
+  // so a single read races the stream. Measured against production it caught
+  // 15 characters on one run in three and 1874 on the others — a flaky gate,
+  // which is worse than no gate, because it teaches everyone to re-run it.
+  //
+  // Same fault as the `networkidle` wait above, which was fixed and this was
+  // not. Polling keeps the assertion identical and lets it settle.
+  await expect
+    .poll(async () => (await page.locator("body").innerText()).trim().length, {
+      message: "home page body should not be effectively empty",
+    })
+    .toBeGreaterThan(200);
 });
 
 test("styles are actually applied", async ({ page }) => {
