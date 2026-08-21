@@ -387,6 +387,57 @@ review, and is a larger change than a release-hardening pass should make.
 
 ---
 
+## F3. Scheduled work has no scheduler — owner action
+
+`celery_app.beat_schedule` defines four periodic jobs. **None of them run.**
+`docs/PRODUCTION.md` documents a deployment of app + Celery worker + beat, but
+`vercel.json` declares two services — `frontend` and `backend` — and no worker,
+and the broker points at the same unconfigured Redis that left auth rate
+limiting open.
+
+| Job | Schedule | Runs? | Manual trigger |
+|---|---|---|---|
+| Honesty Fund distribution | 1st, 02:00 Manila | no | **yes** — `POST /api/v1/admin/honesty-fund/run` |
+| Payout scheduling | daily | no | **yes** — `POST /api/v1/admin/payouts/run` |
+| PII retention sweep | 03:00 daily | no | **yes** — `POST /api/v1/admin/pii-retention/run` (added here) |
+| Wilson re-rank | 04:00 daily | no | none |
+| Trust progression | 04:30 daily | no | none |
+
+Celery's timezone *is* correctly `Asia/Manila` with `enable_utc=True`, so the
+schedule itself is right. There is simply nothing running it.
+
+### The one with a live consequence
+
+Measured 2026-08-21: **225 sessions, 29 holding a raw IP, three already past
+their 30-day hashing deadline.** The 90-day deletions begin falling due from
+late October. The retention schedule is a promise about people's data, so it
+should not be waiting on a process nobody deployed:
+
+```bash
+curl -X POST -H "Authorization: Bearer <moderator token>"   https://www.bluntly.ph/api/v1/admin/pii-retention/run
+```
+
+Idempotent — the sweep selects on deadlines, so a second run finds nothing.
+
+### The two with no trigger
+
+Wilson re-rank and trust progression have neither a worker nor an endpoint.
+Neither is silently broken: `wilson_score` is recomputed on every vote and
+`recompute_user_trust` runs on publish, so both stay roughly current through
+ordinary activity. What never happens is the **time decay** — the "time-decayed
+Wilson Score ranking" the PRD names as core — re-applying to reviews that are
+not being voted on. Ranking drifts stale rather than wrong.
+
+### Fixing it properly
+
+Vercel supports scheduled functions via a `crons` block in `vercel.json`
+hitting an endpoint on a schedule. That is the platform-native answer and needs
+no worker. It is not done here because it changes deployment configuration and
+the cron endpoints need their own authentication — an owner decision, not a
+hardening edit.
+
+---
+
 ## G. Security incident response — password-hash exposure
 
 `users.password_hash` was readable. The values are Argon2id, so they are not

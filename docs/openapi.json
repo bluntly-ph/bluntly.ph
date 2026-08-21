@@ -521,6 +521,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 50,
               "title": "Limit"
             }
@@ -532,7 +534,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -911,6 +914,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 50,
               "title": "Limit"
             }
@@ -1115,6 +1120,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 8,
               "title": "Limit"
             }
@@ -1176,7 +1183,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 200
                 },
                 {
                   "type": "null"
@@ -1953,6 +1961,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 50,
               "title": "Limit"
             }
@@ -1963,6 +1973,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Offset"
             }
@@ -2414,6 +2425,33 @@
         ]
       }
     },
+    "/api/v1/admin/pii-retention/run": {
+      "post": {
+        "tags": [
+          "admin: earnings"
+        ],
+        "summary": "Run the sessions PII retention sweep (idempotent)",
+        "description": "Apply the 30/90-day retention schedule to `sessions`, on demand.\n\nThe sweep is scheduled in `celery_app.beat_schedule` for 03:00 daily, and\nnothing runs it: the deployment is two Vercel services, frontend and\nbackend, with no worker and no beat, and the broker points at a Redis that\nis not configured. Measured on 2026-08-21, three sessions were already\nholding a raw IP past their 30-day hashing deadline, and the 90-day\ndeletions begin falling due from late October.\n\nSo this exists for the same reason the Honesty Fund has a manual trigger:\nthe retention schedule is a promise the platform makes about people's data,\nand it should not depend on infrastructure that is not deployed. Idempotent\n- the sweep selects on deadlines, so running it twice is a no-op the second\ntime.",
+        "operationId": "run_pii_retention_api_v1_admin_pii_retention_run_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionSweepResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/reports": {
       "get": {
         "tags": [
@@ -2451,6 +2489,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 50,
               "title": "Limit"
             }
@@ -2461,6 +2501,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Offset"
             }
@@ -3122,6 +3163,8 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
               "default": 30,
               "title": "Limit"
             }
@@ -7835,6 +7878,24 @@
         "title": "RequestStatus",
         "description": "Review-request lifecycle (M3 slice 9)."
       },
+      "RetentionSweepResult": {
+        "properties": {
+          "hashed": {
+            "type": "integer",
+            "title": "Hashed"
+          },
+          "purged": {
+            "type": "integer",
+            "title": "Purged"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hashed",
+          "purged"
+        ],
+        "title": "RetentionSweepResult"
+      },
       "ReviewCreate": {
         "properties": {
           "product_id": {
@@ -8536,7 +8597,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 10000.0,
+                "maximum": 7000.0,
                 "minimum": 0.0
               },
               {

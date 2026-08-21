@@ -13,7 +13,7 @@ from app.core.errors import AppError
 from app.core.security import require_role
 from app.db.session import get_db
 from app.models.user import User
-from app.services import commission_service, honesty_fund_service
+from app.services import commission_service, honesty_fund_service, retention_service
 
 router = APIRouter(prefix="/admin", tags=["admin: earnings"],
                    dependencies=[Depends(require_role("moderator"))])
@@ -69,3 +69,36 @@ def run_honesty_fund(payload: HonestyFundRunRequest, db: Session = Depends(get_d
     result = honesty_fund_service.distribute(db, cycle_month=cycle,
                                              triggered_by=mod.id)
     return HonestyFundRunResult(**result)
+
+
+class RetentionSweepResult(BaseModel):
+    #: IPs replaced by a salted hash at the 30-day mark.
+    hashed: int
+    #: Hashes deleted and user agents purged at 90 days, counted together —
+    #: `run_retention_sweep` sums them, and this mirrors what it returns rather
+    #: than inventing a shape it does not produce.
+    purged: int
+
+
+@router.post("/pii-retention/run", response_model=RetentionSweepResult,
+             summary="Run the sessions PII retention sweep (idempotent)")
+def run_pii_retention(db: Session = Depends(get_db),
+                      mod: User = Depends(require_role("moderator"))
+                      ) -> RetentionSweepResult:
+    """Apply the 30/90-day retention schedule to `sessions`, on demand.
+
+    The sweep is scheduled in `celery_app.beat_schedule` for 03:00 daily, and
+    nothing runs it: the deployment is two Vercel services, frontend and
+    backend, with no worker and no beat, and the broker points at a Redis that
+    is not configured. Measured on 2026-08-21, three sessions were already
+    holding a raw IP past their 30-day hashing deadline, and the 90-day
+    deletions begin falling due from late October.
+
+    So this exists for the same reason the Honesty Fund has a manual trigger:
+    the retention schedule is a promise the platform makes about people's data,
+    and it should not depend on infrastructure that is not deployed. Idempotent
+    - the sweep selects on deadlines, so running it twice is a no-op the second
+    time.
+    """
+    counts = retention_service.run_retention_sweep(db)
+    return RetentionSweepResult(**counts)

@@ -686,6 +686,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/pii-retention/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the sessions PII retention sweep (idempotent)
+         * @description Apply the 30/90-day retention schedule to `sessions`, on demand.
+         *
+         *     The sweep is scheduled in `celery_app.beat_schedule` for 03:00 daily, and
+         *     nothing runs it: the deployment is two Vercel services, frontend and
+         *     backend, with no worker and no beat, and the broker points at a Redis that
+         *     is not configured. Measured on 2026-08-21, three sessions were already
+         *     holding a raw IP past their 30-day hashing deadline, and the 90-day
+         *     deletions begin falling due from late October.
+         *
+         *     So this exists for the same reason the Honesty Fund has a manual trigger:
+         *     the retention schedule is a promise the platform makes about people's data,
+         *     and it should not depend on infrastructure that is not deployed. Idempotent
+         *     - the sweep selects on deadlines, so running it twice is a no-op the second
+         *     time.
+         */
+        post: operations["run_pii_retention_api_v1_admin_pii_retention_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reports": {
         parameters: {
             query?: never;
@@ -2584,6 +2617,13 @@ export interface components {
          * @enum {string}
          */
         RequestStatus: "open" | "fulfilled" | "cancelled" | "expired" | "removed";
+        /** RetentionSweepResult */
+        RetentionSweepResult: {
+            /** Hashed */
+            hashed: number;
+            /** Purged */
+            purged: number;
+        };
         /** ReviewCreate */
         ReviewCreate: {
             /**
@@ -4545,6 +4585,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_pii_retention_api_v1_admin_pii_retention_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionSweepResult"];
                 };
             };
         };
