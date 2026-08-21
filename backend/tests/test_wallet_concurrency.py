@@ -31,9 +31,22 @@ from tests.conftest import requires_db
 
 SERVICES = pathlib.Path(__file__).resolve().parents[1] / "app" / "services"
 
-# The transitions that guard on current status, and so must hold a row lock
-# before they read it.
-GUARDED_TRANSITIONS = ("mark_paid", "mark_failed", "cancel", "retry")
+# Transitions that guard on current state, and so must hold a row lock before
+# they read it. Keyed by the service that owns them.
+#
+# contract_service turned up in exactly the condition payout_service had been
+# in: accept_buyout read `status`, decided, credited a wallet, then wrote the
+# new status — so two concurrent accepts both saw `active`, both passed the
+# guard, and both paid out the buyout amount for one contract.
+GUARDED_TRANSITIONS = {
+    "payout_service": ("mark_paid", "mark_failed", "cancel", "retry"),
+    "contract_service": (
+        "set_auto_renew", "offer_buyout", "accept_buyout", "reject_buyout",
+    ),
+}
+
+#: The object each service's `_locked` helper re-reads.
+LOCK_SUBJECT = {"payout_service": "payout", "contract_service": "contract"}
 
 
 class TestNoServiceDoesWalletArithmeticInPython:
@@ -64,27 +77,50 @@ class TestNoServiceDoesWalletArithmeticInPython:
 
 class TestGuardedTransitionsTakeARowLock:
 
-    def test_each_transition_locks_before_it_checks(self):
-        src = (SERVICES / "payout_service.py").read_text(encoding="utf-8")
-        for fn in GUARDED_TRANSITIONS:
+    @pytest.mark.parametrize("service", sorted(GUARDED_TRANSITIONS))
+    def test_each_transition_locks_before_it_checks(self, service):
+        src = (SERVICES / f"{service}.py").read_text(encoding="utf-8")
+        subject = LOCK_SUBJECT[service]
+        for fn in GUARDED_TRANSITIONS[service]:
             m = re.search(rf"^def {fn}\([\s\S]*?(?=\n(?:def |\Z))", src, re.M)
-            assert m, f"{fn} not found"
+            assert m, f"{service}.{fn} not found"
             body = m.group(0)
-            lock = body.find("_locked(db, payout)")
-            check = body.find("payout.status")
-            assert lock != -1, f"{fn} checks status without locking the row first"
-            assert lock < check, (
-                f"{fn} reads payout.status before taking the lock, so two "
-                f"callers can both pass the guard")
+            lock = body.find(f"_locked(db, {subject})")
+            check = body.find(f"{subject}.status")
+            assert lock != -1, (
+                f"{service}.{fn} checks state without locking the row first")
+            if check != -1:
+                assert lock < check, (
+                    f"{service}.{fn} reads {subject}.status before taking the "
+                    f"lock, so two callers can both pass the guard")
 
-    def test_the_lock_refreshes_the_identity_map(self):
+    @pytest.mark.parametrize("service", sorted(GUARDED_TRANSITIONS))
+    def test_the_lock_refreshes_the_identity_map(self, service):
         """Without populate_existing the lock hands back the stale instance."""
-        src = (SERVICES / "payout_service.py").read_text(encoding="utf-8")
+        src = (SERVICES / f"{service}.py").read_text(encoding="utf-8")
         m = re.search(r"def _locked\([\s\S]*?(?=\n\ndef )", src)
-        assert m and "with_for_update()" in m.group(0)
+        assert m, f"{service} has no _locked helper"
+        assert "with_for_update()" in m.group(0)
         assert "populate_existing" in m.group(0), (
-            "_locked takes the lock but returns the cached object, so the "
-            "status it re-checks is the one it already had")
+            f"{service}._locked takes the lock but returns the cached object, "
+            f"so the state it re-checks is the one it already had")
+
+    def test_no_money_path_checks_state_without_a_lock(self):
+        """The generalised form: any service that credits a wallet after
+        testing a status must own a `_locked` helper.
+
+        This is what would have caught contract_service, which had the same
+        shape as payout_service and none of the protection.
+        """
+        for path in SERVICES.glob("*_service.py"):
+            src = path.read_text(encoding="utf-8")
+            if "wallet.adjust(" not in src:
+                continue
+            if ".status !=" not in src and ".status not in" not in src:
+                continue
+            assert "def _locked(" in src, (
+                f"{path.name} credits a wallet after testing a status but has "
+                f"no _locked helper, so two callers can both pass the guard")
 
 
 @requires_db

@@ -6,7 +6,6 @@ import uuid as _uuid
 
 import pytest
 
-from app.core.config import settings
 from app.services.ai_critique import heuristic_validate
 from tests.conftest import register_and_token, requires_db
 from tests.test_votes_api import make_published_review
@@ -110,8 +109,7 @@ def test_create_guards(client):
 def test_upvotes_count_once_per_user_and_persist(client):
     """Up-votes are the demand signal now, not a multiplier on a purse."""
     uid, token, _ = register_and_token(client)
-    _, mod_token, _ = register_and_token(client, role="moderator")
-    h, mh = _auth(token), _auth(mod_token)
+    h = _auth(token)
     rid = client.post("/api/v1/requests", headers=h, json={
         "title": "Review this blender", "details": GOOD_DETAILS}).json()["id"]
 
@@ -242,8 +240,7 @@ def test_expiry_closes_open_requests(client):
     from app.services.request_service import expire_open_requests
 
     uid, token, _ = register_and_token(client)
-    _, mod_token, _ = register_and_token(client, role="moderator")
-    h, mh = _auth(token), _auth(mod_token)
+    h = _auth(token)
     rid = client.post("/api/v1/requests", headers=h, json={
         "title": "Review this mug", "details": GOOD_DETAILS}).json()["id"]
 
@@ -267,8 +264,7 @@ def test_list_sorting_by_demand(client):
     wanted the answer.
     """
     uid, token, _ = register_and_token(client)
-    _, mod_token, _ = register_and_token(client, role="moderator")
-    h, mh = _auth(token), _auth(mod_token)
+    h = _auth(token)
     quiet = client.post("/api/v1/requests", headers=h, json={
         "title": "Quietly wanted request", "details": GOOD_DETAILS}).json()["id"]
     popular = client.post("/api/v1/requests", headers=h, json={

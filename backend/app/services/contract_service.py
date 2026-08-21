@@ -114,9 +114,33 @@ def _require_owner(contract: ReviewContract, user: User) -> None:
                        status_code=403, title="Insufficient permissions")
 
 
+
+def _locked(db: Session, contract: ReviewContract) -> ReviewContract:
+    """Re-read a contract FOR UPDATE so its state check cannot race.
+
+    `accept_buyout` reads `status`, decides, credits a wallet, then writes the
+    new status. Read outside a lock, two concurrent accepts both see `active`,
+    both pass the guard, and both credit the buyout amount - the reviewer is
+    paid twice for one contract, and nothing anywhere reports it.
+
+    The same shape as payout_service._locked, and for the same reason:
+    "only an active contract can be bought out" reads like a state machine
+    while behaving like a suggestion. `populate_existing` matters - without it
+    the identity map returns the same instance that was just checked and the
+    lock buys nothing.
+    """
+    return db.execute(
+        select(ReviewContract)
+        .where(ReviewContract.id == contract.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+
+
 def set_auto_renew(db: Session, contract: ReviewContract, user: User,
                    auto_renew: bool) -> ReviewContract:
     _require_owner(contract, user)
+    contract = _locked(db, contract)
     if contract.status != ContractStatus.active:
         raise _conflict("Only an active contract can change its renewal setting.",
                         "contract_not_active")
@@ -128,6 +152,7 @@ def set_auto_renew(db: Session, contract: ReviewContract, user: User,
 
 def offer_buyout(db: Session, contract: ReviewContract, moderator_id: uuid.UUID,
                  amount: Decimal) -> ReviewContract:
+    contract = _locked(db, contract)
     if contract.status != ContractStatus.active:
         raise _conflict("Only an active contract can be bought out.",
                         "contract_not_active")
@@ -155,6 +180,7 @@ def offer_buyout(db: Session, contract: ReviewContract, moderator_id: uuid.UUID,
 
 def accept_buyout(db: Session, contract: ReviewContract, user: User) -> ReviewContract:
     _require_owner(contract, user)
+    contract = _locked(db, contract)
     if contract.status != ContractStatus.active:
         raise _conflict("Only an active contract can be bought out.",
                         "contract_not_active")
@@ -180,6 +206,7 @@ def accept_buyout(db: Session, contract: ReviewContract, user: User) -> ReviewCo
 
 def reject_buyout(db: Session, contract: ReviewContract, user: User) -> ReviewContract:
     _require_owner(contract, user)
+    contract = _locked(db, contract)
     if contract.buyout_offer_amount is None:
         raise _conflict("There is no pending buyout offer.", "no_pending_buyout")
     contract.buyout_offer_amount = None

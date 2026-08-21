@@ -91,10 +91,10 @@ jobs:
         working-directory: backend
         run: |
           pip install ruff
-          python -m ruff check app/ scripts/
-          # Undefined names and unused locals are errors everywhere, including
-          # in tests — a test that quietly references nothing is not a test.
-          python -m ruff check tests/ --select F821,F811
+          # Tests included, with no carve-out. They were clean as of the commit
+          # that added this, and a test that quietly references nothing is not
+          # a test — three here registered a moderator they never used.
+          python -m ruff check app/ scripts/ tests/
 
       # DB-backed tests skip themselves via `requires_db` when no Postgres is
       # reachable, so this runs the unit half of the suite.
