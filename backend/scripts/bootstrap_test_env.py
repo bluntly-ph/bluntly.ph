@@ -43,9 +43,28 @@ def _run(label: str, args: list[str]) -> tuple[bool, str]:
     proc = subprocess.run([PYTHON, *args], capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
     out = (proc.stdout or "") + (proc.stderr or "")
-    tail = [ln for ln in out.splitlines() if ln.strip()][-6:]
-    for line in tail:
-        print(f"  {line}")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+
+    if proc.returncode == 0:
+        for line in lines[-6:]:
+            print(f"  {line}")
+    else:
+        # Six lines is enough to read a success and nowhere near enough to
+        # diagnose a failure. A 33-minute CI run that reports "6 failed,
+        # 4 errors" and then hides which six is a run you have to do again.
+        #
+        # pytest's own "short test summary info" block is exactly the right
+        # amount: one line per failure with the reason. Fall back to a longer
+        # tail for anything that has no such section (alembic, the verifier).
+        marker = next((i for i, ln in enumerate(lines)
+                       if "short test summary info" in ln), None)
+        if marker is not None:
+            print("  --- failures ---")
+            for line in lines[marker:][:60]:
+                print(f"  {line}")
+        else:
+            for line in lines[-40:]:
+                print(f"  {line}")
     print(f"  -> exit {proc.returncode} in {time.time() - started:.1f}s")
     return proc.returncode == 0, out
 

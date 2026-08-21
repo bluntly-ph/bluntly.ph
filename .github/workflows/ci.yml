@@ -156,10 +156,23 @@ jobs:
           SUPABASE_CONNECTION_STRING_SESSION_POOLER: ${{ secrets.TEST_SUPABASE_SESSION_POOLER }}
           EMAIL_PROVIDER: console
           JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789ab
+          # The credential is the SESSION pooler, which allows only a handful of
+          # concurrent clients — far fewer than the app's default pool of
+          # 10 + 10 overflow. A test runner needs one connection at a time, and
+          # asking for twenty against a cap of about four produces setup errors
+          # late in the run that look like unrelated test failures.
+          DB_POOL_SIZE: "2"
+          DB_MAX_OVERFLOW: "3"
+          DB_POOL_TIMEOUT: "30"
         # One gated command: validate the target, refuse production, migrate to
         # head, verify the revision, run pytest, run milestone verification.
         # It exits non-zero on any stage, and stops before touching anything if
         # the target is not a declared non-production test environment.
+        #
+        # ap-southeast-1 from a GitHub runner is a long way, and every query
+        # pays that round trip: the suite takes ~33 minutes here against ~10 on
+        # a machine near the region. The timeout is a hang guard, not a target.
+        timeout-minutes: 75
         run: python -m scripts.bootstrap_test_env
 
   frontend:
