@@ -64,6 +64,16 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
      "Feeds avg_rating and the Wilson ranking, so one bad row skews the "
      "ordering the whole platform is built on."),
 
+    ("reviews stranded outside the moderation queue",
+     "SELECT count(*) FROM reviews WHERE is_removed = false "
+     "AND published_at IS NULL "
+     "AND earn_eligible_status NOT IN ('pending', 'rejected')",
+     "Unpublished and not pending means invisible to readers AND absent from "
+     "get_queue, which selects pending-and-unpublished. Nothing in the "
+     "moderator UI can reach such a row. Two sat in production this way, one "
+     "for eleven days, because the old unpublish cleared published_at without "
+     "moving the status back."),
+
     ("monetized but unverified",
      "SELECT count(*) FROM reviews WHERE earn_eligible_status = 'monetized' "
      "AND verification_status <> 'verified'",

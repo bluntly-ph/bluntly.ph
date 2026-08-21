@@ -479,6 +479,65 @@ hardening edit.
 
 ---
 
+## F4. Data repair — reviews stranded by the old `unpublish` — ✅ DONE
+
+**Applied 2026-08-21. One record. Owner-authorised.**
+
+Until `b7a506a`, `unpublish` cleared `published_at` and left
+`earn_eligible_status` alone. `get_queue` selects `pending` AND unpublished, so
+a review taken down left the site *and* the moderation queue in the same
+moment: no moderator control could reach it again, and the only way back was
+knowing the UUID. Both reviews found in that state got there by a moderator
+using a documented control correctly.
+
+The code fix stops new ones. It does not move records already stranded, so
+those were repaired by hand.
+
+| | |
+|---|---|
+| Review | `10856799-62bf-445b-a035-a26e885af9a2` — "Moderation loop probe" |
+| Author | a real account (not a QA identity) |
+| Before | `approved`, `published_at IS NULL`, `is_removed = false`, unpublished 2026-08-10 |
+| After | `pending` — everything else byte-identical |
+| Stranded for | 11 days |
+
+The second stranded review was a QA record from this sprint's own moderator
+phase and was removed with the rest of that run's data, not repaired.
+
+```sql
+-- Every precondition is in the WHERE clause, so this can only match that one
+-- record in that one state. Re-running it after the fact changes nothing.
+UPDATE reviews
+SET earn_eligible_status = 'pending'
+WHERE id = '10856799-62bf-445b-a035-a26e885af9a2'
+  AND published_at IS NULL
+  AND is_removed = false
+  AND earn_eligible_status = 'approved';
+```
+
+Deliberately **not** touched: `published_at` stays NULL (the repair does not
+publish anything), `is_removed` stays false, `verification_status` stays
+`unverified` — proof-of-purchase evidence is never rewritten to make a record
+tidy — and title, body, author and `current_version` are untouched.
+`updated_at` did not drift either: no trigger fired, so the record still
+carries its real last-edited time rather than the time an engineer touched it.
+
+Verified afterwards through the moderator API, not just in SQL: the review
+appears in `GET /admin/review-queue` among 9 pending items, `published_at`
+null, status `pending`. The QA moderator account created to run that check was
+deleted immediately after.
+
+**Standing check.** This query must stay at zero. Anything it returns is
+unreachable by moderators and invisible to readers:
+
+```sql
+SELECT count(*) FROM reviews
+WHERE is_removed = false AND published_at IS NULL
+  AND earn_eligible_status NOT IN ('pending', 'rejected');
+```
+
+---
+
 ## G. Security incident response — password-hash exposure
 
 `users.password_hash` was readable. The values are Argon2id, so they are not
