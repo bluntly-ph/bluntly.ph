@@ -180,13 +180,36 @@ class TestRefusalsAreSeparateFromWarnings:
         for expected in ("JWT_SECRET", "CORS_ORIGINS", "PII_HASH_SALT"):
             assert expected in refusals, f"{expected} no longer refuses the boot"
 
-    def test_warnings_never_block_the_boot(self, layout):
-        """main.py logs warnings and serves; only issues raise."""
+    def test_warnings_never_block_the_boot(self):
+        """main.py logs warnings and serves; only issues raise.
+
+        Read from the parse tree rather than the source text. This used to
+        slice 300 characters after a marker line and look for `raise` inside
+        them, which made it a proximity check: adding a comment between the two
+        broke it while the behaviour was untouched. What actually matters is
+        which value reaches the raise, and that is a structural question.
+        """
+        import ast
         import pathlib
-        main = (pathlib.Path(__file__).resolve().parents[1]
-                / "app" / "main.py").read_text(encoding="utf-8")
-        assert "production_warnings()" in main, "warnings are never surfaced"
-        raising = main.split("_issues = settings.production_issues()")[1][:300]
-        assert "raise RuntimeError" in raising
-        assert "production_warnings" not in raising, (
-            "a warning can reach the raise, which makes it a refusal")
+
+        source = (pathlib.Path(__file__).resolve().parents[1]
+                  / "app" / "main.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        raises = [node for node in ast.walk(tree)
+                  if isinstance(node, ast.Raise)
+                  and isinstance(node.exc, ast.Call)
+                  and getattr(node.exc.func, "id", None) == "RuntimeError"]
+        assert raises, "nothing refuses the boot any more"
+
+        # Every refusal must sit under `if <something>_issues:` — never under a
+        # test of the warnings list, which would make a warning fatal.
+        for node in raises:
+            guards = [n for n in ast.walk(tree)
+                      if isinstance(n, ast.If) and node in ast.walk(n)]
+            guard_src = " ".join(ast.dump(n.test) for n in guards)
+            assert "issues" in guard_src, "the refusal is not guarded by the issue list"
+            assert "warning" not in guard_src.lower(), (
+                "a warning can reach the raise, which makes it a refusal")
+
+        assert "production_warnings()" in source, "warnings are never surfaced"
