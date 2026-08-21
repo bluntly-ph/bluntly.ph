@@ -5,11 +5,24 @@ written so another competent engineer can execute it without reconstructing a
 plan. Each section states what unblocks it, the exact commands, what a pass
 looks like, and what to do when it fails.
 
-Five things are blocked on the owner and nothing else is, and **E is live** - do that one first. They are
-independent — do them in any order, or in parallel.
+**Status as of 2026-08-21 — only PayPal remains.**
 
-| Blocker | Unblocks | Owner action |
-|---|---|---|
+| Was blocked | Now |
+|---|---|
+| **A. Test database** | ✅ **Done.** `bluntly-ph-test` migrated from empty to head; 717 passed, 0 skipped; milestones 58/58 |
+| **B. GitHub `workflow` scope** | ✅ **Done.** CI active and green on all four jobs |
+| **C. PayPal sandbox** | ⛔ **Still blocked on Zient.** The only remaining external dependency |
+| **E. PostgREST containment** | ✅ **Done.** 0 tables readable by `anon` or `authenticated`; live probes return 401 |
+| **F. Production env vars** | ✅ **Done.** `APP_ENV=production` live and verified from the running process; rate limiting enforcing via the Postgres fallback |
+
+> **The verdict cannot be `CONTRACT READY` until C is executed.** FR-6 makes
+> PayPal payouts contractual, so its acceptance has to actually happen — not be
+> inferred from the mocked boundary tests, however complete those are.
+
+Sections A and B below keep their original instructions as the record of how
+each was resolved.
+
+---|---|---|
 | **A. Test database** | 125 backend tests, 58 milestone checks, moderator a11y spec | a Supabase password *or* a Docker permission |
 | **B. GitHub `workflow` scope** | CI activation | re-authorize the credential |
 | **C. PayPal sandbox** | FR-6 contractual acceptance | sandbox client id + secret |
