@@ -56,3 +56,39 @@ def test_the_real_0029_migration_is_clean():
     from scripts.check_migration_safety import scan
 
     assert "TRUNCATE" not in [label for label, _ in scan(path)]
+
+
+def test_the_whole_chain_renders_offline():
+    """`alembic upgrade head --sql` must work without a database.
+
+    Offline rendering is how a migration gets reviewed before it is applied,
+    and how a fresh database gets built where no direct connection is available
+    — which is exactly the position the isolated test project was in: empty,
+    with its password held only in a dashboard.
+
+    `0027` broke it by reading `result.rowcount` from `op.execute`, which
+    returns None in offline mode, so the chain died four migrations short of
+    head and the failure looked like a broken migration rather than a mode it
+    had never supported.
+    """
+    import os
+    import pathlib
+    import subprocess
+    import sys
+
+    backend = pathlib.Path(__file__).resolve().parents[1]
+    env = {
+        **os.environ,
+        "BLUNTLY_TEST_ENV": "1",
+        "APP_ENV": "test",
+        # Offline mode never connects; this only has to satisfy the guard.
+        "DATABASE_URL": "postgresql+psycopg://ci:ci@localhost:5432/ci",
+    }
+    proc = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head", "--sql"],
+        cwd=backend, env=env, capture_output=True, text=True, timeout=180,
+    )
+    assert proc.returncode == 0, f"offline render failed:\n{proc.stderr[-2000:]}"
+    # It must reach head, not merely exit cleanly partway.
+    assert "0030_tier_share_bounds" in proc.stdout, "chain did not reach head"
+    assert "CREATE TABLE alembic_version" in proc.stdout

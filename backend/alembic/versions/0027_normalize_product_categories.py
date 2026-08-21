@@ -32,8 +32,9 @@ Revises: 0026_data_integrity_checks
 """
 from __future__ import annotations
 
-from alembic import op
+import re
 
+from alembic import op
 from app.core.categories import ALIASES
 
 revision = "0027_normalize_product_categories"
@@ -42,10 +43,36 @@ branch_labels = None
 depends_on = None
 
 
+def _slug(value: str) -> str:
+    """A category slug, or an exception. Guards the literal SQL below.
+
+    ALIASES and CATEGORIES are module constants of hardcoded slugs, never user
+    input, so interpolating them is safe today. This makes that a property the
+    code enforces rather than one a future editor has to remember.
+    """
+    if not re.fullmatch(r"[a-z0-9-]+", value or ""):
+        raise ValueError(f"not a category slug: {value!r}")
+    return value
+
+
 def upgrade() -> None:
-    conn = op.get_bind()
+    from alembic import context
+
+    # `alembic upgrade head --sql` renders SQL without a database. There is
+    # nothing to inspect in that mode: `op.execute` returns None, so reading
+    # `.rowcount` raises, and the diagnostic SELECT below cannot run at all.
+    # Offline rendering is how this migration gets reviewed before it is
+    # applied, and how a fresh database is built where no direct connection is
+    # available - both of which this previously made impossible.
+    if context.is_offline_mode():
+        for wrong, right in ALIASES.items():
+            op.execute(f"UPDATE products SET category = '{_slug(right)}' "
+                       f"WHERE category = '{_slug(wrong)}'")
+        return
+
     from sqlalchemy import text
 
+    conn = op.get_bind()
     for wrong, right in ALIASES.items():
         result = conn.execute(
             text("UPDATE products SET category = :right WHERE category = :wrong"),
