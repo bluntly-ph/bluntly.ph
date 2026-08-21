@@ -43,8 +43,12 @@ test.describe("responsive layout", () => {
     // Whatever the breakpoint, a first-time visitor must be able to reach the
     // reviews without hunting — one of these entry points is always rendered.
     const entry = page.getByRole("link", { name: /browse|reviews|search|get started/i });
-    expect(await entry.count()).toBeGreaterThan(0);
+    // `expect(await locator.count())` reads the DOM once, at that instant.
+    // `goto` resolves on `load` and the App Router keeps streaming afterwards,
+    // so the count raced the stream and this failed roughly one run in three.
+    // `toHaveCount` and `toBeVisible` retry, which is the whole difference.
     await expect(entry.first()).toBeVisible();
+    await expect(entry).not.toHaveCount(0);
   });
 
   test("the header exposes navigation at every width", async ({ page }) => {
@@ -84,7 +88,8 @@ test.describe("responsive layout", () => {
       headingBox!.width,
       `hero copy spans ${headingBox!.width}px of a 768px viewport — the grid did not split`,
     ).toBeLessThan(640);
-    expect(await card.count()).toBeGreaterThan(0);
+    // Retrying, for the same reason as the entry-point check above.
+    await expect(card).not.toHaveCount(0);
   });
 });
 
