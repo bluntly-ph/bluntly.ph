@@ -99,14 +99,26 @@ def test_production_refuses_localhost_cors():
     assert "CORS_ORIGINS" in issues
 
 
-def test_production_refuses_localhost_redis():
-    """No Redis means enforce_rate_limit fails open and brute-force protection
-    on login/register silently disappears (core/rate_limit.py)."""
-    issues = " ".join(_prod_settings(
+def test_production_warns_about_localhost_redis_but_still_boots():
+    """This used to be a refusal, and the reason expired.
+
+    No Redis once meant `enforce_rate_limit` failed open and brute-force
+    protection on login silently disappeared, so refusing to boot was right.
+    Migration 0028 gave the limiter a Postgres fallback — verified enforcing
+    against production, where ten failed logins answer 401 and the eleventh
+    answers 429 with Redis still unconfigured.
+
+    Keeping the refusal would have been actively harmful rather than merely
+    out of date: every production check is gated on APP_ENV, so a refusal over
+    a solved problem keeps the CORS, PII-salt and postback-secret checks
+    switched off as well.
+    """
+    settings = _prod_settings(
         email_provider="resend", resend_api_key="re_x",
         email_from="no-reply@bluntly.ph",
-        redis_url="redis://localhost:6379/0").production_issues())
-    assert "REDIS_URL" in issues
+        redis_url="redis://localhost:6379/0")
+    assert "REDIS_URL" not in " ".join(settings.production_issues())
+    assert "REDIS_URL" in " ".join(settings.production_warnings())
 
 
 def test_production_clean_config_has_no_issues():
