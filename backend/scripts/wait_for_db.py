@@ -15,10 +15,19 @@ from app.core.config import settings
 
 ATTEMPTS = 30
 DELAY_SECONDS = 2
+#: Per attempt. Without it the 30-attempt budget is not a budget: a port
+#: that drops packets rather than refusing never returns, the loop never
+#: reaches attempt 2, and the container waits forever - which is the exact
+#: failure this script exists to prevent.
+CONNECT_TIMEOUT_SECONDS = 5
 
 
 def main() -> int:
-    engine = create_engine(settings.database_url, pool_pre_ping=True)
+    engine = create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+    )
     for attempt in range(1, ATTEMPTS + 1):
         try:
             with engine.connect() as conn:

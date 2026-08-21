@@ -115,20 +115,59 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+
+#: Seconds to wait for the database. Short: this tool reports, and a report
+#: that never arrives is worse than one that says it could not connect.
+CONNECT_TIMEOUT_SECONDS = 5
+
+
+def _probe_engine():
+    from sqlalchemy import create_engine
+
+    from app.core.config import settings
+    return create_engine(
+        settings.effective_database_url,
+        connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+        pool_pre_ping=False,
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--strict", action="store_true",
                     help="Exit non-zero if any invariant is violated.")
     args = ap.parse_args()
 
+    from sqlalchemy.orm import Session
+
     from app.core.env_guard import describe_target
-    from app.db.session import SessionLocal
 
     print(f"[invariants] target: {describe_target()}")
     print("[invariants] read-only; this writes nothing\n")
 
     violations = 0
-    with SessionLocal() as db:
+    # Its own engine with a connect timeout rather than the application's.
+    # This is meant to be pointed at production from wherever the release is
+    # being run, and a refused connection fails in milliseconds while a port
+    # that drops packets never fails at all - the tool would sit there
+    # printing nothing. Same fault found in conftest and
+    # check_migration_safety, same fix.
+    engine = _probe_engine()
+
+    # Prove the connection once, before running anything. Each check catches
+    # its own errors so one bad query cannot hide the rest - but that also
+    # means an unreachable database is retried fifteen times, ten seconds
+    # apart, and the tool appears to hang. Fail here instead, with the reason.
+    try:
+        with engine.connect() as probe:
+            probe.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"  cannot reach the database: {type(exc).__name__}")
+        print("  Nothing was checked. Confirm the target above is the one you "
+              "meant, and that it is reachable from here.")
+        return 2
+
+    with Session(engine) as db:
         for name, sql, meaning in CHECKS:
             try:
                 count = db.execute(text(sql)).scalar() or 0
