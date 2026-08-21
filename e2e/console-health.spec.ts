@@ -27,6 +27,9 @@ const IGNORED = [
 
 const PAGES = ["/", "/search", "/questions", "/requests", "/about"] as const;
 
+/** Long enough for a hydration error to surface, short enough to stay cheap. */
+const HYDRATION_SETTLE_MS = 1500;
+
 for (const path of PAGES) {
   test(`${path} loads with no console errors or uncaught exceptions`, async ({ page }) => {
     const errors: string[] = [];
@@ -39,7 +42,21 @@ for (const path of PAGES) {
     });
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
 
-    await page.goto(path, { waitUntil: "networkidle" });
+    // NOT `networkidle`. Next's router prefetches the destinations of visible
+    // links, Chrome gives those requests the lowest priority, and on a page
+    // that is otherwise finished they simply sit there — so the network never
+    // goes idle and the test times out at 30s having asserted nothing. Against
+    // localhost the prefetches resolve instantly and it happened to work;
+    // against a deployed origin, five of these seven tests failed on a site
+    // whose load event fires in 564ms with zero console errors. Playwright
+    // discourages `networkidle` for exactly this reason.
+    await page.goto(path);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Hydration errors arrive just after load rather than during it, so there
+    // has to be a wait of some kind. A short fixed one is honest about what it
+    // is: there is no event for "React finished and did not throw".
+    await page.waitForTimeout(HYDRATION_SETTLE_MS);
 
     expect(errors, `${path} reported browser errors`).toEqual([]);
   });

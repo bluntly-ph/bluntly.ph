@@ -14,6 +14,23 @@ import { defineConfig, devices } from "@playwright/test";
  * matrix, public page rendering, and console health. Extending past that needs a
  * test-only session endpoint or a seeded token; see e2e/README.md.
  */
+/**
+ * Point the suite at a deployed environment instead of localhost:
+ *
+ *   PLAYWRIGHT_BASE_URL=https://www.bluntly.ph npx playwright test \
+ *     e2e/console-health.spec.ts e2e/accessibility.spec.ts --project=chromium
+ *
+ * Useful when there is no local database — the pages here are server-rendered
+ * against the API, so without one the local stack renders empty states and the
+ * suite tests nothing. It is also the only way to check that what is *deployed*
+ * renders, which is a different question from whether the working tree does.
+ *
+ * Only run the read-only specs this way. `route-guards.spec.ts` submits forms,
+ * and production is not a fixture.
+ */
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+const IS_REMOTE = !BASE_URL.includes("localhost");
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -30,7 +47,7 @@ export default defineConfig({
   workers: process.platform === "win32" ? 2 : undefined,
 
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: BASE_URL,
     trace: "on-first-retry",
     // Guards must be observed, not followed — a 307 that silently lands on /login
     // is indistinguishable from a correct one once the redirect is applied.
@@ -50,12 +67,16 @@ export default defineConfig({
     { name: "mobile-safari", use: { ...devices["iPhone 14"] } },
   ],
 
-  webServer: {
-    command: "npm run dev:all",
-    url: "http://localhost:3000/welcome",
-    reuseExistingServer: true,
-    timeout: 180_000,
-    stdout: "ignore",
-    stderr: "pipe",
-  },
+  // Starting a local stack would be pointless when the target is deployed, and
+  // worse than pointless: it would bind ports and wait three minutes first.
+  webServer: IS_REMOTE
+    ? undefined
+    : {
+        command: "npm run dev:all",
+        url: "http://localhost:3000/welcome",
+        reuseExistingServer: true,
+        timeout: 180_000,
+        stdout: "ignore",
+        stderr: "pipe",
+      },
 });
