@@ -49,9 +49,23 @@ export const getUser = cache(async (): Promise<SessionUser | null> => {
   try {
     return await apiFetch<SessionUser>("/api/v1/auth/me", { token });
   } catch (error) {
-    if (error instanceof ApiError && error.isAuthExpired) {
+    if (
+      error instanceof ApiError &&
+      (error.isAuthExpired || error.code === "account_suspended")
+    ) {
       // The token is dead and there is nothing to refresh with. Drop it so the
       // user isn't stuck re-failing every request with a cookie that can't work.
+      //
+      // A suspension is the same situation from the reader's side: the backend
+      // refuses every authenticated request (security.get_current_user), so the
+      // cookie cannot work again. Without this it threw instead, and a
+      // suspended reader got a blank error boundary on every gated page —
+      // correctly blocked, told nothing. Dropping the session sends them to
+      // /login, where the login endpoint already answers "Account is
+      // suspended." That is the explanation they were missing.
+      //
+      // Public pages were never affected: PageShell catches and renders
+      // signed-out.
       await destroySession();
       return null;
     }
