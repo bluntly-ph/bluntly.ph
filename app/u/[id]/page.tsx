@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { ReviewCard } from "@/components/review/ReviewCard";
 import { PageShell } from "@/components/site/PageShell";
@@ -29,22 +29,12 @@ export default async function ReviewerProfilePage({ params }: Params) {
   const { id } = await params;
   const data = await getAuthorProfile(id);
 
-  if (!data) {
-    return (
-      <PageShell>
-        <div className="prose animate-fade-up">
-          <h1>Reviewer not found</h1>
-          <p>
-            This reviewer has no published reviews yet, or the profile does not
-            exist.
-          </p>
-          <p>
-            <Link href="/search">Browse reviews</Link>
-          </p>
-        </div>
-      </PageShell>
-    );
-  }
+  // `notFound()` rather than rendering the message inline, which returned 200.
+  // `/u/{id}` accepts any id, so a soft 404 here meant every made-up id was a
+  // real, indexable page; Next injects `<meta name="robots" content="noindex">`
+  // only for responses that actually 404. The wording lives in
+  // `not-found.tsx` beside this file.
+  if (!data) notFound();
 
   const { author, cards } = data;
 
