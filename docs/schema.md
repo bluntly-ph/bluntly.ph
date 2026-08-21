@@ -157,10 +157,18 @@ BUG-029 was.
 
 | Bucket | Public | Max object | Holds | Written by |
 |---|---|---|---|---|
-| `avatars` | yes | 5 MB | Profile pictures | `POST /users/me/avatar` |
+| `avatars` | yes | 4 MB | Profile pictures | `POST /users/me/avatar` |
 | `product-images` | yes | 5 MB | Product listing imagery | `scripts/seed_product_images.py`, admin upload |
-| `review-photos` | yes | 8 MB | The product photograph shown **on** a published review (FR-3) | `POST /reviews/photo` |
-| **`review-receipts`** | **no** | 8 MB | **Proof of purchase — evidence for `earn_eligible` evaluation (FR-3, FR-9)** | `POST /reviews/receipt` |
+| `review-photos` | yes | 4 MB | The product photograph shown **on** a published review (FR-3) | `POST /reviews/photo` |
+| **`review-receipts`** | **no** | 4 MB | **Proof of purchase — evidence for `earn_eligible` evaluation (FR-3, FR-9)** | `POST /reviews/receipt` |
+
+The three caps that go through a serverless function are 4 MB, not a round
+number: measured against production, the platform refuses a request body
+somewhere between 3.0 MB and 4.4 MB with a bare `413` before any of our code
+runs, so a higher cap is one the API can never enforce — the reader gets a
+platform error page instead of a sentence. `product-images` stays at 5 MB
+because `seed_product_images.py` uploads straight to Supabase Storage and never
+crosses a function. See `UPLOAD_CEILING_BYTES` in `app/services/storage.py`.
 
 ### Public review media vs. private proof of purchase
 
