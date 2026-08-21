@@ -130,7 +130,8 @@ def _wrap(text_: str, width: int) -> list[str]:
     words, lines, cur = text_.split(), [], ""
     for word in words:
         if len(cur) + len(word) + 1 > width:
-            lines.append(cur); cur = word
+            lines.append(cur)
+            cur = word
         else:
             cur = f"{cur} {word}".strip()
     if cur:

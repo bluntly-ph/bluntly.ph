@@ -23,7 +23,6 @@ Exit codes: 0 ready, 1 not ready (with --strict), 2 could not evaluate.
 from __future__ import annotations
 
 import argparse
-import sys
 
 
 def main() -> int:

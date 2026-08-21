@@ -12,7 +12,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import ModerationReason, ModerationTargetType
-
 from app.schemas.urls import web_url_or_none
 
 

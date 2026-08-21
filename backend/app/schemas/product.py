@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.categories import CATEGORIES, normalize_category
-from app.schemas.urls import web_url_or_none
 from app.models.enums import Platform, ProductStatus
-
+from app.schemas.urls import web_url_or_none
 
 # Published in the OpenAPI schema so the contract states what a category may
 # be. The server also accepts the legacy spellings in `ALIASES` and normalises
@@ -23,6 +22,21 @@ CATEGORY_FIELD = Field(
                  "as chips on /categories. Null means uncategorised."),
     json_schema_extra={"enum": [*CATEGORIES, None]},
 )
+
+
+# The Philippines is UTC+8 all year - no daylight saving - so a fixed offset is
+# exact here and avoids depending on a tz database being present on the host.
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def _ph_today() -> date:
+    """Today, as the reader experiences it.
+
+    The platform is Philippines-specific by design (PRD S1), so "today" means
+    today in Manila. Server-local `date.today()` is UTC in production and is a
+    different day for a third of every one.
+    """
+    return datetime.now(PH_TIMEZONE).date()
 
 
 class ProductCreate(BaseModel):
@@ -109,7 +123,13 @@ class PriceObservationIn(BaseModel):
     def _not_in_the_future(cls, value: date) -> date:
         # A price cannot have been paid tomorrow. Cheap to check here, and it
         # keeps `latest_observed_at` on the panel honest.
-        if value > date.today():
+        #
+        # Against the *Philippine* date, not the server's. `date.today()` is
+        # UTC on Vercel, and Manila is UTC+8 - so for eight hours of every day
+        # (UTC 16:00-23:59, i.e. midnight to 08:00 in Manila) a reader entering
+        # the price they paid today was told it was in the future. A third of
+        # each day, for the only audience this platform has.
+        if value > _ph_today():
             raise ValueError("observed_at cannot be in the future.")
         return value
 

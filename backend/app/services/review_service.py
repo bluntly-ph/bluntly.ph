@@ -116,7 +116,7 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
         price_paid=payload.price_paid,
         # Proof photo at submission => verified (FR-3), but only if the
         # photo is genuinely this author's upload. See _verification_for.
-        verification_status=_verification_for(payload.photo_url, author.id),
+        verification_status=_verification_for(payload.photo_url, author_id),
         review_id=f"rev_{uuid.uuid4().hex[:10]}",
         current_version=1,
         # Publication gate (M2 slice 1): hidden + auto-queued for the moderator.

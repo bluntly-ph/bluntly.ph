@@ -30,8 +30,8 @@ from app.models.moderation import ModerationLog
 from app.models.review import Review
 from app.models.user import User
 from app.models.vote import ReviewVote
-from app.services.trust import gate_vote_weight, honesty_score
 from app.services import wallet
+from app.services.trust import gate_vote_weight, honesty_score
 
 log = get_logger("honesty_fund")
 

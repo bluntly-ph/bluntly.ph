@@ -36,10 +36,9 @@ from app.models.moderation import ModerationLog
 from app.models.review import ReferralLink, Review
 from app.models.session import Session as ClickSession
 from app.models.user import User
-from app.services import report_formats
+from app.services import report_formats, wallet
 from app.services.contract_service import reviewer_bps_for_review
 from app.services.earnings import MAX_REVIEWER_SHARE_BPS, split_commission_tiered
-from app.services import wallet
 
 EXPECTED_HEADER = ["click_ref", "order_ref", "gross_amount", "currency",
                    "order_status", "platform"]

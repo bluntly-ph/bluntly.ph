@@ -11,13 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.errors import NotFoundError
 from app.core.security import require_role
 from app.db.session import get_db
-from app.models.enums import MembershipTier
+from app.models.enums import MembershipTier, ModerationAction, ModerationTargetType
 from app.models.membership import MembershipTierConfig
+from app.models.moderation import ModerationLog
 from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.membership import AssignTierRequest, TierOut, TierUpdate
-from app.models.moderation import ModerationLog
-from app.models.enums import ModerationAction, ModerationTargetType
 
 router = APIRouter(tags=["membership"])
 

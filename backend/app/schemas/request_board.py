@@ -7,8 +7,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.urls import web_url_or_none
 from app.models.enums import RequestStatus
+from app.schemas.urls import web_url_or_none
 
 
 class RequestCreate(BaseModel):

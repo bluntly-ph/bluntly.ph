@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request, UploadFile, Query
+from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -21,13 +21,13 @@ from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
 from app.models.comment import ReviewComment
-from app.models.moderation import ModerationLog
 from app.models.enums import (
     MemberRole,
     ModerationAction,
     ModerationTargetType,
     VoteDirection,
 )
+from app.models.moderation import ModerationLog
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
