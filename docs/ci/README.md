@@ -1,24 +1,26 @@
-# CI workflow — needs one manual step
+# CI workflow — activated 2026-08-21
 
-`ci.yml` in this directory is a complete, working GitHub Actions workflow. It
-is **not** at `.github/workflows/ci.yml` because the credential available to
-the agent that wrote it lacks GitHub's `workflow` OAuth scope, and GitHub
-refuses any push that creates or edits a file under `.github/workflows/`
-without it:
+The workflow now lives at **`.github/workflows/ci.yml`**, where GitHub actually
+runs it. This directory keeps only these notes.
+
+It sat here from 2026-08-19 providing no protection at all, because the
+credential in use lacked GitHub's `workflow` OAuth scope and GitHub refuses any
+push that creates or edits a file under `.github/workflows/` without it:
 
 ```
 ! [remote rejected] main -> main (refusing to allow an OAuth App to create or
   update workflow `.github/workflows/ci.yml` without `workflow` scope)
 ```
 
-To activate it, from a credential that has the scope (a normal `git push` from
-the owner's machine is enough):
+Worth knowing if it ever has to move again: the rejected push still leaves the
+commit sitting on the local branch, and every subsequent push then fails on the
+same rule. Back it out (`git reset --soft HEAD~1`, restore the file) before
+continuing, or unrelated work piles up behind a commit that can never land.
+
+The scope was granted with:
 
 ```bash
-mkdir -p .github/workflows
-git mv docs/ci/ci.yml .github/workflows/ci.yml
-git commit -m "ci: activate the GitHub Actions workflow"
-git push
+gh auth refresh -h github.com -s workflow
 ```
 
 ## What it runs
