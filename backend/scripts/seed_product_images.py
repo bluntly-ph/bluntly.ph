@@ -304,7 +304,8 @@ def _apply(db, product: Product, url: str, dry_run: bool) -> bool:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--allow-production", action="store_true",
-                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
+                        help="Deliberately target production. Only a few scripts "
+                             "accept this; the guard prints the target first.")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument(

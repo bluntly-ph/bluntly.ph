@@ -28,8 +28,8 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
-from app.core.env_guard import guard_cli
 from app.core.config import settings
+from app.core.env_guard import guard_cli
 
 # The verifier drives many auth/vote calls from one client; don't self-throttle.
 settings.auth_rate_limit_max = 1_000_000

@@ -59,7 +59,9 @@ def _queue_item(db: Session, review: Review, product: Product,
 
 @router.get("/review-queue", response_model=ReviewQueueResponse,
             summary="Moderator queue: pending reviews + monetized-but-edited")
-def review_queue(db: Session = Depends(get_db), limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)
+def review_queue(db: Session = Depends(get_db),
+                 limit: int = Query(50, ge=1, le=100),
+                 offset: int = Query(0, ge=0)
                  ) -> ReviewQueueResponse:
     limit = min(limit, 100)
     pending, edited = referral_service.get_queue(db, limit=limit, offset=offset)

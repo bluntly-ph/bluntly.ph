@@ -70,8 +70,9 @@ def preflight() -> bool:
         return False
 
     # Positive confirmation, not just the absence of production signals.
-    from app.core.config import settings
     from sqlalchemy.engine.url import make_url
+
+    from app.core.config import settings
     url = make_url(settings.effective_database_url)
     if PRODUCTION_PROJECT_REF in str(url):
         print("\n  REFUSED: the migration URL references the production project.")

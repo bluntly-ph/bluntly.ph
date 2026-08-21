@@ -83,7 +83,8 @@ SELECT count(*) FROM review_requests rr WHERE rr.status = 'open'
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-production", action="store_true",
-                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
+                        help="Deliberately target production. Only a few scripts "
+                             "accept this; the guard prints the target first.")
     parser.add_argument("--apply", action="store_true",
                         help="write the change; without it this is a dry run")
     parser.add_argument("--revert", action="store_true",

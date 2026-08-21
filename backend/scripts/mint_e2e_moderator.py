@@ -65,7 +65,8 @@ def main() -> int:
 
     print("\nA throwaway moderator was created in the test environment.\n")
     print("Run the spec with:")
-    print(f'  E2E_MODERATOR_TOKEN={body["access_token"]} npx playwright test e2e/moderator-a11y.spec.ts')
+    print(f'  E2E_MODERATOR_TOKEN={body["access_token"]} '
+          f'npx playwright test e2e/moderator-a11y.spec.ts')
     print("\nThen clean up:")
     print("  cd backend && python -m scripts.mint_e2e_moderator --cleanup")
     return 0

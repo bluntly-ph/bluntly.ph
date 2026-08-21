@@ -51,7 +51,7 @@ from app.db.session import SessionLocal
 SYNTHETIC_EMAIL = "%@example.com"
 
 USERS = "SELECT id FROM users WHERE email LIKE :pat"
-REVIEWS = f"SELECT r.id FROM reviews r JOIN users u ON u.id = r.author_id WHERE u.email LIKE :pat"
+REVIEWS = "SELECT r.id FROM reviews r JOIN users u ON u.id = r.author_id WHERE u.email LIKE :pat"
 PRODUCTS = """
     SELECT p.id FROM products p
      WHERE p.submitted_by IN (SELECT id FROM users WHERE email LIKE :pat)
@@ -139,7 +139,9 @@ def _json_safe(value):
 
 
 def preserved_summary(db) -> dict:
-    q = lambda s: db.execute(text(s), {"pat": SYNTHETIC_EMAIL}).scalar()
+    def q(s: str):
+        return db.execute(text(s), {"pat": SYNTHETIC_EMAIL}).scalar()
+
     return {
         "users_preserved": q("SELECT count(*) FROM users WHERE email NOT LIKE :pat"),
         "reviews_preserved": q(

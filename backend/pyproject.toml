@@ -71,6 +71,10 @@ ignore = ["B008", "UP042"]
 # Seed data: the long lines are review/answer prose inside SQL literals. Wrapping
 # them would split sentences mid-clause to satisfy a limit meant for code.
 "scripts/reset_and_seed.py" = ["E501"]
+# Fixture cleanup: each long line is one (table, SQL) pair. Wrapping them breaks
+# the SQL mid-clause and makes the export and delete lists harder to read
+# against each other, which is the one thing that must stay easy to check.
+"scripts/cleanup_fixtures.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

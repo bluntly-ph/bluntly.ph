@@ -31,7 +31,8 @@ def ask_question(payload: QuestionCreate, db: Session = Depends(get_db),
 
 @router.get("", response_model=list[QuestionOut], summary="List questions")
 def list_questions(db: Session = Depends(get_db),
-                   product_id: uuid.UUID | None = None, limit: int = Query(30, ge=1, le=100)) -> list[QuestionOut]:
+                   product_id: uuid.UUID | None = None,
+                   limit: int = Query(30, ge=1, le=100)) -> list[QuestionOut]:
     return qa_service.list_questions(db, product_id=product_id, limit=min(limit, 100))
 
 

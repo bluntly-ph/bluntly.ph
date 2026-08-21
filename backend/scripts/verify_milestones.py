@@ -18,14 +18,14 @@ Exit code 0 only if every claim holds.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 
-from app.core.env_guard import guard_cli
 from app.core.config import settings
+from app.core.env_guard import guard_cli
 
 settings.auth_rate_limit_max = 1_000_000
 settings.vote_rate_limit_max = 1_000_000

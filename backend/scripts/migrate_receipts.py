@@ -115,7 +115,8 @@ def purge_phase() -> int:
             print(f"  [gone] review {review_id}: old public object now HTTP {exc.code}")
             purged += 1
         except Exception as exc:  # noqa: BLE001
-            print(f"  [gone] review {review_id}: old public object unreachable ({type(exc).__name__})")
+            print(f"  [gone] review {review_id}: old public object "
+                  f"unreachable ({type(exc).__name__})")
             purged += 1
     return purged
 
@@ -123,7 +124,8 @@ def purge_phase() -> int:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--allow-production", action="store_true",
-                        help='Deliberately target production. Only a few scripts accept this; the guard prints the target first.')
+                        help="Deliberately target production. Only a few scripts "
+                             "accept this; the guard prints the target first.")
     ap.add_argument("--copy", action="store_true", help="public -> private, verified")
     ap.add_argument("--purge", action="store_true", help="delete the public originals")
     args = ap.parse_args()
