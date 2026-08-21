@@ -103,6 +103,23 @@ def preflight() -> bool:
         print("  docs/ENVIRONMENTS.md. This is the one step that needs the owner.")
         return False
 
+    # Supabase offers three connection strings a click apart, and only one of
+    # them works from CI. `db.<ref>.supabase.co` is the DIRECT connection: it
+    # resolves to IPv6 only, GitHub's runners are IPv4 only, and the result is
+    # `Network is unreachable` against a raw IPv6 address - which reads like an
+    # outage rather than the wrong string being pasted.
+    if (url.host or "").startswith("db.") and url.host.endswith(".supabase.co"):
+        print("\n  NOT READY: this is the DIRECT connection string.")
+        print(f"  Host {url.host} resolves to IPv6 only, and CI runners are")
+        print("  IPv4 only, so the connection cannot be made from here.")
+        print("\n  Use the SESSION POOLER string instead. The two differ in both")
+        print("  the user and the host:")
+        print("\n    direct   postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres")
+        print("    pooler   postgresql://postgres.<ref>:<pw>"
+              "@aws-N-<region>.pooler.supabase.com:5432/postgres")
+        print("\n  In Supabase: Connect -> Session pooler (not Direct connection).")
+        return False
+
     print(f"  migrations -> {url.host}:{url.port}/{url.database}")
     return True
 
