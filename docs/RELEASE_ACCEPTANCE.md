@@ -464,6 +464,22 @@ for p in chromium firefox webkit mobile-chrome mobile-safari; do
   npm run dev:stop
 done
 
+**3b. Browsers against production** — the read-only specs can be pointed at a
+deployed origin, which is the only way to check that what is *deployed* renders.
+It also works when there is no local database, where the local stack renders
+empty states and the suite tests nothing:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://www.bluntly.ph npx playwright test   e2e/console-health.spec.ts e2e/accessibility.spec.ts   --project=chromium --workers=1
+PLAYWRIGHT_BASE_URL=https://www.bluntly.ph npx playwright test   e2e/responsive.spec.ts --project=mobile-chrome --workers=1
+```
+
+**Pass:** 27 tests. Zero console errors, real content, styles applied, no
+horizontal scroll at 393px.
+
+**Only the read-only specs.** `route-guards.spec.ts` submits forms, and
+production is not a fixture.
+
 # 4. Migration safety, before any further schema change
 cd backend && .venv/Scripts/python -m scripts.check_migration_safety --all
 ```
