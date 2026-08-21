@@ -214,6 +214,27 @@ evidence untouched; `updated_at` did not drift. Verified afterwards through
 
 **200 browser assertions, zero failures, no bot checkpoint encountered.**
 
+### WebKit degradation on the development host — infrastructure, not the app
+
+A second full smoke late in the session had both WebKit projects
+(`webkit`, `mobile-safari`) run one test and then stall, reporting the rest as
+"did not run". Classified as a **test-infrastructure limitation** on this
+Windows machine, on this evidence:
+
+- Both WebKit projects passed **40/40 each** earlier in the same session, on the
+  same commit range, against the same deployment.
+- Chromium re-run immediately afterwards passed **7/7** on the identical spec.
+- Production serves that exact iPhone user agent a normal `200` with real
+  server-rendered HTML — checked with `curl`. **No bot checkpoint**: no
+  `security-checkpoint`, no `vercel.link`, no challenge markers.
+- `playwright.config.ts` already documents WebKit dying on Windows
+  (`STATUS_STACK_BUFFER_OVERRUN`) and taking unrelated tests down with it,
+  which is why workers are capped at 2 on `win32`.
+
+Nothing was bypassed or relaxed to make this green — the earlier passing run is
+the evidence, and this note is the caveat on it. Re-running the WebKit projects
+on a fresh host, or in CI on Linux, is the way to confirm independently.
+
 The 6 skips per engine are `moderator-a11y`, which requires
 `E2E_MODERATOR_TOKEN` and whose own header says never to point it at
 production. That is a **test-infrastructure limitation**, not an application
