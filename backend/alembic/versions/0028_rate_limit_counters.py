@@ -20,7 +20,7 @@ introducing another piece of paid infrastructure for a counter.
 Purely additive: a new table nothing yet reads. Safe in any deploy order.
 
 Revision ID: 0028_rate_limit_counters
-Revises: 0027_normalize_product_categories
+Revises: 0027_normalize_categories
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0028_rate_limit_counters"
-down_revision = "0027_normalize_product_categories"
+down_revision = "0027_normalize_categories"
 branch_labels = None
 depends_on = None
 

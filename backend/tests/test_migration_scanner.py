@@ -92,3 +92,36 @@ def test_the_whole_chain_renders_offline():
     # It must reach head, not merely exit cleanly partway.
     assert "0030_tier_share_bounds" in proc.stdout, "chain did not reach head"
     assert "CREATE TABLE alembic_version" in proc.stdout
+
+
+def test_every_revision_id_fits_the_version_column():
+    """Alembic's `alembic_version.version_num` is VARCHAR(32).
+
+    A longer id parses, migrates, and then fails on the bookkeeping UPDATE:
+
+        StringDataRightTruncation: value too long for type character varying(32)
+        UPDATE alembic_version SET version_num='0027_normalize_product_categories'
+
+    That is 33 characters. The chain built 28 tables on a fresh database and
+    then died four migrations short of head, which is invisible anywhere that
+    already migrated past the offending revision — the value is never written
+    again once you are beyond it. It only surfaces when someone builds a
+    database from nothing, which is exactly what the isolated test project is
+    for and exactly what had never run.
+
+    Cheap to check, and the failure it prevents costs a CI cycle to diagnose.
+    """
+    import pathlib
+    import re
+
+    versions = pathlib.Path(__file__).resolve().parents[1] / "alembic" / "versions"
+    too_long = {}
+    for path in versions.glob("*.py"):
+        match = re.search(r'^revision\s*=\s*["\']([^"\']+)["\']',
+                          path.read_text(encoding="utf-8"), re.M)
+        if match and len(match.group(1)) > 32:
+            too_long[path.name] = (match.group(1), len(match.group(1)))
+
+    assert not too_long, (
+        "revision id longer than alembic_version.version_num VARCHAR(32): "
+        + "; ".join(f"{f}: {rid!r} is {n} chars" for f, (rid, n) in too_long.items()))

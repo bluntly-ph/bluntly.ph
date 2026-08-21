@@ -27,7 +27,7 @@ Downgrade is a deliberate no-op. Reversing would have to rewrite every
 always canonical, which would corrupt data this migration never touched. There
 is nothing to restore: the canonical spelling is the correct one.
 
-Revision ID: 0027_normalize_product_categories
+Revision ID: 0027_normalize_categories
 Revises: 0026_data_integrity_checks
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ import re
 from alembic import op
 from app.core.categories import ALIASES
 
-revision = "0027_normalize_product_categories"
+revision = "0027_normalize_categories"
 down_revision = "0026_data_integrity_checks"
 branch_labels = None
 depends_on = None
