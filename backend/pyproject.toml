@@ -60,7 +60,21 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+# ASYNC and PLE were added after a NameError reached production in a code path
+# whose every test is `requires_db` and skips without a Postgres. With the
+# integration half of the suite unavailable, static analysis is most of what
+# stands between an edit and production, so the rules that find *runtime faults*
+# earn their place:
+#   ASYNC — blocking calls inside async functions. This app mixes sync route
+#           handlers with async middleware, which is where that goes wrong.
+#   PLE   — pylint's error subset only: used-before-assignment, bad call
+#           arity, await outside async. Not its style opinions.
+#
+# Both reported zero when added, so neither costs a cleanup. The noisy families
+# were measured and declined on purpose: S is 1103 findings (mostly `assert` in
+# tests, which is what tests are for), T20 is 186 (the scripts are meant to
+# print), RUF 92, PTH 14.
+select = ["E", "F", "I", "UP", "B", "ASYNC", "PLE"]
 # B008: FastAPI Depends() in defaults is idiomatic.
 # UP042: we intentionally use (str, Enum) mixins, not StrEnum, for value serialization.
 ignore = ["B008", "UP042"]
