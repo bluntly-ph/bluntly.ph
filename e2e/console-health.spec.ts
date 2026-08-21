@@ -16,6 +16,18 @@ const IGNORED = [
   /Redis|rate limiter/i,
   // Next dev streams HMR over a websocket that closes on navigation.
   /WebSocket connection to .*_next\/webpack-hmr/i,
+  // FIREFOX ONLY, AND NOT OURS. Supabase Storage is fronted by Cloudflare,
+  // which sets `__cf_bm` on image responses; Firefox rejects it as a
+  // cross-site cookie and reports the rejection as a JavaScript error, once
+  // per image. Chromium and WebKit say nothing. The images load either way —
+  // the content and styling assertions below pass on all three engines.
+  //
+  // Ignored rather than fixed because there is nothing here to fix: the cookie
+  // is set by a third-party CDN on a host we do not control. Avoiding it would
+  // mean proxying every product image through our own origin, which is a
+  // serving change, not a console fix. Deliberately narrow — it matches this
+  // one cookie name, so a real storage error still fails the gate.
+  /Cookie .__cf_bm. has been rejected for invalid domain/i,
   // DEV ONLY, AND DELIBERATE — DO NOT "FIX" BY LOOSENING THE CSP.
   // next.config.ts omits `unsafe-eval` from script-src on purpose. React's
   // development build uses eval() for debugging aids and complains when it is
