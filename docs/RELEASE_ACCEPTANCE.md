@@ -114,7 +114,35 @@ was untouched, the assertion was a proximity heuristic — but nothing else was
 watching, and before CI existed that would have landed silently. Fixed in
 `ecf7efa`, which asserts the structure from the parse tree instead.
 
-### Remaining: the isolated-database job
+### ✅ The isolated-database job — GREEN (2026-08-21)
+
+All three secrets configured. `bootstrap_test_env` migrates `bluntly-ph-test`
+from empty to head and runs everything:
+
+```
+[PASS] migrate
+[PASS] revision at head
+[PASS] pytest (717 passed, 1 warning in 2776.00s (0:46:15))
+[PASS] milestones (=== MILESTONE CLAIMS: 58/58 verified ===)
+Test environment is fully verified.
+```
+
+**717 passed, 0 failed, 0 errors, 0 skipped.** The whole job takes ~50 minutes:
+ap-southeast-1 from a GitHub runner pays a round trip on every query, where a
+machine near the region sees roughly a third of that. `timeout-minutes: 75` is
+a hang guard, not a target.
+
+Two things worth knowing for anyone reconfiguring this:
+
+- `TEST_SUPABASE_SESSION_POOLER` is a **full connection URI**, not a password,
+  and it must be the **Session pooler** string rather than Direct connection.
+  Direct (`db.<ref>.supabase.co`) is IPv6-only and CI runners are IPv4-only.
+  Both mistakes cost a round trip before `bootstrap_test_env` learned to name
+  them; it now does.
+- The test project needs the four storage buckets. They are provisioned to
+  match production, `review-receipts` private.
+
+### Historical: how the job was configured
 
 `TEST_SUPABASE_URL` is set. Two more are needed, and both live behind the
 Supabase dashboard because neither is retrievable through any API:

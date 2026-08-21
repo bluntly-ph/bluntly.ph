@@ -197,9 +197,12 @@ evidence untouched; `updated_at` did not drift. Verified afterwards through
 | Check | Result |
 |---|---|
 | Backend — ruff (`app/ scripts/ tests/`) | **PASS**, clean |
-| Backend — pytest | **583 passed**, 133 skipped |
+| Backend — pytest (local, no database) | **584 passed**, 133 skipped |
+| Backend — pytest (CI, isolated database) | **717 passed, 0 failed, 0 skipped** |
 | Backend — environment guard tests | **27 passed** |
-| **GitHub Actions CI** | **active and green** — guard, backend, frontend all pass on every push |
+| **GitHub Actions CI** | **fully green** — guard, backend, frontend **and the isolated-database job** |
+| **Isolated DB suite** | **717 passed, 0 failed, 0 errors, 0 skipped** (50m against `bluntly-ph-test`) |
+| **Milestone verifier** | **58/58 verified** — run against the isolated project, not from historical counts |
 | Backend — migration safety | **PASS** (advisory; 10 migrations flagged for deliberate rollout order) |
 | Production — data integrity invariants | **18/18 hold** |
 | Frontend — TypeScript (`tsc --noEmit`) | **PASS** |
@@ -240,15 +243,43 @@ The 6 skips per engine are `moderator-a11y`, which requires
 production. That is a **test-infrastructure limitation**, not an application
 failure — it needs the isolated test project, not a code change.
 
-### The 133 skipped backend tests
+### The 133-skip gap — closed, and what it was hiding
 
-Every `requires_db` test skips on the development machine, because Docker/WSL
-cannot start a local Postgres and the suite is deliberately pinned away from
-Supabase — that project **is** production. This is a real coverage gap and it
-has bitten once: a `NameError` in `create_review` reached production because
-every review-creation test skips itself. Ruff is the compensating control, and
-CI's `backend-db-tests` job runs the full suite against the isolated test
-project when its secrets are present.
+Every `requires_db` test skips on the development machine: Docker/WSL cannot
+start a local Postgres, and the suite is deliberately pinned away from Supabase
+because that project **is** production. They now run in CI against the isolated
+`bluntly-ph-test` project: **717 passed, 0 failed, 0 errors, 0 skipped**, plus
+the milestone verifier at **58/58**.
+
+It was never only a coverage statistic. The first run against a real database
+found eleven problems, none of them production defects, and four of them tests
+that had never been capable of passing:
+
+| Found | What it was |
+|---|---|
+| 4 errors | `test_postgrest_surface` and `test_wallet_concurrency` take a `db` fixture, and one imports `make_user`. **Neither existed.** Skipped since the day they were written, so "fixture not found" was never reported — they counted as coverage while being incapable of running |
+| 1 failure | `test_all_fifteen_tables_present` still demanded `seller_reviews`, dropped by `0024` when FR-4 was descoped |
+| 1 failure | A price test computed "tomorrow" in UTC. The validator uses the **Philippine** date on purpose, so for eight hours a day UTC's tomorrow is Manila's today and is correctly accepted. The test was wrong; the product was right |
+| 1 failure | The tier-cap test set `revenue_share_bps = 7001` to exercise an import guard — but `0030`, added so that state could not be stored, now rejects the write, and the test died in its own setup |
+| 1 failure | My own doing: pinning `DB_POOL_SIZE=2` for CI leaked into a config test that reads ambient environment |
+| 1 failure | A default-privileges assertion that **cannot hold on Supabase** and failed against production too — see below |
+| 2 failures | Receipt-privacy tests: the test project had no storage buckets. All four now provisioned, matching production, `review-receipts` private |
+
+**The one genuine limitation.** The test required that no role in `public` has a
+default-ACL granting `anon`. `supabase_admin` carries one, and only that role or
+a superuser may change it. Checked against both databases: `postgres` — the role
+migrations actually run as — is clean in each, `supabase_admin` grants in each.
+The assertion is now the true and narrower one: *a table created by our
+migrations is not exposed*. The residual risk is a table created by Supabase's
+own tooling, and the two `check_invariants` privilege checks fail the moment any
+table becomes readable by `anon` or `authenticated` — detection rather than
+prevention, which is the honest description of what is achievable here.
+
+Getting there also required three fixes to the chain itself: a revision id one
+character too long for `alembic_version` (33 vs `VARCHAR(32)`), a migration that
+could not render offline, and `0029` failing outright on a permission Supabase
+never grants. Each made a from-scratch database impossible, and each was
+invisible from a database that had already migrated past it.
 
 ---
 
@@ -259,8 +290,7 @@ re-authorised. What follows is only what genuinely remains.
 
 | Item | Marker | Exact action required |
 |---|---|---|
-| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | The last engineering-owned item. See below |
-| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | Neither value is retrievable through any API — a DB password can only be *reset*, never read. Supabase → `bluntly-ph-test` → *Settings → Database → Reset database password* (session pooler URI) and *Settings → API* (service_role key), then `gh secret set TEST_SUPABASE_SESSION_POOLER` and `gh secret set TEST_SUPABASE_SECRET_KEY` — both read from the prompt, so neither is ever typed into chat. `TEST_SUPABASE_URL` is already set. This is the only thing standing between the suite and 0 skips |
+
 | **BUG-030 badge wording** | `OWNER / PRODUCT DECISION` | The UI says "Verified purchase"; the contract means "a photograph was attached", which is materially weaker. Options are documented in `BUG-030-verification-semantics.md`: soften the badge, or raise the bar to require a receipt. **Not changed unilaterally** — it is a public trust claim |
 | **PayPal sandbox** | `PAYPAL_SANDBOX = BLOCKED_EXTERNAL_ZIENT` | Zient to provide sandbox credentials. The acceptance sequence runs automatically once they are in the authorised environment |
 | **FR-8 layer 3** | `OWNER DECISION REQUIRED` | Select a reverse-image-search provider. The PRD names none. No paid service will be procured without approval — see the decision brief below |
@@ -273,7 +303,8 @@ re-authorised. What follows is only what genuinely remains.
 | `GITHUB_CI = BLOCKED_AUTH` | **Active and green.** `gh auth refresh -h github.com -s workflow` granted the scope; the workflow runs on every push and has already caught a real regression |
 | Vercel connector unusable | **Usable.** The official CLI is authenticated and linked to the existing `bluntly-ph` project. The MCP still 404s on the project, but the CLI is the supported path |
 | `CORS_ORIGINS` blocks `APP_ENV` | **False alarm, corrected.** That came from the repo's `.env`, which does not set it. Vercel sets it correctly. Real refusal count is **0** |
-| `TEST_SUPABASE_URL` missing | **Set** — it is a public project URL, not a secret |
+| `TEST_SUPABASE_URL` missing | **All three secrets set.** The isolated DB job runs on every push |
+| **133 skipped DB tests** | **Closed.** `717 passed, 0 failed, 0 skipped` against the isolated project, plus milestone verification `58/58`. See below |
 
 ### FR-8 layer 3 — decision brief
 
