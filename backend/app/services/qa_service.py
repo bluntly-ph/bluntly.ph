@@ -163,7 +163,16 @@ def create_answer(
         select(func.count(Answer.id)).where(Answer.question_id == question.id)
     )
     age = datetime.now(UTC) - question.created_at
-    is_first = prior == 0 and age <= FIRST_RESPONDER_WINDOW
+    # Answering your own question is allowed - somebody who finds the answer
+    # and comes back to share it is doing exactly what the board is for. What
+    # is not allowed is being paid for it: without this, asking a question and
+    # answering it a second later awards yourself the first-responder badge,
+    # repeatably, one new question at a time.
+    #
+    # Every sibling feature already refuses this - comment votes, review votes,
+    # request up-votes and reports all check it. Q&A was the exception.
+    answering_own = responder_id == question.asker_id
+    is_first = prior == 0 and age <= FIRST_RESPONDER_WINDOW and not answering_own
 
     answer = Answer(
         question_id=question.id, responder_id=responder_id, body=payload.body,
@@ -188,6 +197,14 @@ def mark_best_answer(
     answer = db.get(Answer, answer_id)
     if answer is None or answer.question_id != question.id:
         raise NotFoundError("Answer not found.", code="answer_not_found")
+    # The asker picks the best answer, so without this the asker can pick their
+    # own and award themselves the badge. The other half of the same hole as
+    # the first-responder check in create_answer.
+    if answer.responder_id == asker_id:
+        raise ForbiddenError(
+            "You cannot mark your own answer as the best one.",
+            code="cannot_pick_own_answer",
+        )
 
     if question.best_answer_id and question.best_answer_id != answer.id:
         previous = db.get(Answer, question.best_answer_id)
