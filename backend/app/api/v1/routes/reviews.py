@@ -291,7 +291,7 @@ def list_reviews(db: Session = Depends(get_db),
 def review_feed(db: Session = Depends(get_db), limit: int = Query(8, ge=1, le=100),
                 product_id: uuid.UUID | None = None,
                 author_id: uuid.UUID | None = None, category: str | None = None,
-                q: str | None = None,
+                q: str | None = Query(None, max_length=200),
                 sort: Literal["newest", "wilson"] = "wilson",
                 user: User | None = Depends(get_optional_user)) -> list[FeedItemOut]:
     items = review_service.list_feed(db, limit=min(limit, 100), product_id=product_id,

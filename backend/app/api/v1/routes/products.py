@@ -149,7 +149,7 @@ def canonicalize_product(product_id: uuid.UUID, payload: ProductCanonicalize,
 
 @router.get("", response_model=list[ProductOut], summary="List products")
 def list_products(db: Session = Depends(get_db), limit: int = Query(50, ge=1, le=100),
-                  q: str | None = None,
+                  q: str | None = Query(None, max_length=200),
                   include_low_trust: bool = False) -> list[ProductOut]:
     stmt = select(Product)
     if q and q.strip():

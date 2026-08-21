@@ -92,3 +92,30 @@ def test_a_negative_limit_is_refused_not_executed():
         assert resp.status_code == 422, (
             f"limit={bad} returned {resp.status_code}; it must be refused at "
             f"validation, before it reaches Postgres")
+
+
+def test_free_text_search_is_length_bounded():
+    """`q` reaches the database as an ILIKE pattern of the caller's choosing.
+
+    Measured flat at ~150ms from 5 to 6000 characters on the current dataset,
+    so this bounds the query surface rather than fixing a measured cost — and
+    200 is generous against a catalogue whose longest product name is 44
+    characters.
+    """
+    unbounded = []
+    for route, name, info in _query_params():
+        if name != "q":
+            continue
+        limit = next((getattr(m, "max_length", None)
+                      for m in getattr(info, "metadata", []) or []
+                      if getattr(m, "max_length", None) is not None), None)
+        if limit is None:
+            unbounded.append(f"{route.path} accepts an unbounded q")
+    assert not unbounded, unbounded
+
+
+def test_a_search_term_past_the_bound_is_refused():
+    from fastapi.testclient import TestClient
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/api/v1/reviews/feed?limit=1&q=" + "a" * 201)
+    assert resp.status_code == 422
