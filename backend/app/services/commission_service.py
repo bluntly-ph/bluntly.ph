@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
+from app.core.constants import MANILA
 from app.core.errors import AppError
 from app.models.commission import Commission
 from app.models.enums import (
@@ -199,7 +200,13 @@ def import_commissions(db: OrmSession, moderator_id: uuid.UUID,
         if occurred is None:
             stamp = (session.clicked_at or session.created_at) if session is not None \
                 else (review.published_at or review.created_at)
-            occurred = stamp.date()
+            # Manila, not UTC. The Honesty Fund derives its cycle month in
+            # Manila (honesty_fund_service.previous_cycle_month) and then pools
+            # commissions by this column, so a UTC date here puts anything
+            # between 16:00 and 23:59 UTC on the wrong side of a month boundary
+            # - and a commission tagged into a cycle that has already been
+            # distributed is money the fund never pays out.
+            occurred = stamp.astimezone(MANILA).date()
         commission = Commission(
             commission_id=f"com_{uuid.uuid4().hex[:12]}",
             target_type=CommissionTarget.review,

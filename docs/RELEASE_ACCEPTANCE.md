@@ -496,7 +496,24 @@ identity, no orphaned reviews or payouts, no review with two active referral
 links, no monetized-but-unverified review, no monetized review at two stars or
 below, commission shares summing to the gross, and none of them negative.
 
-**Pass:** `All 13 invariants hold.` A failure names the invariant and says what
+**Pass:** `All 15 invariants hold.`
+
+**Two currently fail, and they are known residue.** The fixture cleanup deleted
+the synthetic users and reviews but left 132 rows in
+`honesty_fund_distributions` behind — recording ₱73,149.89 of Honesty Fund
+payments, attributed to nobody, dated `1970-01-01`. Nothing is corrupt: the
+foreign keys are `ON DELETE SET NULL` and did exactly that. It is money-shaped
+fiction sitting in a money table, and any report of "total distributed" would
+include it.
+
+```sql
+-- Both conditions together. A real distribution has a reviewer and a real
+-- cycle month, so this cannot reach one.
+DELETE FROM honesty_fund_distributions
+ WHERE reviewer_id IS NULL AND cycle_month < DATE '2020-01-01';
+```
+
+Expect `DELETE 132`, after which `check_invariants` reports all 15 holding. A failure names the invariant and says what
 a non-zero count means, so the output is the diagnosis.
 
 **5. Production smoke** — read-only, no fixtures:

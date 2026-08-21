@@ -7,7 +7,29 @@ them as single constants removes the drift risk flagged in Architecture §4.
 
 from __future__ import annotations
 
+from datetime import timedelta, timezone
 from decimal import Decimal
+
+# --- The platform's calendar. ---
+#
+# bluntly is Philippines-specific (PRD S1), so anything a person would call a
+# "day" or a "month" is a Manila one. Absolute instants stay UTC — this is only
+# for deriving calendar dates from them.
+#
+# It was declared three times before this: `ZoneInfo("Asia/Manila")` in
+# honesty_fund_service, a fixed offset in schemas/product.py, and nowhere at all
+# in commission_service, which is what let the Honesty Fund's cycle and the
+# commissions it pools disagree about which month a commission belonged to.
+#
+# The Philippines has observed UTC+8 with no daylight saving since 1945, so the
+# fallback is exact rather than approximate — it exists only for hosts shipped
+# without a tz database.
+try:  # pragma: no cover - depends on the host's tzdata
+    from zoneinfo import ZoneInfo
+
+    MANILA: timezone | ZoneInfo = ZoneInfo("Asia/Manila")
+except Exception:  # noqa: BLE001
+    MANILA = timezone(timedelta(hours=8))
 
 # --- Revenue split (FR-6). ---
 #

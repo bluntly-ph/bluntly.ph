@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.categories import CATEGORIES, normalize_category
+from app.core.constants import MANILA
 from app.models.enums import Platform, ProductStatus
 from app.schemas.urls import web_url_or_none
 
@@ -24,11 +25,6 @@ CATEGORY_FIELD = Field(
 )
 
 
-# The Philippines is UTC+8 all year - no daylight saving - so a fixed offset is
-# exact here and avoids depending on a tz database being present on the host.
-PH_TIMEZONE = timezone(timedelta(hours=8))
-
-
 def _ph_today() -> date:
     """Today, as the reader experiences it.
 
@@ -36,7 +32,7 @@ def _ph_today() -> date:
     today in Manila. Server-local `date.today()` is UTC in production and is a
     different day for a third of every one.
     """
-    return datetime.now(PH_TIMEZONE).date()
+    return datetime.now(MANILA).date()
 
 
 class ProductCreate(BaseModel):

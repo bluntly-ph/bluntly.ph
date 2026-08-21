@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters import paypal
 from app.core.config import settings
+from app.core.constants import MANILA
 from app.core.errors import AppError, NotFoundError
 from app.core.logging import get_logger
 from app.models.enums import (
@@ -91,7 +92,10 @@ def schedule_payouts(db: Session, when: date | None = None,
     without a payout account are skipped and counted (they are not an error —
     they just haven't told us where to send it).
     """
-    when = when or _now().date()
+    # A Manila day, not a UTC one. `scheduled_for` is rendered to the
+    # reviewer on the dashboard, and a run at 02:00 Manila would otherwise
+    # label the batch with a date they finished eight hours ago.
+    when = when or _now().astimezone(MANILA).date()
     batch = batch_id_for(when)
     method = current_method()
 
@@ -268,7 +272,7 @@ def retry(db: Session, payout: Payout) -> Payout:
     if user is None or user.wallet_balance < payout.amount:
         raise _conflict("The wallet no longer covers this payout.",
                         "insufficient_wallet_balance")
-    today = _now().date()
+    today = _now().astimezone(MANILA).date()  # see schedule_payouts
     payout.status = PayoutStatus.scheduled
     payout.failure_reason = None
     payout.provider_ref = None

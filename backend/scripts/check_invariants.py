@@ -87,6 +87,31 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
      "OR coalesce(reviewer_share,0) < 0 OR coalesce(honesty_fund_share,0) < 0",
      "A share went negative. At 7000 bps the platform could land at -0.01 "
      "before that was guarded; a row here predates the fix."),
+
+    ("honesty fund distributions with no reviewer",
+     "SELECT count(*) FROM honesty_fund_distributions WHERE reviewer_id IS NULL",
+     "A distribution records money paid to a specific reviewer. A NULL one is "
+     "either fixture residue whose user was deleted, or a real payment whose "
+     "recipient is now unknown - and the two look identical afterwards."),
+
+    ("honesty fund distributions dated at the epoch",
+     "SELECT count(*) FROM honesty_fund_distributions "
+     "WHERE cycle_month < DATE '2020-01-01'",
+     "cycle_month is the Manila month the pool was earned in. 1970-01-01 means "
+     "the row was written by a fixture rather than a distribution run."),
+
+    ("distributions whose cycle is not the first of a month",
+     "SELECT count(*) FROM honesty_fund_distributions "
+     "WHERE EXTRACT(DAY FROM cycle_month) <> 1",
+     "previous_cycle_month() always returns the first of a month, so anything "
+     "else was not written by the distributor."),
+
+    ("commissions whose cycle is not the first of a month",
+     "SELECT count(*) FROM commissions WHERE cycle_month IS NOT NULL "
+     "AND EXTRACT(DAY FROM cycle_month) <> 1",
+     "The Honesty Fund pools commissions by cycle_month equality, so a "
+     "mid-month value can never be matched by a cycle and its share is never "
+     "distributed."),
 )
 
 

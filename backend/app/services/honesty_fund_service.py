@@ -13,11 +13,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_FLOOR, Decimal
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.constants import MANILA
 from app.core.logging import get_logger
 from app.models.commission import Commission
 from app.models.enums import (
@@ -36,7 +36,6 @@ from app.services.trust import gate_vote_weight, honesty_score
 log = get_logger("honesty_fund")
 
 _CENT = Decimal("0.01")
-MANILA = ZoneInfo("Asia/Manila")
 
 
 def previous_cycle_month(now: datetime | None = None) -> date:
