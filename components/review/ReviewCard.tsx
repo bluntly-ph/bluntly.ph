@@ -50,6 +50,8 @@ export function ReviewCard({
           <img
             src={review.imageUrl}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
           />
         ) : (

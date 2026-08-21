@@ -34,6 +34,8 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
               <img
                 src={review.avatarUrl}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-6 w-6 shrink-0 rounded-full object-cover"
               />
             ) : (
@@ -89,6 +91,8 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
             <img
               src={review.imageUrl}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (

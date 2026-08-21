@@ -48,6 +48,8 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
             <img
               src={featured.avatarUrl}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="h-8 w-8 shrink-0 rounded-full object-cover"
             />
           ) : (
