@@ -347,6 +347,46 @@ Ordered so that no step can take production down:
 
 ---
 
+## F2. Page weight — owner action, measured
+
+At a 393px viewport the homepage fetches **6 images totalling 1299 KB**, which
+is 96% of the page's 1359 KB. The audience is Filipino mobile shoppers, so this
+is the number that matters most on the first screen they see.
+
+`loading="lazy"` is now on the feed, list and comparison images. Measured
+before and after against production: **no change**, on any page. With six
+published reviews every image sits inside Chrome's lazy threshold, so nothing
+is deferred. It is correct and it will matter as the catalogue grows; it does
+nothing today, and the runbook should not pretend otherwise.
+
+The lever that works now is the source images. `seed_product_images.py`
+downscales to an 800px longest edge and re-encodes an opaque PNG as JPEG.
+Measured across the five images already in storage:
+
+| | before | after |
+|---|---|---|
+| Anker power bank | 887 KB | 172 KB |
+| CeraVe cleanser | 165 KB | 69 KB |
+| Jisulife fan | 120 KB | 45 KB |
+| MacBook Air | 98 KB | 98 KB (already optimal) |
+| Akko keyboard | 35 KB | 35 KB (already optimal) |
+| **total** | **1305 KB** | **419 KB — 68% smaller** |
+
+```bash
+cd backend && python -m scripts.seed_product_images --from-file
+```
+
+Writes to Supabase Storage, so it is an owner action. Re-run it and the
+homepage drops to roughly 420 KB of images with no visible difference at the
+size they display.
+
+The remaining option, if that is not enough, is `next/image` with
+`remotePatterns` for the Supabase host — automatic resizing and modern formats
+per request. Not done here: it changes how every image is served, needs a CSP
+review, and is a larger change than a release-hardening pass should make.
+
+---
+
 ## G. Security incident response — password-hash exposure
 
 `users.password_hash` was readable. The values are Argon2id, so they are not
