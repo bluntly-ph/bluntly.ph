@@ -88,13 +88,40 @@ def upgrade() -> None:
     # every new table to these roles, so without this the hole reopens the next
     # time a migration adds a table - which is the failure mode that put
     # `receipt_key` behind a `USING (true)` policy in the first place.
-    for owner in ("postgres", "supabase_admin"):
-        op.execute(f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public "
-                   f"REVOKE ALL ON TABLES FROM {ROLES}")
-        op.execute(f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public "
-                   f"REVOKE ALL ON SEQUENCES FROM {ROLES}")
-        op.execute(f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public "
-                   f"REVOKE ALL ON FUNCTIONS FROM {ROLES}")
+    #
+    # `postgres` is the role migrations run as, so it can always alter its own
+    # defaults. This half must succeed.
+    for what in ("TABLES", "SEQUENCES", "FUNCTIONS"):
+        op.execute(f"ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public "
+                   f"REVOKE ALL ON {what} FROM {ROLES}")
+
+    # `supabase_admin` is a different story: only that role (or a superuser) may
+    # change its defaults, and Supabase does not grant the project's `postgres`
+    # role that power. It answers
+    #   InsufficientPrivilege: permission denied to change default privileges
+    #
+    # Attempted anyway, because on any deployment where it IS permitted this is
+    # the difference between the hole staying shut and reopening. But a refusal
+    # must not fail the migration: it would make a fresh database unable to
+    # reach head on Supabase at all, which is exactly what it did - this
+    # migration is why the isolated test project could not be built.
+    #
+    # The residual risk is real and already recorded: a table created outside
+    # our migrations could arrive readable by `anon`. Two invariants in
+    # `check_invariants` fail the moment any table becomes readable by `anon`
+    # or `authenticated`, so this degrades to detection rather than prevention
+    # instead of degrading to silence.
+    for what in ("TABLES", "SEQUENCES", "FUNCTIONS"):
+        op.execute(f"""
+            DO $$
+            BEGIN
+                ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+                    REVOKE ALL ON {what} FROM {ROLES};
+            EXCEPTION WHEN insufficient_privilege THEN
+                RAISE NOTICE 'skipped: cannot alter supabase_admin default '
+                             'privileges on {what}; check_invariants covers it';
+            END $$;
+        """)
 
 
 def downgrade() -> None:
