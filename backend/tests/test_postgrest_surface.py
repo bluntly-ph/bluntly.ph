@@ -90,19 +90,38 @@ def test_no_table_in_the_schema_is_readable_by_anon():
 
 
 @requires_db
-def test_a_new_table_does_not_reopen_the_hole():
-    """Supabase's default privileges re-grant every new table to anon.
+def test_a_table_created_by_a_migration_does_not_reopen_the_hole():
+    """Supabase's default privileges re-grant new objects to anon.
 
-    That is the mechanism that would have quietly undone this the next time a
-    migration added a table carrying something private.
+    That is the mechanism that would quietly undo `0029` the next time a
+    migration adds a table carrying something private — so what matters is the
+    defaults belonging to **the role migrations actually run as**, which is
+    `postgres`. `0029` revokes those, and this asserts it stayed revoked.
+
+    This test used to require that NO role in `public` had such a rule, which
+    is not achievable on Supabase and failed against production as surely as
+    against a fresh database. `supabase_admin` also carries one, only that role
+    or a superuser may change it, and Supabase does not grant the project's
+    `postgres` role that power — `0029` attempts it and tolerates the refusal.
+
+    The narrower assertion is the true one. A table created by our migrations
+    is not exposed; a table created by Supabase's own tooling under
+    `supabase_admin` would be. That residual risk is real, documented, and
+    covered by the two `check_invariants` checks that fail the moment any table
+    becomes readable by `anon` or `authenticated` — detection rather than
+    prevention, which is the honest description of what is possible here.
     """
     from app.db.session import SessionLocal
     with SessionLocal() as db:
-        defaults = db.execute(text("""
-            SELECT count(*) FROM pg_default_acl d
+        leaky = db.execute(text("""
+            SELECT pg_get_userbyid(d.defaclrole) AS owner_role,
+                   d.defaclobjtype AS obj_type
+            FROM pg_default_acl d
             JOIN pg_namespace n ON n.oid = d.defaclnamespace
             WHERE n.nspname = 'public'
+              AND pg_get_userbyid(d.defaclrole) = 'postgres'
               AND array_to_string(d.defaclacl, ',') LIKE '%anon=%'
-        """)).scalar()
-        assert defaults == 0, (
-            "a default-privileges rule still grants new objects to anon")
+        """)).all()
+        assert not leaky, (
+            "postgres' default privileges grant new objects to anon, so the "
+            f"next migration that adds a table reopens the hole: {leaky}")

@@ -64,6 +64,14 @@ def _prod_settings(**overrides):
         app_env="production", jwt_secret="x" * 40, pii_hash_salt="y" * 40,
         use_supabase=True, supabase_connection_string="postgresql://x/y",
         cors_origins="https://bluntly.ph",
+        # Pinned, not inherited. `Settings` reads the ambient environment, so
+        # these tests were quietly describing whatever pool the *runner* had
+        # configured: the CI database job sets DB_POOL_SIZE=2 to stay under the
+        # session pooler's client cap, and that alone made
+        # `test_production_clean_config_has_no_issues` fail on a threadpool
+        # check that has nothing to do with email. A test that asserts "a clean
+        # production config has no issues" has to define what clean means.
+        db_pool_size=10, db_max_overflow=10, threadpool_tokens=20,
     )
     base.update(overrides)
     return Settings(**base)

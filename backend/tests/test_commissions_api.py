@@ -152,41 +152,47 @@ def test_full_import_flow_idempotent(client):
 
 
 @requires_db
-def test_import_rejects_tier_bps_above_cap(client):
-    """A tier configured above 7000 bps would make the platform share negative;
-    the import must refuse the whole file (config sanity check, 422)."""
+def test_a_tier_above_the_cap_cannot_be_stored_at_all(client):
+    """7001 bps would make the platform share negative, so it must be unstorable.
+
+    This used to set the value, commit, and assert the *import* refused the
+    file with `tier_bps_invalid`. Migration `0030` added
+    `ck_tier_share_bps_range`, which now rejects the write itself — so the
+    state the import guard was written to survive can no longer be reached, and
+    the old test died on a CheckViolation during its own setup rather than on
+    anything it meant to assert.
+
+    The database check is the stronger guarantee and is what gets asserted now.
+    The service-level guard is deliberately left in place as defence in depth:
+    it covers rows written before `0030` existed, and costs nothing.
+    """
+    from sqlalchemy.exc import IntegrityError
+
     from app.db.session import SessionLocal
     from app.models.enums import MembershipTier
     from app.models.membership import MembershipTierConfig
 
     ensure_tier_configs()
-    _, author_token, _ = register_and_token(client)
-    _, mod_token, _ = register_and_token(client, role="moderator")
-    ah, mh = _auth(author_token), _auth(mod_token)
-    _, click_ref, author_id = make_click(
-        client, ah, mh, name=f"BpsWidget-{_uuid.uuid4().hex[:6]}")
-    wallet_before = _wallet(author_id)
-
     db = SessionLocal()
     try:
         cfg = db.query(MembershipTierConfig).filter_by(
             code=MembershipTier.standard).first()
         cfg.revenue_share_bps = 7001
-        db.commit()
-
-        csv_text = f"{HEADER}\n{click_ref},,100.00,PHP,completed,shopee\n"
-        resp = _import(client, mh, csv_text, filename="bps.csv")
-        assert resp.status_code == 422, resp.text
-        assert resp.json()["code"] == "tier_bps_invalid"
-        assert resp.json()["tiers"] == {"standard": 7001}
-        # Nothing imported, no wallet movement.
-        assert _wallet(author_id) == wallet_before
+        with pytest.raises(IntegrityError) as exc:
+            db.commit()
+        assert "ck_tier_share_bps_range" in str(exc.value)
     finally:
-        cfg = db.query(MembershipTierConfig).filter_by(
-            code=MembershipTier.standard).first()
-        cfg.revenue_share_bps = 3000
-        db.commit()
+        db.rollback()
         db.close()
+
+    # And the row is untouched: a refused write must not have partially applied.
+    verify = SessionLocal()
+    try:
+        cfg = verify.query(MembershipTierConfig).filter_by(
+            code=MembershipTier.standard).first()
+        assert cfg.revenue_share_bps <= 7000
+    finally:
+        verify.close()
 
 
 @requires_db

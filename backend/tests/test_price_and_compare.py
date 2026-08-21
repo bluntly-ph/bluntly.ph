@@ -20,6 +20,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.schemas.product import _ph_today
 from app.services import price_service
 from tests.conftest import register_and_token, requires_db
 
@@ -141,7 +142,13 @@ def test_unknown_product_panel_is_404(client):
 @pytest.mark.parametrize("bad", [
     {"price": "0"},                                    # must be > 0
     {"price": "-5"},
-    {"observed_at": (date.today() + timedelta(days=1)).isoformat()},  # future
+    # Tomorrow in MANILA, not in UTC. The validator checks against the
+    # Philippine date on purpose — `date.today()` is UTC on Vercel, and for the
+    # eight hours where Manila is already the next day, UTC's "tomorrow" is
+    # Manila's today and is legitimately accepted. Using UTC here made this
+    # case fail on a CI runner at 18:47 UTC while the product was behaving
+    # exactly as specified.
+    {"observed_at": (_ph_today() + timedelta(days=1)).isoformat()},  # future
 ])
 @requires_db
 def test_invalid_observations_are_rejected(client, bad):

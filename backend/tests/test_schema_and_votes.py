@@ -17,20 +17,26 @@ from app.models import EarnEligibleVote, Product, Review, User
 from app.models.enums import Verdict, VoteDirection
 from tests.conftest import requires_db
 
+# The M0 core. `seller_reviews` was here until `0024_drop_seller_reviews`
+# removed it: FR-4 was descoped by the owner, so the table is gone by decision
+# rather than by accident. The test kept asserting it for as long as it kept
+# being skipped, and failed the first time it ran against a real database.
 EXPECTED_TABLES = {
     "users", "badges", "user_badges", "products", "product_platforms",
-    "price_history", "reviews", "questions", "answers", "seller_reviews",
+    "price_history", "reviews", "questions", "answers",
     "sessions", "commissions", "honesty_fund_distributions", "moderation_logs",
     "earn_eligible_votes",
 }
 
 
 @requires_db
-def test_all_fifteen_tables_present():
+def test_the_core_tables_are_present():
     tables = set(inspect(engine).get_table_names())
     missing = EXPECTED_TABLES - tables
     assert not missing, f"Missing tables: {missing}"
-    assert len(EXPECTED_TABLES) == 15
+    assert len(EXPECTED_TABLES) == 14
+    assert "seller_reviews" not in tables, (
+        "seller_reviews is back; FR-4 was descoped and 0024 dropped it")
 
 
 @requires_db

@@ -196,3 +196,63 @@ def owned_photo_url(headers: dict) -> str:
     uid = TestClient(app).get("/api/v1/auth/me", headers=headers).json()["id"]
     base = (settings.supabase_url or "https://test.supabase.co").rstrip("/")
     return f"{base}/storage/v1/object/public/{REVIEW_BUCKET}/{uid}/{_uuid.uuid4().hex}.jpg"
+
+
+@pytest.fixture
+def db():
+    """A live database session, for tests that assert on the database itself.
+
+    This did not exist. `test_postgrest_surface` and `test_wallet_concurrency`
+    were both written taking a `db` argument, so all four of those tests failed
+    at setup with "fixture 'db' not found" — and nobody saw it, because
+    `requires_db` skipped them on every machine that has ever run the suite.
+    They were counted as coverage while being incapable of passing. The first
+    run against a real database surfaced them immediately.
+
+    Rows outlive a rollback here, because the tests under it commit on purpose
+    (that is the point of the concurrency ones), so anything `make_user` created
+    is deleted by id afterwards rather than trusted to disappear with the
+    transaction.
+    """
+    from app.db.session import SessionLocal
+
+    session = SessionLocal()
+    created: list = []
+    session.info["created_users"] = created
+    try:
+        yield session
+    finally:
+        try:
+            session.rollback()
+            if created:
+                from app.models.user import User
+                session.query(User).filter(User.id.in_(created)).delete(
+                    synchronize_session=False)
+                session.commit()
+        finally:
+            session.close()
+
+
+def make_user(db, **overrides):
+    """A persisted user for a test that needs a real row rather than a client.
+
+    Registered with the `db` fixture for deletion, so a committing test does not
+    leave an account behind. Referenced by `test_wallet_concurrency` and, like
+    the fixture above, never actually defined until now.
+    """
+    import uuid
+
+    from app.models.user import User
+
+    user = User(
+        email=f"t_{uuid.uuid4().hex}@example.com",
+        password_hash="not-a-real-hash",
+        display_name="Fixture User",
+        **overrides,
+    )
+    db.add(user)
+    db.flush()
+    created = db.info.get("created_users")
+    if created is not None:
+        created.append(user.id)
+    return user
