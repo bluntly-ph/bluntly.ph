@@ -1,8 +1,13 @@
 # Release handoff — engineering → QA
 
-**Prepared 2026-08-21.** Covers the full-stack engagement (frontend + backend
+**Prepared 2026-08-21, revised the same day after GitHub and Vercel were
+re-authorised.** Covers the full-stack engagement (frontend + backend
 agreements) against the capstone PRD as amended by `docs/DEVIATIONS.md` and the
 owner's scope decisions.
+
+Two claims in the first revision were wrong and are corrected in place: CI was
+not permanently blocked, and `CORS_ORIGINS` was not a production refusal. Both
+corrections are marked where they appear.
 
 ## How to read this
 
@@ -192,8 +197,9 @@ evidence untouched; `updated_at` did not drift. Verified afterwards through
 | Check | Result |
 |---|---|
 | Backend — ruff (`app/ scripts/ tests/`) | **PASS**, clean |
-| Backend — pytest | **582 passed**, 133 skipped |
+| Backend — pytest | **583 passed**, 133 skipped |
 | Backend — environment guard tests | **27 passed** |
+| **GitHub Actions CI** | **active and green** — guard, backend, frontend all pass on every push |
 | Backend — migration safety | **PASS** (advisory; 10 migrations flagged for deliberate rollout order) |
 | Production — data integrity invariants | **18/18 hold** |
 | Frontend — TypeScript (`tsc --noEmit`) | **PASS** |
@@ -227,49 +233,76 @@ project when its secrets are present.
 
 ## Blocked — needs someone other than engineering
 
+Four items on this list were resolved on 2026-08-21 once GitHub and Vercel were
+re-authorised. What follows is only what genuinely remains.
+
 | Item | Marker | Exact action required |
 |---|---|---|
-| **GitHub CI activation** | `GITHUB_CI = BLOCKED_AUTH` | The credential available here lacks GitHub's `workflow` OAuth scope; the push is rejected with `refusing to allow an OAuth App to create or update workflow .github/workflows/ci.yml without workflow scope`. From a credential that has the scope: `mkdir -p .github/workflows && git mv docs/ci/ci.yml .github/workflows/ci.yml && git commit -m "ci: activate release verification" && git push` |
-| **`APP_ENV=production`** | `OWNER DECISION REQUIRED` | Not an auth problem: the Vercel connector exposes **no environment-variable capability at all**, so this is a dashboard or CLI action regardless of scope. One refusal stands in the way — see below |
-| **Vercel project API** | `VERCEL_PROJECT_API = BLOCKED_AUTH` | The token sees team `bluntlyph` but `404`s on the project. Re-authorise the Vercel connector with project-level access to `bluntly-ph` in team `bluntlyph`. This would unlock deployment and runtime-log inspection; it would **not** unlock env vars |
+| **`APP_ENV=production`** | `OWNER ACTION — one command` | Safe to run now: the live process reports `refusal_count: 0`. `vercel env update APP_ENV production --value production --sensitive --yes` then `vercel --prod`. I was blocked from mutating a production environment variable and did not work around it |
+| **Isolated test DB — 2 secrets** | `OWNER ACTION — dashboard` | Neither value is retrievable through any API. Supabase → `bluntly-ph-test` → *Settings → Database → Reset database password* (session pooler URI) and *Settings → API* (service_role key), then `gh secret set TEST_SUPABASE_SESSION_POOLER` and `gh secret set TEST_SUPABASE_SECRET_KEY` — both read from the prompt, so neither is ever typed into chat. `TEST_SUPABASE_URL` is already set |
 | **PayPal sandbox** | `PAYPAL_SANDBOX = BLOCKED_EXTERNAL_ZIENT` | Zient to provide sandbox credentials. The acceptance sequence runs automatically once they are in the authorised environment |
-| **FR-8 layer 3** | `OWNER DECISION REQUIRED` | Select and procure a reverse-image-search provider. The PRD names none |
-| **Isolated test DB secrets** | `OWNER DECISION REQUIRED` | Add `TEST_SUPABASE_SESSION_POOLER`, `TEST_SUPABASE_URL`, `TEST_SUPABASE_SECRET_KEY` to GitHub Actions secrets to switch on `backend-db-tests` and close the 133-skip gap |
+| **FR-8 layer 3** | `OWNER DECISION REQUIRED` | Select a reverse-image-search provider. The PRD names none. No paid service will be procured without approval — see the decision brief below |
 
-### The one thing standing between here and `APP_ENV=production`
+### Resolved since the previous handoff
 
-Evaluated against the repo's copy of the production values, with `APP_ENV`
-forced locally only — **nothing in Vercel was touched**:
+| Was | Now |
+|---|---|
+| `GITHUB_CI = BLOCKED_AUTH` | **Active and green.** `gh auth refresh -h github.com -s workflow` granted the scope; the workflow runs on every push and has already caught a real regression |
+| Vercel connector unusable | **Usable.** The official CLI is authenticated and linked to the existing `bluntly-ph` project. The MCP still 404s on the project, but the CLI is the supported path |
+| `CORS_ORIGINS` blocks `APP_ENV` | **False alarm, corrected.** That came from the repo's `.env`, which does not set it. Vercel sets it correctly. Real refusal count is **0** |
+| `TEST_SUPABASE_URL` missing | **Set** — it is a public project URL, not a secret |
 
-```
-NOT READY - 1 issue(s).
-  - CORS_ORIGINS still points at localhost; a production browser origin
-    would be refused.
-```
-
-`CORS_ORIGINS` is unset and falls back to a localhost default. Nothing is broken
-by that today — the browser never calls the API cross-origin; the Next server
-proxies server-side and preflight answers `400` for every origin, which is
-exactly why it went unnoticed. The check tests the configured string, so it
-would still refuse the boot.
+### FR-8 layer 3 — decision brief
 
 ```
-CORS_ORIGINS=https://www.bluntly.ph,https://bluntly.ph
+Requirement          reverse image search + metadata analysis, surfaced to the moderator
+Current provider     none — the PRD names none
+Blocked by           provider selection and procurement, not engineering
+Possible now         an adapter interface + stub, so the moderator card has a slot
+                     to render into and swapping a provider in is a one-file change
+Cost position        no paid service will be signed up for without explicit approval
 ```
 
-**Confirm against the real Vercel values before flipping the flag** — the above
-is a developer's copy and is not guaranteed to match:
+The other six layers are implemented and advisory-only, which is the agreed
+behaviour — signals surface to the moderator and never auto-block. Layer 3's
+absence therefore degrades the *quantity* of signal on a card, not the
+correctness of any decision.
+
+### `APP_ENV=production` — validated, one command away
+
+**Correcting the previous handoff.** It named `CORS_ORIGINS` as the blocker.
+That was measured against the repository's `.env`, which does not set
+`CORS_ORIGINS` at all and so falls back to a localhost default. Vercel sets it
+correctly. Production was never misconfigured — the measurement was.
+
+Ground truth, read out of the running production process:
+
+```json
+{"message": "production readiness", "app_env": "staging",
+ "is_production": false, "would_boot_as_production": true,
+ "refusal_count": 0, "refusals": [],
+ "warnings": ["REDIS_URL points at localhost ..."]}
+```
+
+`APP_ENV` is **`staging`**, which is the only reason the production checks are
+not running. Zero refusals; one non-blocking warning.
 
 ```bash
-vercel env pull prod.env --environment=production
-cd backend && python -m scripts.check_production_config --env-file ../prod.env --strict
-rm ../prod.env
+vercel env update APP_ENV production --value production --sensitive --yes
+vercel --prod          # env changes need a redeploy to take effect
 ```
 
-It prints descriptions, never values (verified with a marker secret: zero
-occurrences), so the output is safe to paste into a ticket. Only set
-`APP_ENV=production` once it prints `READY`. **No configuration change should be
-used as a discovery mechanism** — a failed boot shows as a 500 from every route.
+**Why this could not be checked from outside.** Every variable on the Vercel
+project is marked *sensitive*, and sensitive variables are write-only:
+`vercel env pull` writes the literal `[SENSITIVE]`, `vercel env run` supplies
+empty strings, `vercel env ls` shows `Hidden`. A local checker run against
+either reports on a configuration that does not exist — it produced three
+phantom refusals here. So `main.py` now evaluates `production_issues()` on
+every boot whatever `APP_ENV` says and logs the verdict; descriptions only,
+never values. The answer comes from the one process that holds the real values.
+
+That also removes the hazard the old sequence carried: nothing has to be
+flipped to find out what would happen.
 
 ---
 
@@ -295,24 +328,71 @@ Closing it properly needs Supabase support or a dashboard-level action.
 
 ---
 
-## What engineering is asking QA to retest
+## Requirement traceability — original vs. later owner-approved
 
-Ranked. Items 1–3 are the fixes from this sprint; 4–5 are areas engineering
-exercised but cannot sign off on itself.
+Where a later owner decision supersedes the signed PRD, the later decision
+governs. Recorded here so neither reads as an unmet obligation, and so Figma
+frames showing the *original* scope are not mistaken for missing work.
 
-1. **Moderation lifecycle** — publish, unpublish, reject, and confirm an
-   unpublished review is still reachable in the queue and still actionable.
-   This is defect #1 and the highest-value retest.
-2. **Reviewer profile 404s** — `/u/<nonexistent>` should render the reviewer
-   404 and carry `noindex`; a real profile should not.
-3. **Environment guard** — confirm automated commands still refuse a production
-   target, from more than one working directory. Defect #2 was invisible from
-   `backend/` and only appeared from the repo root.
-4. **Auth rate limiting** — independent confirmation of the 10/11 threshold,
-   ideally from a different source address than engineering used.
-5. **Full review lifecycle with a real proof photo** — engineering verified the
-   unverified path (no owned photo ⇒ unverified). The *verified* path needs a
-   real receipt upload, which is better exercised by QA with real fixtures.
+| Original signed requirement | Later owner-approved alignment | Current implementation | Engineering evidence |
+|---|---|---|---|
+| FR-3: "reviews **publish immediately**" | Publication gate — a review is hidden and auto-queued; a moderator publishes (deviation #30, 2026-07-13) | `create_review` sets `published_at NULL`, `earn_eligible_status pending` | Live: submitted review returned `published_at: null`; published only on moderator action |
+| FR-4: seller reviews, seller accounts, seller dashboard | **Descoped** — affiliate-review platform, not a merchant directory (owner, 2026-07-28 / reaffirmed 2026-08-07) | Absent; schema dropped in `0024` | n/a. Figma retains `Seller Review`, `Seller Page`, `Search for Sellers` frames — **obsolete, not a gap** |
+| Token economy (balances, transaction history) | **Retired** — superseded by the PHP revenue share (owner, 2026-08-07) | `token_transactions.amount` is a token count, never rendered beside peso figures; `/tokens/balance` retained only as the `wallet_balance` source | Not surfaced in any UI. Old Figma frames showing token balances are obsolete |
+| Membership tiers implying purchase | **Not subscriptions** — assigned status levels controlling `revenue_share_bps` and `payout_priority` (ADR-012) | No checkout, no billing; `/membership` reads as a benefits table | e2e asserts the page "explains that tiers are not purchasable" |
+| AI critique interface | **Deliberately no UI** for the capstone (owner, 2026-08-07) | Backend endpoints exist and work; frontend surface withheld | No route renders it |
+| Payout on request | **Scheduler-driven only** — a sweep over everyone at/above ₱300 with a payout account, in tier order | No "request payout" control anywhere | Absent by design |
 
-Not for QA: FR-4 (descoped), FR-8 layer 3 (never procured), payout execution
-(no sandbox credentials).
+**Scope rule applied throughout:** an obsolete Figma frame is not a
+requirement. Nothing above will be rebuilt on the strength of a design file
+that predates the owner decision retiring it.
+
+---
+
+## QA retest pack
+
+Reproducible user workflows, not internal engineering checks. Production base
+URL is `https://www.bluntly.ph`.
+
+### 1. Moderation lifecycle (defect #1 — highest value)
+
+- **Precondition:** a moderator account; at least one unpublished review in the queue.
+- **Steps:** open the moderation queue → publish a review → confirm it appears publicly → unpublish it → **return to the queue**.
+- **Expected:** after unpublishing, the review is *still listed in the queue* and can still be published or rejected. It must not vanish from both the site and the queue.
+- **Fix reference:** `b7a506a`; guarded by invariant #18, which must stay at zero.
+
+### 2. Reviewer profile — missing vs. real (defect #3)
+
+- **Precondition:** none; signed out is fine.
+- **Steps:** visit `/u/00000000-0000-0000-0000-00000000dead`, then a real reviewer profile linked from any review card.
+- **Expected:** the missing one shows "Reviewer not found." and its HTML carries `<meta name="robots" content="noindex">`; the real one renders the profile and carries **no** noindex.
+- **Fix reference:** `c9b52ff`.
+
+### 3. Auth rate limiting
+
+- **Precondition:** a source address that has not just been rate-limited; use a nonexistent account such as `qa-probe@example.invalid`.
+- **Steps:** attempt login with a wrong password 11 times in under a minute.
+- **Expected:** attempts 1–10 return `401`; the 11th returns `429` with `application/problem+json` and a `retry_after_seconds` field.
+- **Note:** worth running from a different network than engineering used, since the limit is keyed per address.
+
+### 4. Full review lifecycle with a real proof photo
+
+- **Precondition:** a reviewer account and a genuine product photo.
+- **Steps:** submit a review **with** a photo uploaded through the composer → confirm it is queued and unpublished → have a moderator publish it.
+- **Expected:** verification status is **verified** (engineering has only verified the *unverified* path — that a review with no owned photo is not verified). A review whose `photo_url` points at an object the author does not own must stay unverified.
+- **Why QA:** needs a real upload with real fixtures.
+
+### 5. Publication gate from a reader's view
+
+- **Precondition:** a freshly submitted, unpublished review.
+- **Steps:** sign out, try to reach the review by direct URL; check it is absent from feed, search and the product page; confirm the author can still see it.
+- **Expected:** `404` for anonymous readers, visible to its author, absent from all public listings.
+
+### 6. Environment guard (engineering-facing, but retestable)
+
+- **Steps:** from the **repository root** — not `backend/` — run any command that invokes `require_non_production`.
+- **Expected:** it reports `PRODUCTION` and refuses. Defect #2 was invisible from `backend/` and only appeared from the repo root, so the working directory is the whole point of this test.
+- **Fix reference:** `ea21b47`.
+
+**Not for QA:** FR-4 (descoped), FR-8 layer 3 (no provider procured), payout
+execution (no sandbox credentials).

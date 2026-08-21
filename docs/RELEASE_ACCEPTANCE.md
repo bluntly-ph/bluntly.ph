@@ -90,25 +90,50 @@ cd backend && .venv/Scripts/python -m scripts.mint_e2e_moderator --cleanup
 
 ---
 
-## B. CI activation
+## B. CI activation — ✅ ACTIVE AND GREEN (2026-08-21)
 
-1. Re-authorize the GitHub credential with the **`workflow`** scope. Without it
-   GitHub rejects any push touching `.github/workflows/`, with:
-   `refusing to allow an OAuth App to create or update workflow … without workflow scope`.
-2. ```bash
-   mkdir -p .github/workflows
-   git mv docs/ci/ci.yml .github/workflows/ci.yml
-   git commit -m "ci: activate the GitHub Actions workflow"
-   git push
-   ```
-3. Optional, for the DB job only — **Settings → Secrets and variables →
-   Actions**: `TEST_SUPABASE_SESSION_POOLER`, `TEST_SUPABASE_URL`,
-   `TEST_SUPABASE_SECRET_KEY`. Never production values.
-4. Watch the first run. `guard`, `backend` and `frontend` must pass with no
-   secrets at all. `backend-db-tests` skips with a notice until step 3.
+The workflow lives at `.github/workflows/ci.yml` and runs on every push. The
+`workflow` OAuth scope that had blocked it was granted with
+`gh auth refresh -h github.com -s workflow`.
 
-**Pass looks like:** four jobs, three green without secrets, and the `guard`
-job proving a simulated production target is *refused*.
+First run: four jobs, three green without any secrets, `backend-db-tests`
+skipping on its documented condition.
+
+| Job | Result |
+|---|---|
+| Production guard | green — 44s |
+| Backend (no database) | green — 45s |
+| Frontend | green — 54s |
+| Backend (isolated database) | skipped — `TEST_SUPABASE_SESSION_POOLER not set` |
+
+**It has already earned its place.** The very next push
+(`feat(ops): the app reports its own production readiness`) went red: a test
+asserted `raise RuntimeError` appeared within 300 characters of a marker line
+in `main.py`, and an added comment pushed it outside that window. The behaviour
+was untouched, the assertion was a proximity heuristic — but nothing else was
+watching, and before CI existed that would have landed silently. Fixed in
+`ecf7efa`, which asserts the structure from the parse tree instead.
+
+### Remaining: the isolated-database job
+
+`TEST_SUPABASE_URL` is set. Two more are needed, and both live behind the
+Supabase dashboard because neither is retrievable through any API:
+
+```bash
+# Supabase → project bluntly-ph-test (miysywhcdqkoniaibglx)
+#   Settings → Database → Reset database password  -> session pooler URI
+#   Settings → API      → service_role key
+gh secret set TEST_SUPABASE_SESSION_POOLER      # paste at the prompt
+gh secret set TEST_SUPABASE_SECRET_KEY          # paste at the prompt
+```
+
+`gh secret set` reads from the prompt or stdin, so neither value is ever typed
+into a chat, a file, or a shell history entry.
+
+The job then runs `scripts.bootstrap_test_env`, which validates the target,
+refuses production, migrates the empty test project to head, runs the suite and
+the milestone verifier. The test project is **currently empty** — 0 tables, no
+`alembic_version` — so its first run builds the schema from scratch.
 
 ---
 
@@ -331,61 +356,56 @@ dashboard", that is why — not an oversight.
 | `EMAIL_PROVIDER` not console | **Yes** — Resend delivers (202 to real domains) | **Pass** | None | Every OTP silently fails; codes land in logs |
 | `RESEND_API_KEY` set | **Yes** — same evidence | **Pass** | None | OTP delivery fails |
 
-### Evaluated 2026-08-21 — one refusal left
+### Answered 2026-08-21 — zero refusals. `APP_ENV` is the only thing left.
 
-Run against the developer's copy of the production values, with `APP_ENV`
-forced to `production` **locally only** (nothing in Vercel was touched), the
-report is:
+**The earlier prediction on this page was wrong and is corrected here.** It said
+`CORS_ORIGINS` was the one refusal standing in the way. That came from
+evaluating the *repository's* `.env`, which simply does not set `CORS_ORIGINS`
+and so falls back to a localhost default. Vercel sets it correctly. Nothing was
+wrong with production; the measurement was wrong.
 
-```
-1 warning(s) - these do NOT stop the app serving:
-  ~ REDIS_URL points at localhost ... (Postgres fallback, migration 0028)
+Ground truth, read out of the running production process:
 
-NOT READY - 1 issue(s).
-  - CORS_ORIGINS still points at localhost; a production browser origin
-    would be refused.
-```
-
-**`CORS_ORIGINS` is the single thing standing between here and
-`APP_ENV=production`.** It is unset in the repository, so it falls back to a
-default containing `localhost:3000`.
-
-It has gone unnoticed because it is currently harmless: the browser never calls
-the API cross-origin. The Next server holds the session cookie and proxies
-server-side, and a preflight from *any* origin — including `https://www.bluntly.ph`
-itself — answers `400`. So nothing is broken today. It would still refuse the
-boot, because the check tests the configured string rather than observed
-behaviour.
-
-Set it to the real origins:
-
-```
-CORS_ORIGINS=https://www.bluntly.ph,https://bluntly.ph
+```json
+{"message": "production readiness", "app_env": "staging",
+ "is_production": false, "would_boot_as_production": true,
+ "refusal_count": 0, "refusals": [],
+ "warnings": ["REDIS_URL points at localhost ..."]}
 ```
 
-**Caveat worth stating plainly:** this was evaluated against the repo's `.env`,
-which is a developer's copy and is not guaranteed to match what Vercel holds.
-Confirm against the real thing before flipping the flag — that is what the
-`--env-file` flag below exists for.
-
-### Answer it without guessing
+`APP_ENV` is **`staging`**, which is why none of the production checks are
+running. Set it to `production` and the app boots with every check on:
 
 ```bash
-vercel env pull prod.env --environment=production
-cd backend && python -m scripts.check_production_config --env-file ../prod.env --strict
-rm ../prod.env          # it holds real secrets
+vercel env update APP_ENV production --value production --sensitive --yes
+vercel --prod          # environment changes need a redeploy to take effect
 ```
 
-It evaluates the same `production_issues()` list that `main.py` uses and prints
-**descriptions only, never values** — verified: with a connection string
-containing a marker secret, the marker appears zero times in the output — so
-the result is safe to paste into a ticket. `--strict` exits non-zero when the
-app would refuse to boot, which makes it usable as a deploy gate.
+### Why the checker cannot answer this from outside
 
-`--env-file` matters because pydantic resolves `env_file` against the current
-working directory and only under fixed names; a pulled `prod.env` is not one of
-them, so without the flag the script would silently report on local
-configuration while appearing to describe production.
+Every environment variable on the Vercel project is marked **sensitive**, and
+sensitive variables are write-only. Neither CLI path returns a real value:
+
+| Path | What it actually returns |
+|---|---|
+| `vercel env pull` | the literal string `[SENSITIVE]` |
+| `vercel env run` | empty strings |
+| `vercel env ls` | `Hidden`, with the type column reading `Sensitive` |
+
+So `check_production_config --env-file` run against a pulled file describes a
+configuration that does not exist. It reported three phantom refusals here —
+`USE_SUPABASE`, `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS` — none of which is
+actually unset. **Do not trust a local run against pulled production values.**
+The flag remains useful for any project whose variables are not sensitive.
+
+The real values exist in exactly one place, so that is where the question is
+answered: `main.py` evaluates `production_issues()` on every boot regardless of
+`APP_ENV` and logs the result. Descriptions only, never values.
+
+```bash
+curl -s -o /dev/null "https://www.bluntly.ph/api/v1/reviews/feed?limit=1"   # force a cold start
+vercel logs <deployment-url> --json | grep "production readiness"
+```
 
 ### Safe sequence
 
