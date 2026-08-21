@@ -40,8 +40,19 @@ def wilson_lower_bound(positive: float, total: float, z: float = WILSON_Z_95) ->
     Accepts weighted (non-integer) counts so it can run on effective n.
     Returns 0.0 for empty input.
     """
-    if total <= 0:
+    if total <= 0 or not math.isfinite(total):
         return 0.0
+    # Clamp rather than trust the caller. Both callers today are careful -
+    # helpfulness_score clamps each counter before summing, and
+    # time_decayed_wilson builds `positive` by accumulating a subset of what it
+    # adds to `total` - so nothing currently reaches this. But `positive > total`
+    # makes `phat > 1`, which puts a negative under the square root and raises
+    # ValueError out of a ranking helper, i.e. a 500 from a nightly sweep. The
+    # precondition belongs with the function that needs it, not with each
+    # caller who has to remember.
+    if not math.isfinite(positive):
+        return 0.0
+    positive = min(max(positive, 0.0), total)
     phat = positive / total
     z2 = z * z
     denom = 1.0 + z2 / total
