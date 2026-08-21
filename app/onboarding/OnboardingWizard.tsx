@@ -14,6 +14,7 @@ import { StepBar } from "@/components/auth/StepBar";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { INTERESTS, REQUIRED_INTERESTS } from "@/lib/interests";
+import { prepareImageForUpload } from "@/lib/image";
 
 const EMPTY: ProfileState = {};
 
@@ -108,6 +109,7 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
   const [displayName, setDisplayName] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [avatar, setAvatar] = useState<File | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(user.avatarUrl);
   const [state, formAction, pending] = useActionState(completeOnboarding, EMPTY);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -165,10 +167,28 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
           setDisplayName={setDisplayName}
           preview={preview}
           fileRef={fileRef}
-          onPick={(file) => {
-            setAvatar(file);
-            setPreview(file ? URL.createObjectURL(file) : null);
+          onPick={async (file) => {
+            // Shrink before it is ever submitted. The platform refuses a
+            // request body over ~4.5MB with a bare 413, and a phone photo is
+            // routinely larger — so the avatar an ordinary person picks is
+            // exactly the one that fails, at the end of a four-step wizard.
+            // Same fix as the review photo and receipt fields.
+            if (!file) {
+              setAvatar(null);
+              setPreview(null);
+              return;
+            }
+            const prepared = await prepareImageForUpload(file, "photo");
+            setAvatarError(prepared.error ?? null);
+            if (prepared.error) {
+              setAvatar(null);
+              setPreview(null);
+              return;
+            }
+            setAvatar(prepared.file);
+            setPreview(URL.createObjectURL(prepared.file));
           }}
+          avatarError={avatarError}
           error={state.fieldErrors?.username}
           availability={availability}
         />
@@ -247,6 +267,7 @@ function StepIdentity({
   preview,
   fileRef,
   onPick,
+  avatarError,
   error,
   availability,
 }: {
@@ -256,7 +277,8 @@ function StepIdentity({
   setDisplayName: (v: string) => void;
   preview: string | null;
   fileRef: React.RefObject<HTMLInputElement | null>;
-  onPick: (file: File | null) => void;
+  onPick: (file: File | null) => void | Promise<void>;
+  avatarError?: string | null;
   error?: string;
   availability: Availability;
 }) {
@@ -301,6 +323,11 @@ function StepIdentity({
         <span className="text-[12px] text-[var(--text-muted)]">
           Tap to upload to photo
         </span>
+        {avatarError ? (
+          <span role="alert" className="text-[12px] text-[var(--accent-danger)]">
+            {avatarError}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-8 flex flex-col gap-5">

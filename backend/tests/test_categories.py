@@ -176,3 +176,46 @@ class TestReadIsForgivingWhereWriteIsStrict:
         assert "spellings_for(category)" in src, (
             "the feed no longer filters through the alias set; a product stored "
             "under a legacy spelling will vanish from its category page")
+
+
+class TestInterestsUseTheSameVocabulary:
+    """`users.interests` is matched against `products.category`, so it is the
+    same vocabulary and needs the same validation.
+
+    The list length was bounded at 20 and the values were not bounded at all,
+    so any string could be stored. An unrecognised interest matches no product
+    and quietly does nothing — the same silent failure the category work exists
+    to end.
+    """
+
+    def test_a_known_slug_is_kept(self):
+        from app.schemas.auth import ProfileUpdateIn
+        assert ProfileUpdateIn(interests=["beauty", "gaming"]).interests == [
+            "beauty", "gaming"]
+
+    def test_a_legacy_spelling_is_normalised(self):
+        from app.schemas.auth import ProfileUpdateIn
+        assert ProfileUpdateIn(interests=["electronics"]).interests == [
+            "electronics-tech"]
+
+    def test_duplicates_and_casing_collapse(self):
+        from app.schemas.auth import ProfileUpdateIn
+        assert ProfileUpdateIn(interests=["beauty", "Beauty", "beauty"]).interests == [
+            "beauty"]
+
+    def test_an_unknown_interest_is_refused(self):
+        from pydantic import ValidationError
+
+        from app.schemas.auth import ProfileUpdateIn
+        with pytest.raises(ValidationError):
+            ProfileUpdateIn(interests=["beauty", "not-a-category"])
+
+    def test_omitting_them_leaves_them_untouched(self):
+        from app.schemas.auth import ProfileUpdateIn
+        assert ProfileUpdateIn().interests is None
+
+    def test_every_onboarding_interest_is_accepted(self):
+        """Whatever the wizard offers must survive the round trip."""
+        from app.schemas.auth import ProfileUpdateIn
+        offered = sorted(interest_slugs())
+        assert ProfileUpdateIn(interests=offered).interests == offered
