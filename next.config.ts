@@ -59,27 +59,14 @@ const nextConfig: NextConfig = {
    * product image in production is an 887 KB PNG drawn into a 96 px box.
    */
   images: {
-    // Scoped to the public storage path so the optimizer cannot be pointed at
-    // arbitrary URLs. `*.supabase.co` rather than the one project ref because
-    // development and the test project are different refs, and this matches
-    // what the CSP's img-src already allows. `search` is empty because
-    // `get_public_url` returns a bare URL: allowing arbitrary query strings
-    // would let one image be cached under unlimited distinct keys.
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "*.supabase.co",
-        pathname: "/storage/v1/object/public/**",
-        search: "",
-      },
-    ],
-    // The upstream is `no-cache`, so this value alone decides how long an
-    // optimized image lives — max-age is the larger of the two. A month is
-    // safe here specifically because every object path ends in a fresh uuid4
-    // hex: the bytes at a given path never change, and a replacement image
-    // arrives at a new path under a new URL. That also covers the caveat that
-    // there is no way to invalidate this cache.
-    minimumCacheTTL: 2678400,
+    // NOT the built-in optimizer: `/_next/image` 404s in this deployment,
+    // because vercel.json rewrites every path to a service and a function
+    // route does not survive that. See lib/supabase-image-loader.ts — the
+    // resizing and the year-long cache header both come from Supabase's own
+    // render endpoint instead. `remotePatterns` is deliberately absent: it
+    // governs the built-in optimizer, which is not in play here.
+    loader: "custom",
+    loaderFile: "./lib/supabase-image-loader.ts",
   },
 
   async headers() {
