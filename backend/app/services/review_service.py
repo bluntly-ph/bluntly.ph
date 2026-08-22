@@ -181,8 +181,79 @@ def list_versions(db: Session, review_id: uuid.UUID) -> list[ReviewVersion]:
     ))
 
 
+#: A feed dominated by one voice or one product is not a feed. These caps are
+#: deliberately small: the point is that scrolling shows you the platform, not
+#: one prolific reviewer's back catalogue.
+MAX_PER_AUTHOR = 2
+MAX_PER_PRODUCT = 2
+
+
+def diversify(
+    rows: list[tuple[Review, User | None, Product | None]],
+    *, limit: int,
+    max_per_author: int = MAX_PER_AUTHOR,
+    max_per_product: int = MAX_PER_PRODUCT,
+) -> list[tuple[Review, User | None, Product | None]]:
+    """Thin a ranked list so no author or product dominates it.
+
+    Order is preserved: this only removes, never re-sorts, so whatever ranking
+    produced `rows` still decides what a reader sees first. Anything dropped for
+    exceeding a cap is appended afterwards rather than discarded, so a small
+    corpus still fills the page — on a platform with fifteen reviews, strict
+    caps would otherwise return four.
+
+    Pure, so the rule is testable without a database.
+    """
+    kept: list[tuple[Review, User | None, Product | None]] = []
+    overflow: list[tuple[Review, User | None, Product | None]] = []
+    by_author: dict[uuid.UUID, int] = {}
+    by_product: dict[uuid.UUID, int] = {}
+
+    for row in rows:
+        review, author, _ = row
+        author_key = author.id if author is not None else None
+        author_n = by_author.get(author_key, 0) if author_key else 0
+        product_n = by_product.get(review.product_id, 0)
+        if author_n >= max_per_author or product_n >= max_per_product:
+            overflow.append(row)
+            continue
+        if author_key:
+            by_author[author_key] = author_n + 1
+        by_product[review.product_id] = product_n + 1
+        kept.append(row)
+        if len(kept) >= limit:
+            return kept
+
+    return (kept + overflow)[:limit]
+
+
+def prioritise_interests(
+    rows: list[tuple[Review, User | None, Product | None]],
+    interests: list[str] | None,
+) -> list[tuple[Review, User | None, Product | None]]:
+    """Move reviews in the reader's chosen categories to the front.
+
+    A stable partition rather than a score: reviews the reader asked for come
+    first, everything else keeps its existing order behind them. Nothing is
+    removed, so a reader whose interests match two reviews still gets a full
+    feed instead of a two-item one — the fallback is the same list, which is
+    what "graceful" has to mean when personalisation data is thin.
+
+    Pure, so the rule is testable without a database.
+    """
+    if not interests:
+        return rows
+    wanted = {c for i in interests for c in spellings_for(i)}
+    if not wanted:
+        return rows
+    preferred = [r for r in rows if r[2] is not None and r[2].category in wanted]
+    rest = [r for r in rows if not (r[2] is not None and r[2].category in wanted)]
+    return preferred + rest
+
+
 def list_feed(
-    db: Session, *, limit: int = 8, product_id: uuid.UUID | None = None,
+    db: Session, *, limit: int = 8, offset: int = 0,
+    product_id: uuid.UUID | None = None,
     author_id: uuid.UUID | None = None, category: str | None = None,
     q: str | None = None, sort: str = "wilson",
 ) -> list[tuple[Review, User | None, Product | None]]:
@@ -214,7 +285,7 @@ def list_feed(
     else:
         stmt = stmt.order_by(Review.created_at.desc())
 
-    reviews = list(db.scalars(stmt.limit(limit)))
+    reviews = list(db.scalars(stmt.limit(limit).offset(max(0, offset))))
     author_ids = {r.author_id for r in reviews if r.author_id is not None}
     product_ids = {r.product_id for r in reviews}
     authors = (

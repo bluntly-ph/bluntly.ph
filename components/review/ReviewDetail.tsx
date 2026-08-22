@@ -64,16 +64,22 @@ export function ReviewDetail({
 
   return (
     <>
-      {/* The review's own nav is a solid brand-orange bar in the frame, not
-          icons floating on the page ground — it is the one screen that replaces
-          the site header rather than sitting under it, which is why the page no
-          longer renders SiteHeader. Sticky so the way back survives a 2,273px
-          scroll. The five controls are the BUG-012 set, recoloured for the bar.
+      {/* MOBILE chrome only. The frame gives the review its own brand-orange
+          bar, and on a phone it is right: it replaces the site header rather
+          than stacking under it, and the back control is the way out. Sticky so
+          that survives a 2,273px scroll. The five controls are the BUG-012 set.
           The #d9d9d9 strip above it in the mockup is the phone status bar, i.e.
-          device chrome, so it is deliberately not built. */}
+          device chrome, so it is deliberately not built.
+
+          Hidden from `md` up, where the page renders SiteHeader instead: a
+          768px tablet showing a phone's back-arrow bar is the same mistake as
+          the desktop one, just less obvious. Carrying
+          the phone bar onto a 1440px desktop was the whole reason that width
+          read as a blown-up mobile layout: no wordmark, no nav, no search, and
+          a back arrow where the site's own navigation belongs. */}
       <nav
         aria-label="Review"
-        className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-white"
+        className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-white md:hidden"
       >
         <Link
           href="/"
@@ -118,7 +124,7 @@ export function ReviewDetail({
         </div>
       </nav>
 
-      <article className="mx-auto w-full max-w-[44rem] px-4 py-6 lg:px-6 lg:py-10">
+      <article className="mx-auto w-full max-w-[44rem] px-4 py-6 lg:mx-0 lg:max-w-[42rem] lg:px-0 lg:py-0">
       {/* Product context */}
       {product ? (
         <div className="mt-5 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
@@ -203,12 +209,12 @@ export function ReviewDetail({
         <img
           src={usablePhoto(review.photo_url) as string}
           alt={review.title}
-          className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)] object-cover"
+          className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)] object-cover lg:max-h-[22rem]"
         />
       ) : (
         <div
           aria-hidden="true"
-          className="mt-6 grid aspect-[16/10] w-full place-items-center rounded-[var(--radius-sm)]"
+          className="mt-6 grid aspect-[16/10] w-full place-items-center rounded-[var(--radius-sm)] lg:aspect-[16/7]"
           style={{
             background: `linear-gradient(150deg, hsl(20 42% 74%), hsl(30 38% 55%))`,
           }}
@@ -267,19 +273,22 @@ export function ReviewDetail({
           myVote={review.my_vote}
         />
 
+        {/* Hidden at `lg`: the sidebar's product card carries the Buy action on
+            desktop, and two identical primary CTAs on one screen is a choice
+            the reader has to make for no reason. */}
         {review.referral_redirect_url ? (
           <a
             href={review.referral_redirect_url}
             target="_blank"
             rel="noopener noreferrer nofollow sponsored"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)]"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)] lg:hidden"
           >
             <ShoppingBag size={16} weight="fill" />
             Buy it here
           </a>
         ) : (
           <span
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--line-hairline-30)] px-5 py-2.5 text-[13px] font-semibold text-[var(--text-muted)]"
+            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--line-hairline-30)] px-5 py-2.5 text-[13px] font-semibold text-[var(--text-muted)] lg:hidden"
             title="An affiliate link is added once a moderator approves this review."
           >
             <ShoppingBag size={16} />

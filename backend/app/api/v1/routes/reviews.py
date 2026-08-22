@@ -289,13 +289,44 @@ def list_reviews(db: Session = Depends(get_db),
 @router.get("/feed", response_model=list[FeedItemOut],
             summary="Public feed: published reviews joined with author + product")
 def review_feed(db: Session = Depends(get_db), limit: int = Query(8, ge=1, le=100),
+                offset: int = Query(0, ge=0, le=1000),
                 product_id: uuid.UUID | None = None,
                 author_id: uuid.UUID | None = None, category: str | None = None,
                 q: str | None = Query(None, max_length=200),
                 sort: Literal["newest", "wilson"] = "wilson",
+                mode: Literal["plain", "for-you"] = "plain",
                 user: User | None = Depends(get_optional_user)) -> list[FeedItemOut]:
-    items = review_service.list_feed(db, limit=min(limit, 100), product_id=product_id,
-                                     author_id=author_id, category=category, q=q, sort=sort)
+    """The public card feed, and the browsing feed behind `/feed`.
+
+    `mode` defaults to `plain`, which is the behaviour every existing caller
+    (landing, search, category, profile) already depends on — sort, slice,
+    return. `for-you` is the only thing that ranks:
+
+      * a bounded candidate pool is read at the requested sort,
+      * reviews in the reader's chosen categories move to the front,
+      * no author or product may take more than two of the visible slots.
+
+    Both extra steps are pure functions in `review_service`, so the ranking is
+    testable without a database, and both are no-ops when there is nothing to
+    act on: a signed-out reader, or one who skipped onboarding interests, gets
+    the same quality-and-recency feed as `plain` rather than an empty one.
+
+    `offset` is bounded at 1000 rather than unbounded: this is a browsing feed,
+    not an export.
+    """
+    if mode == "for-you":
+        # Over-read so there is something to thin. Bounded, because a feed page
+        # must not turn into a table scan.
+        pool = review_service.list_feed(
+            db, limit=min(limit * 4, 100), offset=offset, product_id=product_id,
+            author_id=author_id, category=category, q=q, sort=sort)
+        ranked = review_service.prioritise_interests(
+            pool, user.interests if user is not None else None)
+        items = review_service.diversify(ranked, limit=min(limit, 100))
+    else:
+        items = review_service.list_feed(
+            db, limit=min(limit, 100), offset=offset, product_id=product_id,
+            author_id=author_id, category=category, q=q, sort=sort)
     review_ids = [r.id for r, _, _ in items]
     mine = _my_votes(db, user, review_ids)
     comments = _comment_counts(db, review_ids)

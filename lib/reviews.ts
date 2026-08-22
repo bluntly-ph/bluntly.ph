@@ -59,6 +59,8 @@ type FeedItem = {
     canonical_name: string | null;
     category: string | null;
     avg_rating: string | null;
+    /** How many published reviews the product has, for the desktop sidebar. */
+    review_count: number;
     /** The product listing image, behind the reviewer's own photo (BUG-009). */
     image_url: string | null;
   } | null;
@@ -336,4 +338,104 @@ export async function getLandingReviews(): Promise<{
     // fall through to the curated samples
   }
   return { featured: SAMPLE_FEATURED, cards: READING_REVIEWS };
+}
+
+/** A feed row: enough signal to judge a review without opening it. */
+export type FeedCardData = {
+  id: string;
+  title: string;
+  product: string | null;
+  category: string | null;
+  /** The reviewer's photo when usable, else the product listing image. */
+  imageUrl: string | null;
+  imageHue: number;
+  verdict: string;
+  stars: number;
+  verified: boolean;
+  excerpt: string;
+  author: string;
+  authorId: string | null;
+  username: string | null;
+  trustLevel: string | null;
+  trustStage: number;
+  trustScore: string | null;
+  helpful: string;
+  comments: string;
+  ageLabel: string;
+};
+
+/** First ~180 characters of the discussion, cut on a word. */
+function excerptOf(text: string | null | undefined): string {
+  const clean = (text ?? "").replace(/\s+/g, " ").trim();
+  if (clean.length <= 180) return clean;
+  const cut = clean.slice(0, 180);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${cut.slice(0, lastSpace > 120 ? lastSpace : 180).trimEnd()}…`;
+}
+
+function toFeedCard(item: FeedItem): FeedCardData {
+  const name = authorName(item);
+  return {
+    id: item.review.id,
+    title: item.review.title.trim(),
+    product: item.product?.canonical_name ?? null,
+    category: item.product?.category ?? null,
+    // The reviewer's own photo is the point of the platform, so it wins; the
+    // product listing image is the fallback, and the gradient is the last one.
+    imageUrl: usablePhoto(item.review.photo_url) ?? usablePhoto(item.product?.image_url),
+    imageHue: hueOf(name),
+    verdict: item.review.verdict,
+    stars: item.review.star_rating,
+    verified: item.review.verification_status === "verified",
+    excerpt: excerptOf(item.review.discussion),
+    author: name,
+    authorId: item.author?.id ?? null,
+    username: item.author?.username ?? null,
+    trustLevel: item.author?.trust_level_name ?? null,
+    trustStage: item.author?.trust_stage ?? 0,
+    trustScore: item.author?.reputation_score ?? null,
+    helpful: compact(item.review.helpful_votes ?? 0),
+    comments: compact(item.comment_count ?? 0),
+    ageLabel: ageLabel(item.review.created_at),
+  };
+}
+
+/**
+ * The browsing feed behind `/feed`.
+ *
+ * `mode: "for-you"` asks the API to rank: reviews in the reader's chosen
+ * categories first, then a cap of two per author and per product so one voice
+ * or one product cannot own the page. It is a no-op for a signed-out reader,
+ * which is why this route works without a session — discovery should not
+ * require an account.
+ *
+ * The token is passed only so `my_vote` comes back for the viewer. That also
+ * drops the shared cache for the request, which is correct: a response
+ * carrying one reader's vote must never be served to another.
+ */
+export async function getFeed(opts: {
+  mode?: "plain" | "for-you";
+  sort?: "wilson" | "newest";
+  limit?: number;
+  offset?: number;
+  token?: string | null;
+}): Promise<FeedCardData[] | null> {
+  const params = new URLSearchParams({
+    mode: opts.mode ?? "plain",
+    sort: opts.sort ?? "wilson",
+    limit: String(opts.limit ?? 12),
+    offset: String(opts.offset ?? 0),
+  });
+  try {
+    const items = await apiFetch<FeedItem[]>(`/api/v1/reviews/feed?${params}`, {
+      token: opts.token ?? undefined,
+      // Only cache the signed-out, unranked shape.
+      ...(opts.token ? {} : { revalidate: 60 }),
+    });
+    return items.map(toFeedCard);
+  } catch {
+    // null means "we could not reach the server", which the feed renders
+    // differently from "there is nothing here yet".
+    return null;
+  }
 }

@@ -52,6 +52,15 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
             <MagnifyingGlass size={24} />
           </Link>
 
+          {/* First in the row: for a reader who is already sold, browsing is
+              the thing they came to do. `/` stays the landing page. */}
+          <Link
+            href="/feed"
+            className="hidden min-h-[44px] items-center text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline-flex"
+          >
+            Feed
+          </Link>
+
           <Link
             href="/categories"
             className="hidden min-h-[44px] items-center text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] md:inline-flex"

@@ -17,12 +17,24 @@ import { peso, type PricePanel as PanelData } from "@/lib/products";
  * provenance reads like a listing price and this platform's whole argument is
  * that it does not make claims it cannot back.
  */
-export function PricePanel({ panel }: { panel: PanelData | null }) {
+export function PricePanel({
+  panel,
+  compact = false,
+}: {
+  panel: PanelData | null;
+  /**
+   * Drop the leading margin, for the desktop review sidebar where the column's
+   * own `gap` already provides the spacing. The panel keeps its heading in both
+   * cases — it is the only thing naming what the numbers are.
+   */
+  compact?: boolean;
+}) {
+  const outer = compact ? "" : "mt-8 ";
   if (panel === null) {
     return (
       <section
         aria-labelledby="price-panel-heading"
-        className="mt-8 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]"
+        className={`${outer}rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]`}
       >
         <h2 id="price-panel-heading" className="text-[15px] font-semibold text-[var(--text-primary)]">
           What people paid
@@ -40,7 +52,7 @@ export function PricePanel({ panel }: { panel: PanelData | null }) {
   return (
     <section
       aria-labelledby="price-panel-heading"
-      className="mt-8 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]"
+      className={`${outer}rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]`}
     >
       <div className="flex items-center gap-2">
         <Tag size={18} weight="fill" className="text-[var(--accent-primary)]" aria-hidden="true" />
