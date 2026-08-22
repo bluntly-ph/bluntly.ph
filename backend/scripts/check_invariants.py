@@ -92,11 +92,29 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
      "coalesce(honesty_fund_share,0) <> gross_amount",
      "A centavo appeared or vanished in the 40/30/30 split."),
 
-    ("negative commission shares",
-     "SELECT count(*) FROM commissions WHERE coalesce(platform_share,0) < 0 "
-     "OR coalesce(reviewer_share,0) < 0 OR coalesce(honesty_fund_share,0) < 0",
+    ("negative commission shares on a forward entry",
+     "SELECT count(*) FROM commissions WHERE reverses_commission_id IS NULL AND "
+     "(coalesce(platform_share,0) < 0 OR coalesce(reviewer_share,0) < 0 "
+     "OR coalesce(honesty_fund_share,0) < 0)",
      "A share went negative. At 7000 bps the platform could land at -0.01 "
-     "before that was guarded; a row here predates the fix."),
+     "before that was guarded; a row here predates the fix. Reversal rows are "
+     "excluded on purpose - their shares are negative by design (0031), which "
+     "is a paired, audited undo rather than a rounding fault."),
+
+    ("reversals that do not oppose their original",
+     "SELECT count(*) FROM commissions r JOIN commissions o "
+     "ON o.id = r.reverses_commission_id "
+     "WHERE r.reviewer_share <> -o.reviewer_share "
+     "OR r.platform_share <> -o.platform_share "
+     "OR r.honesty_fund_share <> -o.honesty_fund_share",
+     "A reversal must be the exact negation of the entry it undoes. Anything "
+     "else means the ledger and the wallet have quietly diverged."),
+
+    ("reversals pointing at another reversal",
+     "SELECT count(*) FROM commissions r JOIN commissions o "
+     "ON o.id = r.reverses_commission_id WHERE o.reverses_commission_id IS NOT NULL",
+     "A reversal of a reversal is not a correction, it is a double credit "
+     "wearing a disguise."),
 
     ("honesty fund distributions with no reviewer",
      "SELECT count(*) FROM honesty_fund_distributions WHERE reviewer_id IS NULL",
@@ -195,11 +213,18 @@ def main() -> int:
               "meant, and that it is reachable from here.")
         return 2
 
+    unrunnable: list[str] = []
     with Session(engine) as db:
         for name, sql, meaning in CHECKS:
             try:
                 count = db.execute(text(sql)).scalar() or 0
             except Exception as exc:  # noqa: BLE001
+                # Roll back before the next check. Postgres aborts the whole
+                # transaction on any error, so without this one unrunnable
+                # query turns every check after it into InternalError - which
+                # is how a single missing column blinded eight of twenty here.
+                db.rollback()
+                unrunnable.append(name)
                 print(f"  ????  {name}: could not run ({type(exc).__name__})")
                 continue
             if count:
@@ -213,7 +238,23 @@ def main() -> int:
     print()
     if violations:
         print(f"{violations} invariant(s) violated.")
+        if unrunnable:
+            print(f"{len(unrunnable)} could not run at all.")
         return 1 if args.strict else 0
+
+    # A check that could not run is not a check that passed. Reporting "all
+    # invariants hold" while some never executed is the failure mode this tool
+    # exists to prevent, so it is spelled out rather than rounded up.
+    if unrunnable:
+        print(f"{len(CHECKS) - len(unrunnable)} of {len(CHECKS)} invariants hold; "
+              f"{len(unrunnable)} COULD NOT RUN:")
+        for name in unrunnable:
+            print(f"  - {name}")
+        print()
+        print("An unrunnable check is usually a schema the database has not "
+              "reached yet. Verify the target's migration revision.")
+        return 1 if args.strict else 0
+
     print(f"All {len(CHECKS)} invariants hold.")
     return 0
 

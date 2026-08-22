@@ -83,3 +83,17 @@ class Commission(Base, UUIDPrimaryKey, Timestamps):
     is_disputed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     cycle_month: Mapped[date] = mapped_column(Date, nullable=False, index=True)  # YYYY-MM-01
+
+    #: Set on a reversal row, pointing at the commission it undoes (0031).
+    #:
+    #: A returned sale does not rewrite the original entry — that destroys the
+    #: audit trail and makes the ledger disagree with what actually happened.
+    #: It writes a second row whose shares are the negation of the first, and
+    #: the pair sums to the truth. A partial unique index enforces at most one
+    #: reversal per original, so a repeated `returned` cannot reverse twice.
+    #:
+    #: The `negative commission shares` invariant excludes these rows: it exists
+    #: to catch a rounding bug that could push a *forward* share to -0.01, which
+    #: is a different thing from a deliberate, paired reversal.
+    reverses_commission_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("commissions.id", ondelete="SET NULL"))
