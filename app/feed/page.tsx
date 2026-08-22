@@ -131,8 +131,8 @@ export default async function FeedPage({
               ) : (
                 <>
                   <div className="mt-1">
-                    {cards.map((card) => (
-                      <FeedCard key={card.id} review={card} />
+                    {cards.map((card, i) => (
+                      <FeedCard key={card.id} review={card} priority={i === 0} />
                     ))}
                   </div>
 

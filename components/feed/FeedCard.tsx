@@ -48,7 +48,14 @@ const VERDICT: Record<string, { label: string; className: string }> = {
  * The full review stays on `/reviews/[id]`. Nothing here links anywhere else,
  * so the whole row is one target rather than a card containing rival links.
  */
-export function FeedCard({ review }: { review: FeedCardData }) {
+export function FeedCard({
+  review,
+  priority = false,
+}: {
+  review: FeedCardData;
+  /** First card only: its thumbnail is the above-the-fold LCP candidate. */
+  priority?: boolean;
+}) {
   const verdict = VERDICT[review.verdict] ?? VERDICT.it_depends;
 
   return (
@@ -66,7 +73,8 @@ export function FeedCard({ review }: { review: FeedCardData }) {
             <img
               src={review.imageUrl}
               alt=""
-              loading="lazy"
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
               decoding="async"
               className="absolute inset-0 h-full w-full object-cover"
             />

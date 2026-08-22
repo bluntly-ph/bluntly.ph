@@ -132,8 +132,8 @@ export default async function SearchPage({
           // A list, not a grid — see ReviewListRow. Each row's title is an h2,
           // following the page h1 directly with no section heading between.
           <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
-            {results.map((r) => (
-              <ReviewListRow key={r.id} review={r} />
+            {results.map((r, i) => (
+              <ReviewListRow key={r.id} review={r} priority={i === 0} />
             ))}
           </ul>
         ) : (

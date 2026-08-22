@@ -18,7 +18,23 @@ import { splitHeadline } from "@/lib/reviews";
  * icons. On a results page the words carry the meaning; on a dense grid card
  * the icons do.
  */
-export function ReviewListRow({ review }: { review: ReviewCardData }) {
+export function ReviewListRow({
+  review,
+  priority = false,
+}: {
+  review: ReviewCardData;
+  /**
+   * Set on the first row only. Its thumbnail is above the fold and is the
+   * element LCP is measured on, so lazy-loading it deprioritises the one image
+   * the score depends on — Lighthouse measured /search LCP between 3.0s and
+   * 9.4s across three runs while FCP held steady at 1.0s, which is the shape of
+   * a late-arriving hero image rather than a slow page.
+   *
+   * Every other row stays lazy: they are below the fold and eager-loading them
+   * would trade one metric for page weight.
+   */
+  priority?: boolean;
+}) {
   const headline = splitHeadline(review.title, review.product);
 
   return (
@@ -34,7 +50,8 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
               <img
                 src={review.avatarUrl}
                 alt=""
-                loading="lazy"
+                loading={priority ? "eager" : "lazy"}
+                fetchPriority={priority ? "high" : undefined}
                 decoding="async"
                 className="h-6 w-6 shrink-0 rounded-full object-cover"
               />
@@ -91,7 +108,8 @@ export function ReviewListRow({ review }: { review: ReviewCardData }) {
             <img
               src={review.imageUrl}
               alt=""
-              loading="lazy"
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
               decoding="async"
               className="absolute inset-0 h-full w-full object-cover"
             />
