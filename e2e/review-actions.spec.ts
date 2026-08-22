@@ -124,3 +124,42 @@ test.describe("BUG-005 — the footer stays put on an empty result set", () => {
     expect(geometry.footerTop - geometry.mainBottom).toBeLessThanOrEqual(20);
   });
 });
+
+test.describe("category strip — desktop must not clip it", () => {
+  /**
+   * The strip is `overflow-x-auto` + `w-max`: right on a phone, wrong on a
+   * desktop, where it kept running past the container edge and clipped the last
+   * four of fourteen categories mid-word. They were reachable only by dragging
+   * a strip with a hidden scrollbar.
+   */
+  test("every category is reachable at desktop widths", async ({ page }) => {
+    for (const width of [1440, 1280, 1024]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/search");
+      const clipped = await page.evaluate(() => {
+        const list = document.querySelector("form + div ul");
+        if (!list) return null;
+        const chips = [...list.querySelectorAll("li")];
+        const last = chips[chips.length - 1].getBoundingClientRect();
+        return last.right > list.parentElement!.getBoundingClientRect().right + 1;
+      });
+      expect(clipped, `category strip clipped at ${width}px`).toBe(false);
+    }
+  });
+
+  test("mobile keeps the horizontal scroller", async ({ page }) => {
+    // The fix must not have turned the phone strip into a wrapped block; at
+    // 393px a three-row chip grid would push the results off the first screen.
+    await page.setViewportSize({ width: 393, height: 850 });
+    await page.goto("/search");
+    const height = await page.evaluate(
+      () => document.querySelector("form + div ul")?.getBoundingClientRect().height ?? 0,
+    );
+    expect(height).toBeLessThan(60);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+    ).toBe(false);
+  });
+});
