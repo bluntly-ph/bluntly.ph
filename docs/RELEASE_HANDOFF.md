@@ -405,6 +405,64 @@ that predates the owner decision retiring it.
 
 ---
 
+## Owner-approved changes after the freeze (2026-08-22)
+
+Two product changes the owner authorised after engineering delivery, which
+means QA is retesting a build that has moved past `47b5388`.
+
+### A. `/reviews/[id]` desktop redesign
+
+**The defect.** The page carried the Figma frame's orange phone bar at every
+width. At 1440px the most important screen in the product had no wordmark, no
+search and no navigation — a back-arrow where the site header belongs — and put
+a 704px reading column in the middle of the window with grey either side. The
+component had two responsive breakpoint usages in 369 lines.
+
+**Now.** The phone bar is phone chrome, hidden from `md` where `SiteHeader`
+takes over. At `lg` the page is a reading column beside a 20rem context
+sidebar: product card with the Buy action, the FR-2 price panel, the reviewer
+and their trust, and related reviews from the same category. The Buy control
+appears once, not twice. Mobile is unchanged.
+
+| Width | Header | Reading column | Sidebar |
+|---|---|---|---|
+| 1440 / 1280 | site | 672px | 320px |
+| 1024 | site | 576px | 320px |
+| 768 | site | 704px, single column | — |
+| 393 | orange phone bar | full width | — |
+
+No horizontal scroll at any width.
+
+### B. `/feed` — new browsing surface
+
+`/` is untouched and does **not** redirect. The landing page argues for the
+platform; the feed is for someone who has already decided and wants to see what
+people are saying.
+
+**Public on purpose.** Discovery that demands an account is discovery nobody
+does, and every review shown is already published. Signing in changes the
+ranking, not the access.
+
+**Ranking** reuses the existing `/reviews/feed` endpoint rather than forking a
+parallel system. `mode=plain` is identical to what landing, search, category
+and profile already depend on. `mode=for-you` adds two transparent steps:
+
+1. reviews in the reader's chosen categories move to the front (stable
+   partition, nothing removed),
+2. no author and no product may take more than two visible slots.
+
+Both are pure functions with 10 tests, and both are no-ops for a signed-out
+reader — the fallback is the same quality-and-recency feed, not an empty one.
+`offset` is bounded at 1000: a browsing feed, not an export.
+
+**Moderators** get the ordinary feed. Nothing forces them to `/moderate`.
+
+**Privacy:** both surfaces use the existing `FeedItemOut` serializer, which
+carries `has_receipt` as a boolean and no locator, and a `FeedAuthor` that has
+never included email or wallet fields.
+
+---
+
 ## QA retest pack
 
 Reproducible user workflows, not internal engineering checks. Production base
@@ -444,7 +502,20 @@ URL is `https://www.bluntly.ph`.
 - **Steps:** sign out, try to reach the review by direct URL; check it is absent from feed, search and the product page; confirm the author can still see it.
 - **Expected:** `404` for anonymous readers, visible to its author, absent from all public listings.
 
-### 6. Environment guard (engineering-facing, but retestable)
+### 6. `/feed` browsing (new)
+
+- **Precondition:** signed out, then signed in with interests set.
+- **Steps:** open `/feed`; switch between "For you" and "Recent"; page through with Older/Newer; open a card into the full review; check `/` still loads as the landing page and does not redirect.
+- **Expected:** reviews render signed out; "Recent" is chronological; a card links to `/reviews/[id]`; signed in with interests, those categories appear first; no author or product occupies more than two of the visible rows.
+- **Widths:** rails at 1440/1280, left rail only at 1024, neither at 768/393, and no sideways scroll.
+
+### 7. `/reviews/[id]` desktop structure (redesigned)
+
+- **Precondition:** any published review.
+- **Steps:** load at 1440, 1280, 1024, 768 and 393.
+- **Expected:** site header at 768 and above with **no** orange phone bar; sidebar present at 1024 and above carrying product, price, reviewer and related reviews; orange bar returns at 393; one Buy control per screen; no horizontal scroll at any width.
+
+### 8. Environment guard (engineering-facing, but retestable)
 
 - **Steps:** from the **repository root** — not `backend/` — run any command that invokes `require_non_production`.
 - **Expected:** it reports `PRODUCTION` and refuses. Defect #2 was invisible from `backend/` and only appeared from the repo root, so the working directory is the whole point of this test.
