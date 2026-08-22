@@ -91,9 +91,16 @@ export default async function SearchPage({
           ) : null}
         </form>
 
-        {/* Category chips */}
-        <div className="-mx-6 mt-5 overflow-x-auto px-6 [scrollbar-width:none] lg:mx-0 lg:px-0">
-          <ul className="flex w-max gap-2">
+        {/* Category chips.
+            A horizontal scroller is right on a phone, where the row is wider
+            than the screen and swiping is natural. On desktop it was the wrong
+            component entirely: the strip kept `w-max` and `overflow-x-auto`, so
+            the last categories were clipped mid-word at the container edge with
+            only a hidden scrollbar to reach them — fourteen categories, four of
+            them unreachable without knowing to drag. There is room to wrap at
+            `lg`, so it wraps. */}
+        <div className="-mx-6 mt-5 overflow-x-auto px-6 [scrollbar-width:none] lg:mx-0 lg:overflow-x-visible lg:px-0">
+          <ul className="flex w-max gap-2 lg:w-auto lg:flex-wrap lg:gap-y-2.5">
             <li>
               <Link
                 href={fromCategories ? "/categories" : "/search"}
