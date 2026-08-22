@@ -45,14 +45,19 @@ export function ReviewCard({
     >
       <div className="relative aspect-square w-full overflow-hidden">
         {review.imageUrl ? (
-          // A reviewer's own photo; the feed filters out the synthetic seed
-          // URLs. Card width varies by rail, so `sizes` brackets it rather
-          // than naming one pixel value.
+          /* A reviewer's own photo; the feed filters out the synthetic seed
+             URLs. Measured on production, this card is 195-224px at every
+             viewport from 390 to 1920 — it is a fixed rail card, not a fluid
+             one, so a viewport-relative `sizes` was wrong and pulled 640px
+             files for a 200px box. 384px is the smallest candidate width that
+             still covers the box after an object-cover crop of a 1.9:1 source
+             (384/1.9 = 202px of height), and it is an exact Next candidate,
+             so nothing rounds up to 640. */
           <Image
             src={review.imageUrl}
             alt=""
             fill
-            sizes="(min-width: 1024px) 30rem, (min-width: 640px) 50vw, 100vw"
+            sizes="24rem"
             className="object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
           />
         ) : (
