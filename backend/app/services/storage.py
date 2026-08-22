@@ -28,6 +28,26 @@ AVATAR_BUCKET = "avatars"
 # cross a serverless function and the platform limit does not apply.
 UPLOAD_CEILING_BYTES = 4 * 1024 * 1024
 
+#: How long a public image may be cached, in SECONDS-AS-A-STRING.
+#:
+#: The unit matters: storage3 emits ``Cache-Control: max-age={this}``, so a full
+#: directive here would render as ``max-age=public, max-age=...``. Seconds only.
+#:
+#: This has to be passed explicitly on every public upload. storage3 carries a
+#: sane default (``DEFAULT_FILE_OPTIONS``, cache-control 3600) but applies it
+#: only when ``file_options`` is omitted entirely - passing a partial dict, as
+#: every call here does, silently discards it and Supabase then serves the
+#: object ``Cache-Control: no-cache``. Measured on production 2026-08-23: the
+#: product image on /search was refetched in full (120,455 B, CF-Cache-Status
+#: MISS) on every single page load, and was the page's LCP element at 9.25 s
+#: under Lighthouse's throttling. /feed scored better only because its LCP
+#: happens to be a text node rather than an image.
+#:
+#: A year is safe because every object path ends in a fresh uuid4 hex, so a
+#: given path's bytes never change; a replacement image is written to a new
+#: path and referenced by a new URL.
+PUBLIC_IMAGE_MAX_AGE = "31536000"
+
 MAX_AVATAR_BYTES = UPLOAD_CEILING_BYTES
 
 # (magic prefix, mime, file extension)
@@ -76,7 +96,8 @@ def upload_avatar(user_id: uuid.UUID, data: bytes) -> str:
     mime = validate_avatar(data)
     path = f"{user_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
     bucket = get_service_client().storage.from_(AVATAR_BUCKET)
-    bucket.upload(path, data, {"content-type": mime, "upsert": "false"})
+    bucket.upload(path, data, {"content-type": mime, "upsert": "false",
+                           "cache-control": PUBLIC_IMAGE_MAX_AGE})
     return bucket.get_public_url(path)
 
 
@@ -146,7 +167,8 @@ def upload_product_image(product_id: uuid.UUID, data: bytes) -> str:
     path = f"{product_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
     client = get_service_client()
     client.storage.from_(PRODUCT_BUCKET).upload(
-        path, data, {"content-type": mime, "upsert": "true"})
+        path, data, {"content-type": mime, "upsert": "true",
+                     "cache-control": PUBLIC_IMAGE_MAX_AGE})
     return client.storage.from_(PRODUCT_BUCKET).get_public_url(path)
 
 
@@ -196,7 +218,8 @@ def upload_review_photo(user_id: uuid.UUID, data: bytes) -> str:
     path = f"{user_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
     client = get_service_client()
     client.storage.from_(REVIEW_BUCKET).upload(
-        path, data, {"content-type": mime, "upsert": "false"})
+        path, data, {"content-type": mime, "upsert": "false",
+                     "cache-control": PUBLIC_IMAGE_MAX_AGE})
     return client.storage.from_(REVIEW_BUCKET).get_public_url(path)
 
 
@@ -251,6 +274,9 @@ def upload_receipt(user_id: uuid.UUID, data: bytes) -> str:
     """
     mime = validate_receipt(data)
     key = f"{user_id}/{uuid.uuid4().hex}.{_extension_for(mime)}"
+    # No cache-control on purpose. A receipt is private evidence reached
+    # through a short-lived signed URL; a year of shared caching is the wrong
+    # lifetime for it, and the default no-cache is the right one here.
     get_service_client().storage.from_(RECEIPT_BUCKET).upload(
         key, data, {"content-type": mime, "upsert": "false"})
     return key

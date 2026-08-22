@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
@@ -46,13 +47,11 @@ export function ReviewListRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {review.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={review.avatarUrl}
                 alt=""
-                loading={priority ? "eager" : "lazy"}
-                fetchPriority={priority ? "high" : undefined}
-                decoding="async"
+                width={24}
+                height={24}
                 className="h-6 w-6 shrink-0 rounded-full object-cover"
               />
             ) : (
@@ -104,14 +103,18 @@ export function ReviewListRow({
         {/* 100px square, radius 16, pinned right. */}
         <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] lg:h-[120px] lg:w-[120px]">
           {review.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            /* `sizes` is a WIDTH, but this box is cropped with object-cover:
+               a 1200x630 source scaled to the box width has only ~62px of
+               height for a 120px box and is upscaled back, which is visibly
+               softer than the original. Declaring ~2x the box covers sources
+               up to 2:1 without going back to full-size downloads. */
+            <Image
               src={review.imageUrl}
               alt=""
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : undefined}
-              decoding="async"
-              className="absolute inset-0 h-full w-full object-cover"
+              fill
+              sizes="(min-width: 1024px) 240px, 200px"
+              priority={priority}
+              className="object-cover"
             />
           ) : (
             <div

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { DotsThree } from "@phosphor-icons/react/dist/ssr";
 
@@ -43,13 +44,11 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
           {featured.avatarUrl ? (
             // The reviewer's real photo (BUG-004) — the card showed a flat
             // colour disc, which reads as a missing person rather than a person.
-            // Plain img: the avatar host isn't in the next/image allowlist.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={featured.avatarUrl}
               alt=""
-              loading="lazy"
-              decoding="async"
+              width={32}
+              height={32}
               className="h-8 w-8 shrink-0 rounded-full object-cover"
             />
           ) : (

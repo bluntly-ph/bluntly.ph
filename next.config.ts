@@ -40,6 +40,48 @@ const nextConfig: NextConfig = {
   // Do not advertise the framework and its version.
   poweredByHeader: false,
 
+  /**
+   * Product and review photographs are served from Supabase Storage, and this
+   * project's storage will not emit a cacheable `Cache-Control` for them.
+   *
+   * Measured on production 2026-08-23: every public object answers
+   * `Cache-Control: no-cache`, and it is not a matter of how they were
+   * uploaded. The objects' stored metadata was corrected to
+   * `max-age=31536000` (see backend/scripts/backfill_image_cache_headers.py)
+   * and a freshly uploaded probe carried the header too — both still served
+   * `no-cache`, cache-busted, straight from origin. So the bytes are refetched
+   * in full on every page load, and the 120 KB product image is `/search`'s
+   * LCP element at 9.25 s under Lighthouse throttling. `/feed` only scores
+   * better because its LCP happens to be a text node.
+   *
+   * Routing them through the built-in optimizer puts the caching decision back
+   * on our side of the wire, and resizes at the same time — the heaviest
+   * product image in production is an 887 KB PNG drawn into a 96 px box.
+   */
+  images: {
+    // Scoped to the public storage path so the optimizer cannot be pointed at
+    // arbitrary URLs. `*.supabase.co` rather than the one project ref because
+    // development and the test project are different refs, and this matches
+    // what the CSP's img-src already allows. `search` is empty because
+    // `get_public_url` returns a bare URL: allowing arbitrary query strings
+    // would let one image be cached under unlimited distinct keys.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+        search: "",
+      },
+    ],
+    // The upstream is `no-cache`, so this value alone decides how long an
+    // optimized image lives — max-age is the larger of the two. A month is
+    // safe here specifically because every object path ends in a fresh uuid4
+    // hex: the bytes at a given path never change, and a replacement image
+    // arrives at a new path under a new URL. That also covers the caveat that
+    // there is no way to invalidate this cache.
+    minimumCacheTTL: 2678400,
+  },
+
   async headers() {
     return [
       {

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowFatUp, ChatCircle, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
@@ -44,15 +45,15 @@ export function ReviewCard({
     >
       <div className="relative aspect-square w-full overflow-hidden">
         {review.imageUrl ? (
-          // A reviewer's own photo. Plain img so no image-domain config is needed;
-          // the feed filters out the synthetic seed URLs.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          // A reviewer's own photo; the feed filters out the synthetic seed
+          // URLs. Card width varies by rail, so `sizes` brackets it rather
+          // than naming one pixel value.
+          <Image
             src={review.imageUrl}
             alt=""
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
+            fill
+            sizes="(min-width: 1024px) 30rem, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
           />
         ) : (
           <div

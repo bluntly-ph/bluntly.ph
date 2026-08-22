@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ChatCircle,
@@ -69,14 +70,16 @@ export function FeedCard({
             whole feed, which is most of what makes a list scannable. */}
         <span className="relative block h-20 w-20 shrink-0 overflow-hidden rounded-[var(--radius-sm)] sm:h-24 sm:w-24">
           {review.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            /* 80/96 px box, so `sizes` says so — the stored object is a
+               full-size photograph and would otherwise be fetched at the
+               browser's 100vw default. */
+            <Image
               src={review.imageUrl}
               alt=""
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : undefined}
-              decoding="async"
-              className="absolute inset-0 h-full w-full object-cover"
+              fill
+              sizes="(min-width: 640px) 192px, 160px"
+              priority={priority}
+              className="object-cover"
             />
           ) : (
             <span

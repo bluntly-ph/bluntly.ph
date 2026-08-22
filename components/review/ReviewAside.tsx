@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { SealCheck, ShoppingBag, Star } from "@phosphor-icons/react/dist/ssr";
 
@@ -43,12 +44,17 @@ export function ReviewAside({
 
           <div className="mt-3 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-card)] shadow-[var(--shadow-hairline-inset)]">
             {productImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={productImage}
-                alt=""
-                className="aspect-[4/3] w-full object-cover"
-              />
+              // The context column is a fixed 20rem, so the intrinsic box is
+              // known exactly.
+              <div className="relative aspect-[4/3] w-full">
+                <Image
+                  src={productImage}
+                  alt=""
+                  fill
+                  sizes="30rem"
+                  className="object-cover"
+                />
+              </div>
             ) : (
               <div
                 aria-hidden="true"
@@ -191,17 +197,35 @@ export function ReviewAside({
                   href={`/reviews/${item.id}`}
                   className="group flex gap-3 py-3 hover:bg-[var(--line-hairline-10)]"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="h-12 w-12 shrink-0 rounded-[var(--radius-sm)] bg-cover bg-center"
-                    style={
-                      item.imageUrl
-                        ? { backgroundImage: `url(${item.imageUrl})` }
-                        : {
-                            background: `linear-gradient(150deg, hsl(${item.imageHue} 42% 78%), hsl(${item.imageHue} 38% 62%))`,
-                          }
-                    }
-                  />
+                  {/* A 48px thumbnail. This was a CSS `background-image`,
+                      which no optimizer can reach: the browser fetched the
+                      stored photograph at full size for a box this big, and on
+                      a review with three related items that came to 1.1 MB —
+                      one of them an 887 KB PNG. As an <Image> it is fetched at
+                      the size it is drawn. The gradient fallback stays a
+                      background, because there is no image to optimize. */}
+                  {item.imageUrl ? (
+                    <span
+                      aria-hidden="true"
+                      className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-[var(--radius-sm)]"
+                    >
+                      <Image
+                        src={item.imageUrl}
+                        alt=""
+                        fill
+                        sizes="96px"
+                        className="object-cover"
+                      />
+                    </span>
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="h-12 w-12 shrink-0 rounded-[var(--radius-sm)]"
+                      style={{
+                        background: `linear-gradient(150deg, hsl(${item.imageHue} 42% 78%), hsl(${item.imageHue} 38% 62%))`,
+                      }}
+                    />
+                  )}
                   <span className="min-w-0">
                     {item.product ? (
                       <span className="block truncate text-[12px] text-[var(--text-muted)]">

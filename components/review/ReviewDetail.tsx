@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   CaretLeft,
@@ -205,12 +206,20 @@ export function ReviewDetail({
 
       {/* The reviewer's proof photo, or a clean branded placeholder when none. */}
       {usablePhoto(review.photo_url) ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={usablePhoto(review.photo_url) as string}
-          alt={review.title}
-          className="mt-6 aspect-[16/10] w-full rounded-[var(--radius-sm)] object-cover lg:max-h-[22rem]"
-        />
+        /* The hero is this page's LCP element, so it is the one image that
+           loads eagerly. The wrapper carries the ratio and the corner radius
+           the bare <img> used to carry itself, so the drawn result is
+           unchanged. */
+        <div className="relative mt-6 aspect-[16/10] w-full overflow-hidden rounded-[var(--radius-sm)] lg:max-h-[22rem]">
+          <Image
+            src={usablePhoto(review.photo_url) as string}
+            alt={review.title}
+            fill
+            sizes="(min-width: 1024px) 50rem, 100vw"
+            priority
+            className="object-cover"
+          />
+        </div>
       ) : (
         <div
           aria-hidden="true"

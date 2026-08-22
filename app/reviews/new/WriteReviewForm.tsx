@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -982,12 +983,14 @@ function PhotoField({
 
       {url ? (
         <div className="mt-2 flex items-start gap-3">
-          {/* Plain img: the storage host isn't in the next/image allowlist, and
-              a preview doesn't warrant the config surface. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          {/* The uploaded object, so it goes through the optimizer. The
+              *local* preview above stays a plain <img>: it is a blob: URL that
+              never reaches the network. */}
+          <Image
             src={url}
             alt="Uploaded preview"
+            width={112}
+            height={112}
             className="h-28 w-28 rounded-[var(--radius-sm)] object-cover shadow-[var(--shadow-hairline-inset)]"
           />
           <button

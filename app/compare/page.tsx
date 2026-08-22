@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { ImageSquare, ShieldCheck, Star } from "@phosphor-icons/react/dist/ssr";
 
@@ -113,13 +114,12 @@ function Column({ entry }: { entry: ComparisonEntry }) {
     <>
       <div className="relative h-[120px] w-full overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)]">
         {product.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={product.image_url}
             alt=""
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover"
+            fill
+            sizes="(min-width: 640px) 30rem, 100vw"
+            className="object-cover"
           />
         ) : (
           <div aria-hidden="true" className="absolute inset-0 grid place-items-center">
