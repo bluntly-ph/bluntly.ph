@@ -217,3 +217,34 @@ TRUST_STAGE_NAMES = [
     "Trusted Reviewer",
     "Community Expert",
 ]
+
+
+class AffiliateTxStatus(str, enum.Enum):
+    """The canonical lifecycle of one affiliate transaction.
+
+    Shopee and Lazada each have their own vocabulary, and neither maps cleanly:
+    Lazada's live API returns `Fulfilled` — a state its own XLSX export never
+    contains — and Shopee reports an order-level status that can disagree with
+    the affiliate item-level one. Everything downstream of the adapter speaks
+    these four words instead, so no dashboard, payout or earnings code has to
+    know which marketplace a row came from.
+    """
+
+    pending = "pending"        # money may still happen; nothing is owed yet
+    completed = "completed"    # finalised by the provider; commission recognisable
+    cancelled = "cancelled"    # died before finality; never earned
+    returned = "returned"      # was finalised, then reversed by the buyer
+
+
+class SettlementStatus(str, enum.Enum):
+    """What has happened to the *money*, which is not the same question.
+
+    A sale can be `completed` and unpaid, or `returned` after being paid. Keeping
+    the two dimensions apart is the whole reason a return can be represented as a
+    reversal entry rather than by rewriting the original one.
+    """
+
+    not_earned = "not_earned"  # pending or cancelled: contributes nothing
+    earned = "earned"          # recognised, payable, not yet paid
+    paid = "paid"              # included in a sent payout
+    reversed = "reversed"      # recognised, then reversed by a return
