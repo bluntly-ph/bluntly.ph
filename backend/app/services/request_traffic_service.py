@@ -61,8 +61,12 @@ def record(db: Session, geo: RequestGeo, *, now: datetime | None = None,
         latitude=geo.latitude, longitude=geo.longitude,
         request_count=count,
     )
+    # Inferred from the index's columns rather than named as a constraint:
+    # migration 0032 creates `uq_request_geo_bucket` with CREATE UNIQUE INDEX
+    # (the only way to get NULLS NOT DISTINCT), and an index is not a
+    # constraint — `ON CONFLICT ON CONSTRAINT` fails against it at runtime.
     db.execute(stmt.on_conflict_do_update(
-        constraint="uq_request_geo_bucket",
+        index_elements=["bucket_start", "country", "region", "city", "pop"],
         set_={
             "request_count": RequestGeoBucket.request_count + count,
             "updated_at": func.now(),
