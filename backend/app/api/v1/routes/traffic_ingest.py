@@ -73,9 +73,22 @@ class TrafficBeacon(BaseModel):
 
     @field_validator("region", "city")
     @classmethod
-    def _trimmed(cls, value: str | None) -> str | None:
+    def _place_name(cls, value: str | None) -> str | None:
+        """A trimmed place name, or nothing.
+
+        Markup and control characters are dropped rather than stored. They can
+        never execute — the values are parameterised into Postgres and escaped
+        by React on the way out, and that was verified against production — but
+        a chart is read by a person, and "<script>alert(1)</script>" sitting in
+        a ranked list of cities is noise in the one place this data is meant to
+        be legible. Anything else is kept: real place names carry accents,
+        apostrophes and non-Latin scripts, and an allowlist would quietly drop
+        most of the world.
+        """
         value = (value or "").strip()
-        return value or None
+        if not value or any(c in value for c in "<>") or any(ord(c) < 32 for c in value):
+            return None
+        return value
 
 
 @router.post("/traffic", status_code=status.HTTP_204_NO_CONTENT,

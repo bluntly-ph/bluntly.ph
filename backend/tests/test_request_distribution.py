@@ -280,3 +280,53 @@ def test_ingest_refuses_malformed_geography(client, payload):
     """Shape validation is what keeps this from storing arbitrary content."""
     assert client.post("/api/v1/internal/traffic",
                        json=payload).status_code in (204, 422, 429)
+
+
+# Place-name validation ------------------------------------------------------
+
+@pytest.mark.parametrize("name", [
+    "Manila", "Ho Chi Minh", "Iloilo City", "N'Djamena", "São Paulo",
+    "München", "Reykjavík", "北京", "Kuala Lumpur",
+])
+def test_real_place_names_survive_validation(name):
+    """Place names carry accents, apostrophes and non-Latin scripts. An
+    allowlist would quietly drop most of the world."""
+    from app.api.v1.routes.traffic_ingest import TrafficBeacon
+
+    assert TrafficBeacon(country="PH", city=name).city == name
+
+
+@pytest.mark.parametrize("junk", [
+    "<script>alert(1)</script>", "<img src=x onerror=y>", "Bad\x01Control", "   ",
+])
+def test_markup_and_control_characters_are_dropped(junk):
+    """These can never execute — values are parameterised into Postgres and
+    escaped by React, verified against production. But a ranked list of cities
+    is read by a person, and markup sitting in it is noise in the one place
+    this data is supposed to be legible."""
+    from app.api.v1.routes.traffic_ingest import TrafficBeacon
+
+    assert TrafficBeacon(country="PH", city=junk).city is None
+
+
+def test_an_apostrophe_is_not_treated_as_an_attack():
+    """Rejecting apostrophes would break real names for no gain: the value is
+    parameterised, never concatenated into SQL."""
+    from app.api.v1.routes.traffic_ingest import TrafficBeacon
+
+    assert TrafficBeacon(country="PH", city="N'Djamena").city == "N'Djamena"
+
+
+@pytest.mark.parametrize("payload", [
+    {"country": "PH", "is_admin": True},
+    {"country": "PH", "role": "moderator"},
+    {"country": "PH", "request_count": 999999},
+])
+def test_unknown_fields_cannot_be_mass_assigned(payload):
+    """The beacon is unauthenticated, so anything it accepts is attacker
+    controlled. Unknown keys must be ignored, not bound."""
+    from app.api.v1.routes.traffic_ingest import TrafficBeacon
+
+    beacon = TrafficBeacon(**payload)
+    for forbidden in ("is_admin", "role", "request_count"):
+        assert not hasattr(beacon, forbidden)
