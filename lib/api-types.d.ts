@@ -2235,8 +2235,22 @@ export interface components {
             reversed: number;
             /** Dropped */
             dropped: number;
+            /** No Ledger Effect */
+            no_ledger_effect: number;
+            /** Created */
+            created: number;
+            /** Updated */
+            updated: number;
             /** Unchanged */
             unchanged: number;
+            /** Invalid */
+            invalid: number;
+            /** Warnings */
+            warnings: number;
+            /** Lifecycle */
+            lifecycle: {
+                [key: string]: number;
+            };
             /** Refused */
             refused: number;
             /** Unattributed */

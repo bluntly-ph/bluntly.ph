@@ -6747,9 +6747,36 @@
             "type": "integer",
             "title": "Dropped"
           },
+          "no_ledger_effect": {
+            "type": "integer",
+            "title": "No Ledger Effect"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
           "unchanged": {
             "type": "integer",
             "title": "Unchanged"
+          },
+          "invalid": {
+            "type": "integer",
+            "title": "Invalid"
+          },
+          "warnings": {
+            "type": "integer",
+            "title": "Warnings"
+          },
+          "lifecycle": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Lifecycle"
           },
           "refused": {
             "type": "integer",
@@ -6787,7 +6814,13 @@
           "recognised",
           "reversed",
           "dropped",
+          "no_ledger_effect",
+          "created",
+          "updated",
           "unchanged",
+          "invalid",
+          "warnings",
+          "lifecycle",
           "refused",
           "unattributed",
           "unidentified",

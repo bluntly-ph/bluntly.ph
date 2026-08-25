@@ -89,6 +89,8 @@ class RowOutcome:
     amount: Decimal = ZERO
     #: Set only on a reversal that could not be fully recovered.
     unrecovered: Decimal = ZERO
+    #: created | updated | unchanged | invalid
+    provenance: str = "unchanged"
 
 
 @dataclass
@@ -98,7 +100,10 @@ class ImportSummary:
     recognised: int = 0
     reversed_count: int = 0
     dropped: int = 0
-    unchanged: int = 0
+    #: Rows the LEDGER did nothing about. Named apart from the provenance
+    #: `unchanged` below because they are different axes and a first import
+    #: reports both — 108 rows created, 13 of which moved no money.
+    no_ledger_effect: int = 0
     #: Transitions the matrix refuses. Never applied, always reported: an
     #: unlisted transition means the provider did something nobody has reasoned
     #: about, and guessing at it moves money.
@@ -107,6 +112,23 @@ class ImportSummary:
     #: nobody to pay. Recorded, never dropped.
     unattributed: int = 0
     unidentified: int = 0
+    #: Row provenance, independent of the ledger effect: whether this import
+    #: opened a new canonical transaction, changed one, or left it alone. A
+    #: moderator asking "what will this file do" wants both — a row can be
+    #: `updated` with no money effect at all (a status refinement), and one
+    #: that is `unchanged` is proof the import is safely repeatable.
+    created: int = 0
+    updated: int = 0
+    #: Rows this file said nothing new about. Proof the import is repeatable.
+    unchanged: int = 0
+    #: Rows that could not be used: no stable identity, or a transition the
+    #: matrix refuses. Counted apart from `warnings`, which are usable.
+    invalid: int = 0
+    #: Usable but needing a human eye — currently, a real sale with no
+    #: attributable review.
+    warnings: int = 0
+    #: The canonical lifecycle this file describes, before any ledger effect.
+    lifecycle: dict[str, int] = field(default_factory=dict)
     recognised_amount: Decimal = ZERO
     reversed_amount: Decimal = ZERO
     #: Money a reversal could not claw back because it had already been paid
@@ -119,9 +141,14 @@ class ImportSummary:
         return {
             "format": self.format, "total_rows": self.total_rows,
             "recognised": self.recognised, "reversed": self.reversed_count,
-            "dropped": self.dropped, "unchanged": self.unchanged,
+            "dropped": self.dropped,
+            "no_ledger_effect": self.no_ledger_effect,
+            "unchanged": self.unchanged,
             "refused": self.refused, "unattributed": self.unattributed,
             "unidentified": self.unidentified,
+            "created": self.created, "updated": self.updated,
+            "invalid": self.invalid, "warnings": self.warnings,
+            "lifecycle": dict(self.lifecycle),
             "recognised_amount": str(self.recognised_amount),
             "reversed_amount": str(self.reversed_amount),
             "unrecovered_amount": str(self.unrecovered_amount),
@@ -241,7 +268,8 @@ def _reverse(db: Session, postback: AffiliatePostback) -> tuple[Decimal, Decimal
 def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
     parsed = report_formats.parse_lifecycle(file_bytes)
     summary = ImportSummary(format=parsed.format, total_rows=len(parsed.rows),
-                            unidentified=len(parsed.unidentified), dry_run=dry_run)
+                            unidentified=len(parsed.unidentified),
+                            invalid=len(parsed.unidentified), dry_run=dry_run)
     if parsed.format == "unknown" or parsed.errors:
         return summary
 
@@ -256,6 +284,9 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
         current = postback.canonical_status if postback is not None else None
         decision = evaluate(current, mapped.status)
 
+        summary.lifecycle[mapped.status.value] = (
+            summary.lifecycle.get(mapped.status.value, 0) + 1)
+
         outcome = RowOutcome(
             line=row.line, identity=row.identity,
             from_status=current.value if current else None,
@@ -266,8 +297,24 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
 
         if not decision.allowed:
             summary.refused += 1
+            summary.invalid += 1
+            outcome.provenance = "invalid"
             summary.outcomes.append(outcome)
             continue
+
+        # Provenance is decided by whether the row already existed and whether
+        # this file says anything new about it, NOT by the ledger effect.
+        is_new = postback is None
+        changed = is_new or current is not mapped.status
+        outcome.provenance = (
+            "created" if is_new else "updated" if changed else "unchanged")
+
+        if outcome.provenance == "created":
+            summary.created += 1
+        elif outcome.provenance == "updated":
+            summary.updated += 1
+        else:
+            summary.unchanged += 1
 
         if dry_run:
             _tally(summary, decision.effect, outcome.amount, ZERO)
@@ -320,6 +367,7 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
             if review is None:
                 # Real sale, nobody to pay. Recorded so the gap is visible.
                 summary.unattributed += 1
+                summary.warnings += 1
                 postback.settlement_status = SettlementStatus.not_earned
                 outcome.reason = "no attributable review"
                 summary.outcomes.append(outcome)
@@ -358,7 +406,7 @@ def _tally(summary: ImportSummary, effect: Effect, amount: Decimal,
     elif effect is Effect.drop_pending:
         summary.dropped += 1
     else:
-        summary.unchanged += 1
+        summary.no_ledger_effect += 1
 
 
 def _import_id(file_bytes: bytes) -> str:

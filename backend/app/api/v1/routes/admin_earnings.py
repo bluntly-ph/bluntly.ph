@@ -117,7 +117,20 @@ class LifecycleImportResult(BaseModel):
     recognised: int
     reversed: int
     dropped: int
+    #: Rows the LEDGER did nothing about — a different axis from the row
+    #: provenance below, and a first import legitimately reports both.
+    no_ledger_effect: int
+    #: Row provenance: did this file open a canonical transaction, change one,
+    #: or say nothing new about it?
+    created: int
+    updated: int
     unchanged: int
+    #: Rows that could not be used at all.
+    invalid: int
+    #: Usable but needing a human eye (a real sale with no attributable review).
+    warnings: int
+    #: The canonical lifecycle this file describes, before any ledger effect.
+    lifecycle: dict[str, int]
     #: Transitions the matrix refuses. Never applied, always surfaced.
     refused: int
     #: Real sales with no attributable review — recorded, paid to nobody.
