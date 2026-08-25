@@ -1112,6 +1112,7 @@
           "reviews"
         ],
         "summary": "Public feed: published reviews joined with author + product",
+        "description": "The public card feed, and the browsing feed behind `/feed`.\n\n`mode` defaults to `plain`, which is the behaviour every existing caller\n(landing, search, category, profile) already depends on \u2014 sort, slice,\nreturn. `for-you` is the only thing that ranks:\n\n  * a bounded candidate pool is read at the requested sort,\n  * reviews in the reader's chosen categories move to the front,\n  * no author or product may take more than two of the visible slots.\n\nBoth extra steps are pure functions in `review_service`, so the ranking is\ntestable without a database, and both are no-ops when there is nothing to\nact on: a signed-out reader, or one who skipped onboarding interests, gets\nthe same quality-and-recency feed as `plain` rather than an empty one.\n\n`offset` is bounded at 1000 rather than unbounded: this is a browsing feed,\nnot an export.",
         "operationId": "review_feed_api_v1_reviews_feed_get",
         "parameters": [
           {
@@ -1124,6 +1125,18 @@
               "minimum": 1,
               "default": 8,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           },
           {
@@ -1205,6 +1218,20 @@
               "type": "string",
               "default": "wilson",
               "title": "Sort"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "plain",
+                "for-you"
+              ],
+              "type": "string",
+              "default": "plain",
+              "title": "Mode"
             }
           }
         ],
@@ -2440,6 +2467,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RetentionSweepResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/geo-probe": {
+      "get": {
+        "tags": [
+          "admin: analytics"
+        ],
+        "summary": "What geography does the edge see for this request?",
+        "description": "Diagnostic: the normalised geography of the caller's own request.\n\nThis exists because the collection below is only worth building if the\nplatform genuinely supplies these headers, and the honest way to find out\nis to look at a real production request rather than to assume. It stays\nafterwards as an operations tool: when the chart looks wrong, the first\nquestion is always \"what is the edge actually sending\", and this answers it\nwithout reading logs.\n\nSafe to expose to a moderator because it describes THEIR OWN request and\ncontains no address \u2014 the edge has already reduced it to a place name.",
+        "operationId": "geo_probe_api_v1_admin_analytics_geo_probe_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeoProbeOut"
                 }
               }
             }
@@ -5784,6 +5838,113 @@
           "review_id"
         ],
         "title": "FulfillRequest"
+      },
+      "GeoProbeOut": {
+        "properties": {
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "pop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pop"
+          },
+          "location_key": {
+            "type": "string",
+            "title": "Location Key"
+          },
+          "has_location": {
+            "type": "boolean",
+            "title": "Has Location"
+          },
+          "headers_present": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Headers Present"
+          },
+          "headers_absent": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Headers Absent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country",
+          "region",
+          "city",
+          "latitude",
+          "longitude",
+          "pop",
+          "location_key",
+          "has_location",
+          "headers_present",
+          "headers_absent"
+        ],
+        "title": "GeoProbeOut",
+        "description": "What the edge resolved for the CALLER'S OWN request."
       },
       "HTTPValidationError": {
         "properties": {

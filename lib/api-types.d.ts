@@ -365,7 +365,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Public feed: published reviews joined with author + product */
+        /**
+         * Public feed: published reviews joined with author + product
+         * @description The public card feed, and the browsing feed behind `/feed`.
+         *
+         *     `mode` defaults to `plain`, which is the behaviour every existing caller
+         *     (landing, search, category, profile) already depends on — sort, slice,
+         *     return. `for-you` is the only thing that ranks:
+         *
+         *       * a bounded candidate pool is read at the requested sort,
+         *       * reviews in the reader's chosen categories move to the front,
+         *       * no author or product may take more than two of the visible slots.
+         *
+         *     Both extra steps are pure functions in `review_service`, so the ranking is
+         *     testable without a database, and both are no-ops when there is nothing to
+         *     act on: a signed-out reader, or one who skipped onboarding interests, gets
+         *     the same quality-and-recency feed as `plain` rather than an empty one.
+         *
+         *     `offset` is bounded at 1000 rather than unbounded: this is a browsing feed,
+         *     not an export.
+         */
         get: operations["review_feed_api_v1_reviews_feed_get"];
         put?: never;
         post?: never;
@@ -713,6 +732,36 @@ export interface paths {
          *     time.
          */
         post: operations["run_pii_retention_api_v1_admin_pii_retention_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/geo-probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What geography does the edge see for this request?
+         * @description Diagnostic: the normalised geography of the caller's own request.
+         *
+         *     This exists because the collection below is only worth building if the
+         *     platform genuinely supplies these headers, and the honest way to find out
+         *     is to look at a real production request rather than to assume. It stays
+         *     afterwards as an operations tool: when the chart looks wrong, the first
+         *     question is always "what is the edge actually sending", and this answers it
+         *     without reading logs.
+         *
+         *     Safe to expose to a moderator because it describes THEIR OWN request and
+         *     contains no address — the edge has already reduced it to a place name.
+         */
+        get: operations["geo_probe_api_v1_admin_analytics_geo_probe_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1778,6 +1827,32 @@ export interface components {
              * Format: uuid
              */
             review_id: string;
+        };
+        /**
+         * GeoProbeOut
+         * @description What the edge resolved for the CALLER'S OWN request.
+         */
+        GeoProbeOut: {
+            /** Country */
+            country: string | null;
+            /** Region */
+            region: string | null;
+            /** City */
+            city: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Pop */
+            pop: string | null;
+            /** Location Key */
+            location_key: string;
+            /** Has Location */
+            has_location: boolean;
+            /** Headers Present */
+            headers_present: string[];
+            /** Headers Absent */
+            headers_absent: string[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3802,11 +3877,13 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
                 product_id?: string | null;
                 author_id?: string | null;
                 category?: string | null;
                 q?: string | null;
                 sort?: "newest" | "wilson";
+                mode?: "plain" | "for-you";
             };
             header?: never;
             path?: never;
@@ -4605,6 +4682,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetentionSweepResult"];
+                };
+            };
+        };
+    };
+    geo_probe_api_v1_admin_analytics_geo_probe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoProbeOut"];
                 };
             };
         };

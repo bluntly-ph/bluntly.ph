@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1.routes import (
+    admin_analytics,
     admin_earnings,
     admin_referral,
     admin_reports,
@@ -33,6 +34,7 @@ api_v1_router.include_router(reviews.router)
 api_v1_router.include_router(comments.router)
 api_v1_router.include_router(admin_referral.router)
 api_v1_router.include_router(admin_earnings.router)
+api_v1_router.include_router(admin_analytics.router)
 api_v1_router.include_router(admin_reports.router)
 api_v1_router.include_router(membership.router)
 api_v1_router.include_router(ai.router)
