@@ -26,8 +26,11 @@ add authorization, moderation, or money effects to this module.
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import auth_rate_limiter
@@ -47,6 +50,9 @@ class TrafficBeacon(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     pop: str | None = Field(default=None, max_length=8)
+    #: Set when the request the proxy saw was a review page. A view is the same
+    #: event as the page request, so it costs no extra beacon.
+    review_id: uuid.UUID | None = None
 
     @field_validator("country")
     @classmethod
@@ -88,6 +94,19 @@ def ingest(beacon: TrafficBeacon, request: Request,
         country=beacon.country, region=beacon.region, city=beacon.city,
         latitude=beacon.latitude, longitude=beacon.longitude, pop=beacon.pop,
     )
-    if request_traffic_service.record(db, geo):
+    wrote = request_traffic_service.record(db, geo)
+
+    if beacon.review_id is not None:
+        try:
+            request_traffic_service.record_view(db, beacon.review_id)
+            wrote = True
+        except IntegrityError:
+            # A review id that does not exist — a stale link, or someone
+            # posting a made-up one. The foreign key refuses it, and that is
+            # the correct outcome; the page request itself still counts.
+            db.rollback()
+            wrote = request_traffic_service.record(db, geo)
+
+    if wrote:
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

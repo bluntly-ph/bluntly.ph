@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -19,6 +27,7 @@ from app.models.user import User, UserBadge
 from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
+from app.services import dashboard_service
 from app.services.storage import delete_avatar_object, upload_avatar
 from app.services.username import MAX_LENGTH, MIN_LENGTH, is_valid_username
 
@@ -183,3 +192,79 @@ def set_role(user_id: uuid.UUID, payload: RoleUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)
+
+
+class DashboardSeriesPoint(BaseModel):
+    day: date
+    #: String-decimal, like every other money field in this API.
+    amount: str
+
+
+class DashboardReviewRow(BaseModel):
+    review_id: uuid.UUID
+    title: str
+    photo_url: str | None
+    earnings: str
+    views: int
+    helped: int
+    series: list[DashboardSeriesPoint]
+
+
+class DashboardSummaryOut(BaseModel):
+    range: str
+    window_start: date
+    window_end: date
+    estimated_commission: str
+    earned_in_window: str
+    total_views: int
+    #: Null today — nothing measures read time, and starting to would be
+    #: reader-behaviour tracking rather than aggregate counting. Listed in
+    #: `unavailable` so the client renders the tile honestly instead of
+    #: substituting a plausible number.
+    average_read_seconds: int | None
+    unavailable: list[str]
+    has_earnings: bool
+    series: list[DashboardSeriesPoint]
+    reviews: list[DashboardReviewRow]
+
+
+@router.get("/me/dashboard", response_model=DashboardSummaryOut,
+            summary="Earnings, views and ranked reviews for the signed-in user")
+def my_dashboard(
+    range: str = Query(default=dashboard_service.DEFAULT_RANGE),
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+) -> DashboardSummaryOut:
+    """The contributor dashboard, for the caller and nobody else.
+
+    There is no user id in the path on purpose: a reviewer's earnings are
+    theirs alone, and an endpoint that accepts an id is an endpoint someone
+    will eventually pass a different id to.
+    """
+    if range not in dashboard_service.RANGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"range must be one of {sorted(dashboard_service.RANGES)}")
+
+    result = dashboard_service.summary(db, me.id, range_key=range)
+    return DashboardSummaryOut(
+        range=result.range_key,
+        window_start=result.window_start, window_end=result.window_end,
+        estimated_commission=str(result.estimated_commission),
+        earned_in_window=str(result.earned_in_window),
+        total_views=result.total_views,
+        average_read_seconds=result.average_read_seconds,
+        unavailable=list(result.unavailable),
+        has_earnings=result.has_earnings,
+        series=[DashboardSeriesPoint(day=p.day, amount=str(p.amount))
+                for p in result.series],
+        reviews=[
+            DashboardReviewRow(
+                review_id=r.review_id, title=r.title, photo_url=r.photo_url,
+                earnings=str(r.earnings), views=r.views, helped=r.helped,
+                series=[DashboardSeriesPoint(day=p.day, amount=str(p.amount))
+                        for p in r.series],
+            )
+            for r in result.reviews
+        ],
+    )

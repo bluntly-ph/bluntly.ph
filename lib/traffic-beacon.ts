@@ -15,6 +15,11 @@ import type { NextRequest } from "next/server";
  * actually interpret; mixing navigations with the XHR they trigger would
  * inflate a "busy" city purely because its readers clicked more.
  *
+ * When the page is a review, the same beacon carries its id so the view is
+ * counted too. Views are "times opened", never "unique readers" — telling
+ * those apart would mean identifying readers, which is the one thing this
+ * subsystem exists not to do.
+ *
  * PRIVACY. The edge has already turned the address into a place, so no IP is
  * read, sent, or logged here. What leaves is a country, a coarse region/city,
  * the edge's own approximate coordinates for that city, and the serving POP.
@@ -28,6 +33,16 @@ const H_CITY = "x-vercel-ip-city";
 const H_LAT = "x-vercel-ip-latitude";
 const H_LON = "x-vercel-ip-longitude";
 const H_ID = "x-vercel-id";
+
+/**
+ * A review page, captured so the same beacon can count the view.
+ *
+ * A view IS the page request — counting it separately would mean a second
+ * beacon for an event we have already observed. Anchored and UUID-shaped so
+ * `/reviews/new` and any other non-id segment cannot be mistaken for a review.
+ */
+const REVIEW_PATH =
+  /^\/reviews\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 
 /** Reserved "unresolved" codes. `T1` is the Tor exit pseudo-country. */
 const UNRESOLVED = new Set(["", "-", "xx", "zz", "t1"]);
@@ -75,17 +90,24 @@ export function trafficBeacon(request: NextRequest): Promise<unknown> | null {
   if (!isCountable(request)) return null;
 
   const country = clean(request.headers.get(H_COUNTRY));
+  const reviewId = REVIEW_PATH.exec(request.nextUrl.pathname)?.[1];
+
   // No country means the edge could not place this request — off-platform, or
   // simply unresolved. Recording it as "unknown" would put a large permanent
   // bar in a chart whose only job is showing where traffic comes from.
-  if (!country) return null;
+  //
+  // A review view does NOT depend on knowing where the reader is, so an
+  // unplaceable request still counts as a view. Tying the two together would
+  // silently undercount views for exactly the readers we cannot locate.
+  if (!country && !reviewId) return null;
 
   const vercelId = clean(request.headers.get(H_ID)) ?? "";
   const pop = vercelId.split("::", 1)[0]?.toLowerCase();
   const city = clean(request.headers.get(H_CITY));
 
   const body = JSON.stringify({
-    country: country.toUpperCase(),
+    review_id: reviewId,
+    country: country?.toUpperCase(),
     region: clean(request.headers.get(H_REGION)),
     // Vercel percent-encodes city names; left encoded, `Ho%20Chi%20Minh`
     // ranks as a separate city from `Ho Chi Minh`.

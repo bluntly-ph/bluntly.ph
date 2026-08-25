@@ -19,7 +19,10 @@ from app.models.request_board import RequestUpvote, ReviewRequest  # noqa: F401
 from app.models.review import ReferralLink, Review, ReviewVersion  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.token import TokenTransaction  # noqa: F401
-from app.models.traffic import RequestGeoBucket  # noqa: F401
+from app.models.traffic import (  # noqa: F401
+    RequestGeoBucket,
+    ReviewViewBucket,
+)
 from app.models.user import Badge, User, UserBadge  # noqa: F401
 from app.models.vote import EarnEligibleVote, ReviewVote  # noqa: F401
 

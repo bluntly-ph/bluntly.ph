@@ -1054,6 +1054,30 @@ export interface paths {
         patch: operations["set_role_api_v1_users__user_id__role_patch"];
         trace?: never;
     };
+    "/api/v1/users/me/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Earnings, views and ranked reviews for the signed-in user
+         * @description The contributor dashboard, for the caller and nobody else.
+         *
+         *     There is no user id in the path on purpose: a reviewer's earnings are
+         *     theirs alone, and an endpoint that accepts an id is an endpoint someone
+         *     will eventually pass a different id to.
+         */
+        get: operations["my_dashboard_api_v1_users_me_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/questions": {
         parameters: {
             query?: never;
@@ -1859,6 +1883,67 @@ export interface components {
             weaknesses?: string[];
             /** Suggestions */
             suggestions?: string[];
+        };
+        /** DashboardReviewRow */
+        DashboardReviewRow: {
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /** Title */
+            title: string;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Earnings */
+            earnings: string;
+            /** Views */
+            views: number;
+            /** Helped */
+            helped: number;
+            /** Series */
+            series: components["schemas"]["DashboardSeriesPoint"][];
+        };
+        /** DashboardSeriesPoint */
+        DashboardSeriesPoint: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Amount */
+            amount: string;
+        };
+        /** DashboardSummaryOut */
+        DashboardSummaryOut: {
+            /** Range */
+            range: string;
+            /**
+             * Window Start
+             * Format: date
+             */
+            window_start: string;
+            /**
+             * Window End
+             * Format: date
+             */
+            window_end: string;
+            /** Estimated Commission */
+            estimated_commission: string;
+            /** Earned In Window */
+            earned_in_window: string;
+            /** Total Views */
+            total_views: number;
+            /** Average Read Seconds */
+            average_read_seconds: number | null;
+            /** Unavailable */
+            unavailable: string[];
+            /** Has Earnings */
+            has_earnings: boolean;
+            /** Series */
+            series: components["schemas"]["DashboardSeriesPoint"][];
+            /** Reviews */
+            reviews: components["schemas"]["DashboardReviewRow"][];
         };
         /**
          * EarnEligibleStatus
@@ -3209,6 +3294,8 @@ export interface components {
             longitude?: number | null;
             /** Pop */
             pop?: string | null;
+            /** Review Id */
+            review_id?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -5491,6 +5578,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_dashboard_api_v1_users_me_dashboard_get: {
+        parameters: {
+            query?: {
+                range?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardSummaryOut"];
                 };
             };
             /** @description Validation Error */

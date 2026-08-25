@@ -202,3 +202,36 @@ def purge_expired(db: Session, *, now: datetime | None = None) -> int:
     result = db.execute(
         delete(RequestGeoBucket).where(RequestGeoBucket.bucket_start < cutoff))
     return int(result.rowcount or 0)
+
+
+def record_view(db: Session, review_id, *, now: datetime | None = None,
+                count: int = 1) -> None:
+    """Add one opening of a review to its hourly bucket.
+
+    Deliberately no de-duplication per reader: doing that would mean
+    identifying readers, which is the one thing this whole subsystem is built
+    not to do. The number is therefore "times opened", not "unique readers",
+    and the dashboard says so rather than implying the stronger claim.
+    """
+    from app.models.traffic import ReviewViewBucket
+
+    bucket = _hour(now or datetime.now(UTC))
+    stmt = insert(ReviewViewBucket).values(
+        review_id=review_id, bucket_start=bucket, view_count=count)
+    db.execute(stmt.on_conflict_do_update(
+        index_elements=["review_id", "bucket_start"],
+        set_={
+            "view_count": ReviewViewBucket.view_count + count,
+            "updated_at": func.now(),
+        },
+    ))
+
+
+def purge_expired_views(db: Session, *, now: datetime | None = None) -> int:
+    """Drop view buckets past the retention window. Returns rows removed."""
+    from app.models.traffic import ReviewViewBucket
+
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=RETENTION_DAYS)
+    result = db.execute(
+        delete(ReviewViewBucket).where(ReviewViewBucket.bucket_start < cutoff))
+    return int(result.rowcount or 0)

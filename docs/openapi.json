@@ -3346,6 +3346,55 @@
         }
       }
     },
+    "/api/v1/users/me/dashboard": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Earnings, views and ranked reviews for the signed-in user",
+        "description": "The contributor dashboard, for the caller and nobody else.\n\nThere is no user id in the path on purpose: a reviewer's earnings are\ntheirs alone, and an endpoint that accepts an id is an endpoint someone\nwill eventually pass a different id to.",
+        "operationId": "my_dashboard_api_v1_users_me_dashboard_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "7d",
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummaryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/questions": {
       "post": {
         "tags": [
@@ -5877,6 +5926,160 @@
           "summary"
         ],
         "title": "CritiqueResponse"
+      },
+      "DashboardReviewRow": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "earnings": {
+            "type": "string",
+            "title": "Earnings"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "helped": {
+            "type": "integer",
+            "title": "Helped"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSeriesPoint"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "title",
+          "photo_url",
+          "earnings",
+          "views",
+          "helped",
+          "series"
+        ],
+        "title": "DashboardReviewRow"
+      },
+      "DashboardSeriesPoint": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "amount"
+        ],
+        "title": "DashboardSeriesPoint"
+      },
+      "DashboardSummaryOut": {
+        "properties": {
+          "range": {
+            "type": "string",
+            "title": "Range"
+          },
+          "window_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Window Start"
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Window End"
+          },
+          "estimated_commission": {
+            "type": "string",
+            "title": "Estimated Commission"
+          },
+          "earned_in_window": {
+            "type": "string",
+            "title": "Earned In Window"
+          },
+          "total_views": {
+            "type": "integer",
+            "title": "Total Views"
+          },
+          "average_read_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Read Seconds"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unavailable"
+          },
+          "has_earnings": {
+            "type": "boolean",
+            "title": "Has Earnings"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSeriesPoint"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardReviewRow"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "range",
+          "window_start",
+          "window_end",
+          "estimated_commission",
+          "earned_in_window",
+          "total_views",
+          "average_read_seconds",
+          "unavailable",
+          "has_earnings",
+          "series",
+          "reviews"
+        ],
+        "title": "DashboardSummaryOut"
       },
       "EarnEligibleStatus": {
         "type": "string",
@@ -9492,6 +9695,18 @@
               }
             ],
             "title": "Pop"
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id"
           }
         },
         "type": "object",
