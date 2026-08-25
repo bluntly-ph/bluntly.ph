@@ -626,6 +626,46 @@ optimizer is unreachable behind this project's service rewrite — `/_next/image
 
 ---
 
+## Anti-AI / generic-template visual audit (2026-08-26)
+
+Run against the heuristics the owner supplied. The rule applied to each was the
+owner's own: **an element is not removed because it appears on a list** — the
+question is whether it is in Figma, whether it is intentional Bluntly identity,
+or whether it is generic template residue.
+
+| Heuristic | Found? | In Figma / intentional? | Verdict |
+|---|---|---|---|
+| Glass / backdrop blur | 1 — `SiteHeader` sticky bar at 85% opacity | Functional sticky chrome, not decoration | **Keep** |
+| Gradients | `--brand-gradient` only: welcome, auth shell, dashboard hero, chart fills | Welcome and auth are documented Figma-verbatim; the dashboard hero is its frame's own hero | **Keep** |
+| Emoji / sparkle decoration | **0** | — | Clean |
+| Over-rounded cards (`rounded-lg/xl/2xl/3xl`) | **0** | Every radius is a `--radius-*` token | Clean |
+| Arbitrary pastel/neon hex | 3 — gold/silver/bronze medals | The frame draws medals; metals are literal, not palette drift | **Keep**, documented in place |
+| Excessive hover animation | 2 — a 3% image scale on one card | Restrained card affordance on a tokenised duration | **Keep** |
+| AI marketing vocabulary ("seamless", "elevate", "supercharge"…) | **0** | — | Clean |
+| Excessive em dashes | 51 total: **30** are the site title convention `X — bluntly`; **21** in prose | The 30 are a consistent metadata convention; the 21 are ordinary correct usage at low density across the entire marketing surface | **Keep** |
+| Generic three-card sections | 8 `grid-cols-3`, in categories / membership / profile / user | All are content grids (categories, tiers, review lists), none is a "three feature cards" marketing block | **Keep** |
+| Unnecessary shadows | 121, of which 118 are `--shadow-card` / `--shadow-hairline-inset` tokens | The remainder are focus rings, which are functional | Clean |
+| Repetitive / mixed icon sets | Phosphor in 43 files, **Lucide in 0** | Single consistent library | Clean |
+
+**No removals were required.** Every pattern the heuristics name is either
+absent, expressed through a design token, or traceable to an approved frame.
+
+### Loading states
+
+Audited every `loading.tsx`, and the routes that had none.
+
+* The **only** loading state that paints the brand orange is `/dashboard`, and
+  that is correct: its hero is orange at every width in its own frame. This is
+  the opposite of the `/reviews/[id]` defect the owner reported, where orange
+  was phone-only chrome being painted at 1440px.
+* Five server-fetching routes rendered **nothing at all** while awaiting the
+  backend — `/moderate`, `/profile`, `/u/[id]`, `/questions/[id]`,
+  `/contracts`. All now have neutral, layout-faithful skeletons. `/moderate`
+  gets the console's own shape, including the real 220px rail, so the working
+  area does not start wide and snap narrower when the sidebar arrives.
+
+---
+
 ## Documented deviations from approved frames (2026-08-26)
 
 Each is a place the implementation intentionally differs from its Figma frame.
