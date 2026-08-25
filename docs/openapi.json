@@ -5230,6 +5230,9 @@
             },
             "type": "array",
             "title": "Activity"
+          },
+          "affiliate": {
+            "$ref": "#/components/schemas/AffiliateHealthOut"
           }
         },
         "type": "object",
@@ -5243,7 +5246,8 @@
           "honesty_fund_month",
           "urgent",
           "breakdown",
-          "activity"
+          "activity",
+          "affiliate"
         ],
         "title": "AdminOverviewOut"
       },
@@ -5267,6 +5271,51 @@
           "note"
         ],
         "title": "AdminTokenGrant"
+      },
+      "AffiliateHealthOut": {
+        "properties": {
+          "lifecycle": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownBarOut"
+            },
+            "type": "array",
+            "title": "Lifecycle"
+          },
+          "settlement": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownBarOut"
+            },
+            "type": "array",
+            "title": "Settlement"
+          },
+          "recognised_amount": {
+            "type": "string",
+            "title": "Recognised Amount"
+          },
+          "reversed_amount": {
+            "type": "string",
+            "title": "Reversed Amount"
+          },
+          "unrecovered_amount": {
+            "type": "string",
+            "title": "Unrecovered Amount"
+          },
+          "has_data": {
+            "type": "boolean",
+            "title": "Has Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lifecycle",
+          "settlement",
+          "recognised_amount",
+          "reversed_amount",
+          "unrecovered_amount",
+          "has_data"
+        ],
+        "title": "AffiliateHealthOut",
+        "description": "Two separate axes, never summed together.\n\n`lifecycle` is what the marketplace says happened to the order; `settlement`\nis what our ledger did about it. A `completed` order can be `not_earned`\n(nobody to attribute it to) and a `returned` one can be `paid` (the return\narrived after payout), so combining them would imply a progression that does\nnot exist."
       },
       "AnswerCreate": {
         "properties": {

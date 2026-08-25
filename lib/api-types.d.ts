@@ -1625,6 +1625,7 @@ export interface components {
             breakdown: components["schemas"]["BreakdownBarOut"][];
             /** Activity */
             activity: components["schemas"]["ActivityItemOut"][];
+            affiliate: components["schemas"]["AffiliateHealthOut"];
         };
         /** AdminTokenGrant */
         AdminTokenGrant: {
@@ -1635,6 +1636,30 @@ export interface components {
             amount: number;
             /** Note */
             note: string;
+        };
+        /**
+         * AffiliateHealthOut
+         * @description Two separate axes, never summed together.
+         *
+         *     `lifecycle` is what the marketplace says happened to the order; `settlement`
+         *     is what our ledger did about it. A `completed` order can be `not_earned`
+         *     (nobody to attribute it to) and a `returned` one can be `paid` (the return
+         *     arrived after payout), so combining them would imply a progression that does
+         *     not exist.
+         */
+        AffiliateHealthOut: {
+            /** Lifecycle */
+            lifecycle: components["schemas"]["BreakdownBarOut"][];
+            /** Settlement */
+            settlement: components["schemas"]["BreakdownBarOut"][];
+            /** Recognised Amount */
+            recognised_amount: string;
+            /** Reversed Amount */
+            reversed_amount: string;
+            /** Unrecovered Amount */
+            unrecovered_amount: string;
+            /** Has Data */
+            has_data: boolean;
         };
         /** AnswerCreate */
         AnswerCreate: {

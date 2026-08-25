@@ -124,6 +124,14 @@ export type AdminOverviewData = {
   honesty_fund_month: string;
   urgent: number;
   breakdown: { label: string; count: number }[];
+  affiliate: {
+    lifecycle: { label: string; count: number }[];
+    settlement: { label: string; count: number }[];
+    recognised_amount: string;
+    reversed_amount: string;
+    unrecovered_amount: string;
+    has_data: boolean;
+  };
   activity: {
     action: string;
     actor: string | null;

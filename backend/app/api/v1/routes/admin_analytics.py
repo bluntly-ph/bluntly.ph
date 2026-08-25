@@ -156,6 +156,24 @@ class BreakdownBarOut(BaseModel):
     count: int
 
 
+class AffiliateHealthOut(BaseModel):
+    """Two separate axes, never summed together.
+
+    `lifecycle` is what the marketplace says happened to the order; `settlement`
+    is what our ledger did about it. A `completed` order can be `not_earned`
+    (nobody to attribute it to) and a `returned` one can be `paid` (the return
+    arrived after payout), so combining them would imply a progression that does
+    not exist.
+    """
+
+    lifecycle: list[BreakdownBarOut]
+    settlement: list[BreakdownBarOut]
+    recognised_amount: str
+    reversed_amount: str
+    unrecovered_amount: str
+    has_data: bool
+
+
 class AdminOverviewOut(BaseModel):
     queue_total: int
     high_priority: int
@@ -168,6 +186,7 @@ class AdminOverviewOut(BaseModel):
     urgent: int
     breakdown: list[BreakdownBarOut]
     activity: list[ActivityItemOut]
+    affiliate: AffiliateHealthOut
 
 
 @router.get("/overview", response_model=AdminOverviewOut,
@@ -180,6 +199,7 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
     headline at all.
     """
     o = admin_overview_service.overview(db)
+    health = admin_overview_service.affiliate_health(db)
     return AdminOverviewOut(
         queue_total=o.queue_total, high_priority=o.high_priority,
         approved_today=o.approved_today, approved_delta=o.approved_delta,
@@ -193,4 +213,14 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
                             target_ref=a.target_ref, at=a.at)
             for a in o.activity
         ],
+        affiliate=AffiliateHealthOut(
+            lifecycle=[BreakdownBarOut(label=b.label, count=b.count)
+                       for b in health.lifecycle],
+            settlement=[BreakdownBarOut(label=b.label, count=b.count)
+                        for b in health.settlement],
+            recognised_amount=str(health.recognised_amount),
+            reversed_amount=str(health.reversed_amount),
+            unrecovered_amount=str(health.unrecovered_amount),
+            has_data=health.has_data,
+        ),
     )

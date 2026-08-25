@@ -228,3 +228,76 @@ def _activity(db: Session) -> list[ActivityItem]:
         )
         for log, display, username in rows
     ]
+
+
+@dataclass(frozen=True)
+class AffiliateHealth:
+    """The affiliate ledger at a glance, kept in two separate axes.
+
+    LIFECYCLE is what the marketplace says happened to the order:
+    pending / completed / cancelled / returned.
+
+    SETTLEMENT is what we did about it in our own ledger:
+    not_earned / earned / paid / reversed.
+
+    They are reported separately and never summed together, because they answer
+    different questions and a single combined bar would imply a progression
+    that does not exist — a `completed` order can be `not_earned` (nobody to
+    attribute it to), and a `returned` one can be `paid` (the return arrived
+    after payout, which is the case the platform absorbs).
+    """
+
+    lifecycle: list[BreakdownBar] = field(default_factory=list)
+    settlement: list[BreakdownBar] = field(default_factory=list)
+    #: Commission recognised, and the part later reversed. Money, not counts.
+    recognised_amount: Decimal = ZERO
+    reversed_amount: Decimal = ZERO
+    #: What returns could not claw back because it had already been paid out.
+    #: Bluntly absorbs this; it is surfaced so it is reconciled rather than lost.
+    unrecovered_amount: Decimal = ZERO
+
+    @property
+    def has_data(self) -> bool:
+        return any(b.count for b in self.lifecycle)
+
+
+#: Fixed order, so a bar does not move between refreshes as counts change.
+_LIFECYCLE_ORDER = ("pending", "completed", "cancelled", "returned")
+_SETTLEMENT_ORDER = ("not_earned", "earned", "paid", "reversed")
+
+
+def affiliate_health(db: Session) -> AffiliateHealth:
+    """Counts and money across the canonical affiliate store."""
+    from app.models.postback import AffiliatePostback
+
+    def _counts(column, order: tuple[str, ...]) -> list[BreakdownBar]:
+        rows = db.execute(
+            select(column, func.count()).group_by(column)
+        ).all()
+        found = {
+            (v.value if hasattr(v, "value") else str(v)): int(n) for v, n in rows
+        }
+        return [BreakdownBar(name.replace("_", " ").title(), found.get(name, 0))
+                for name in order]
+
+    recognised = db.scalar(
+        select(func.coalesce(func.sum(Commission.gross_amount), 0))
+        .where(Commission.reverses_commission_id.is_(None))
+    ) or ZERO
+    # Reversal rows are negative by design, so this is reported as a positive
+    # magnitude rather than shown as a negative bar beside a positive one.
+    reversed_total = db.scalar(
+        select(func.coalesce(func.sum(Commission.gross_amount), 0))
+        .where(Commission.reverses_commission_id.is_not(None))
+    ) or ZERO
+    unrecovered = db.scalar(
+        select(func.coalesce(func.sum(AffiliatePostback.unrecovered_amount), 0))
+    ) or ZERO
+
+    return AffiliateHealth(
+        lifecycle=_counts(AffiliatePostback.canonical_status, _LIFECYCLE_ORDER),
+        settlement=_counts(AffiliatePostback.settlement_status, _SETTLEMENT_ORDER),
+        recognised_amount=Decimal(recognised),
+        reversed_amount=abs(Decimal(reversed_total)),
+        unrecovered_amount=Decimal(unrecovered),
+    )

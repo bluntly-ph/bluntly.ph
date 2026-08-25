@@ -20,6 +20,14 @@ export type AdminOverviewData = {
   honesty_fund_month: string;
   urgent: number;
   breakdown: { label: string; count: number }[];
+  affiliate: {
+    lifecycle: { label: string; count: number }[];
+    settlement: { label: string; count: number }[];
+    recognised_amount: string;
+    reversed_amount: string;
+    unrecovered_amount: string;
+    has_data: boolean;
+  };
   activity: {
     action: string;
     actor: string | null;
@@ -229,7 +237,112 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
           </dl>
         </section>
       </div>
+
+      <AffiliateLedger data={data.affiliate} />
     </>
+  );
+}
+
+/**
+ * The affiliate ledger, on two separate axes.
+ *
+ * This is MONEY analytics and sits apart from the request analytics elsewhere
+ * on this console on purpose — they are different subjects with different
+ * sources, and putting them in one card would invite reading a traffic spike
+ * as revenue.
+ *
+ * Lifecycle and settlement are never summed together: a completed order can be
+ * unearned (nobody to attribute it to) and a returned one can be paid (the
+ * return landed after payout), so a single combined bar would imply a
+ * progression that does not exist.
+ */
+function AffiliateLedger({
+  data,
+}: {
+  data: AdminOverviewData["affiliate"];
+}) {
+  return (
+    <section
+      aria-labelledby="affiliate-ledger-heading"
+      className="mt-5 rounded-[var(--radius-md)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]"
+    >
+      <h2
+        id="affiliate-ledger-heading"
+        className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+      >
+        Affiliate ledger
+      </h2>
+
+      {!data.has_data ? (
+        <p className="mt-4 text-[13px] text-[var(--text-secondary)]">
+          No affiliate transactions imported yet. Import a Shopee or Lazada
+          export to populate this.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+            <CountRow title="Order lifecycle" bars={data.lifecycle} />
+            <CountRow title="Settlement" bars={data.settlement} />
+          </div>
+
+          <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3 border-t border-[var(--border-subtle)] pt-4">
+            <Money label="Recognised" value={data.recognised_amount} />
+            <Money label="Reversed" value={data.reversed_amount} />
+            {/* Surfaced rather than buried: this is money the platform
+                absorbed because a return arrived after payout, and it has to
+                be reconciled by someone. */}
+            <Money label="Absorbed (unrecovered)" value={data.unrecovered_amount} />
+          </dl>
+        </>
+      )}
+    </section>
+  );
+}
+
+function CountRow({
+  title,
+  bars,
+}: {
+  title: string;
+  bars: { label: string; count: number }[];
+}) {
+  const total = bars.reduce((a, b) => a + b.count, 0) || 1;
+  return (
+    <div>
+      <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
+      <dl className="mt-3 flex flex-col gap-3">
+        {bars.map((bar, i) => (
+          <div key={bar.label}>
+            <div className="flex items-baseline justify-between">
+              <dt className="text-[13px] text-[var(--text-secondary)]">{bar.label}</dt>
+              <dd className="text-[13px] font-semibold text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
+                {bar.count}
+              </dd>
+            </div>
+            <div
+              aria-hidden="true"
+              className="mt-1 h-1.5 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--surface-app)]"
+            >
+              <div
+                className={`h-full rounded-[var(--radius-pill)] ${BAR_COLOR[i % BAR_COLOR.length]}`}
+                style={{ width: `${(bar.count / total) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function Money({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dd className="text-[18px] font-bold text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
+        {pesoWhole(value)}
+      </dd>
+      <dt className="mt-0.5 text-[12px] text-[var(--text-secondary)]">{label}</dt>
+    </div>
   );
 }
 
