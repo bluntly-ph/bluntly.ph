@@ -702,6 +702,87 @@ Each is a place the implementation intentionally differs from its Figma frame.
 
 ---
 
+## Verification evidence (2026-08-26)
+
+Measured against production, in this order. The order is the point: after the
+`/_next/image` incident, **a Lighthouse score from a page with missing assets
+is not evidence**, so assets are verified to render before any score is quoted.
+
+### 1. Production assets render
+
+`e2e/images.spec.ts`, run against `https://www.bluntly.ph`:
+**20/20 passing** across chromium, firefox, webkit, mobile-chrome and
+mobile-safari. Each page asserts the request succeeded, `naturalWidth > 0`
+(it decoded, not merely responded), the drawn box did not collapse, the
+response is cacheable, and there were no console or network errors.
+
+This test found a real WebKit behaviour on its first run and, on inspection,
+the fault was the test's own scrolling rather than the product — recorded in
+the spec so nobody re-derives it.
+
+### 2. Public performance, after assets were confirmed
+
+| Page | Perf | A11y | Best practices | SEO | LCP | CLS | Console errors |
+|---|---|---|---|---|---|---|---|
+| landing | 93–95 | 96 | 100 | 100 | 3.0s | 0 | 0 |
+| feed | 95 | 95 | 100 | 100 | 3.0s | 0 | 0 |
+| search | 93 | 96 | 100 | 100 | 3.2s | 0 | 0 |
+| review | 98 | 92 | 100 | 100 | 2.4s | 0 | 0 |
+
+Landing was measured four times because a single run immediately after a deploy
+read 81; the repeat runs were 93/95/93/95 with a 31ms TTFB, so that reading was
+a cold cache rather than a regression. Single Lighthouse runs are not quoted as
+results anywhere in this document.
+
+### 3. Regression suite
+
+Full Playwright suite against production: **60 passed, 6 skipped, 0 failures** —
+route guards, redirect safety, responsive layout, accessibility and console
+health all intact after the sprint.
+
+### 4. Backend
+
+**712 tests pass locally; 831 in CI** (the difference is the ~120 that need
+Postgres and skip on developer machines). Ruff clean, TypeScript clean, ESLint
+clean, production build clean.
+
+CI caught one genuine defect this sprint that every local gate missed — the
+importer set a column the table does not have — because the importer's tests
+all require a database. Two database-free guards were added so that class of
+error fails in seconds rather than 68 minutes, and both were verified by
+reintroducing the bug.
+
+### 5. Production integrity
+
+`scripts/check_invariants.py` against production: **all 20 invariants hold**,
+including `wallet_balance >= 0`, the commission split identity, reversal
+opposition, and that no `public` table is readable by `anon` or `authenticated`.
+
+### 6. Authorization
+
+Every endpoint added this sprint denies an anonymous caller:
+
+| Endpoint | Anonymous |
+|---|---|
+| `GET /admin/analytics/overview` | 401 |
+| `GET /admin/analytics/request-distribution` | 401 |
+| `GET /admin/analytics/geo-probe` | 401 |
+| `GET /users/me/dashboard` | 401 |
+| `POST /admin/affiliate/preview` | 401 |
+| `POST /admin/affiliate/import` | 401 |
+| `GET /internal/traffic` | 405 (write-only) |
+
+`/dashboard`, `/moderate` and `/profile` all 307 to `/login?next=…`.
+
+The one unauthenticated write surface — the traffic beacon — was probed
+directly against production: oversized values, over-long country codes,
+out-of-range coordinates, wrong types and malformed UUIDs are all 422; unknown
+keys (`is_admin`, `role`) are dropped rather than bound; a SQL-shaped string
+was stored as a literal with `users` intact afterwards. Markup and control
+characters are now rejected so a moderator's chart stays legible.
+
+---
+
 ## QA retest pack
 
 Reproducible user workflows, not internal engineering checks. Production base
