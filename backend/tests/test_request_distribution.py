@@ -231,6 +231,26 @@ def test_purge_keeps_data_inside_the_window(db):
                       .where(RequestGeoBucket.city == "KeptCity")).first() is not None
 
 
+@requires_db
+def test_opening_a_new_bucket_enforces_retention(db):
+    """Retention has no scheduler behind it — production has no Redis broker,
+    so the Celery beat that would own this never runs. Recording into a new
+    hourly bucket is what triggers the purge, and if that link breaks the
+    policy silently stops being enforced while everything still looks fine."""
+    stale = datetime.now(UTC) - timedelta(days=svc.RETENTION_DAYS + 5)
+    svc.record(db, _geo(city="StaleBeforeNewBucket"), now=stale)
+    db.commit()
+
+    # A location that cannot already have a bucket this hour, so the write is
+    # an INSERT rather than an increment.
+    svc.record(db, _geo(city=f"FreshBucket{datetime.now(UTC).timestamp()}"))
+    db.commit()
+
+    assert db.execute(
+        select(RequestGeoBucket)
+        .where(RequestGeoBucket.city == "StaleBeforeNewBucket")).first() is None
+
+
 def test_no_range_outlives_retention():
     """Offering a window longer than we keep data for would draw a chart that is
     silently empty for most of its span."""

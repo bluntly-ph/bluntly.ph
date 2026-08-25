@@ -54,7 +54,8 @@ def record(db: Session, geo: RequestGeo, *, now: datetime | None = None,
     if not geo.has_location:
         return False
 
-    bucket = _hour(now or datetime.now(UTC))
+    moment = now or datetime.now(UTC)
+    bucket = _hour(moment)
     stmt = insert(RequestGeoBucket).values(
         bucket_start=bucket,
         country=geo.country, region=geo.region, city=geo.city, pop=geo.pop,
@@ -65,13 +66,25 @@ def record(db: Session, geo: RequestGeo, *, now: datetime | None = None,
     # migration 0032 creates `uq_request_geo_bucket` with CREATE UNIQUE INDEX
     # (the only way to get NULLS NOT DISTINCT), and an index is not a
     # constraint — `ON CONFLICT ON CONSTRAINT` fails against it at runtime.
-    db.execute(stmt.on_conflict_do_update(
-        index_elements=["bucket_start", "country", "region", "city", "pop"],
-        set_={
-            "request_count": RequestGeoBucket.request_count + count,
-            "updated_at": func.now(),
-        },
-    ))
+    inserted = db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["bucket_start", "country", "region", "city", "pop"],
+            set_={
+                "request_count": RequestGeoBucket.request_count + count,
+                "updated_at": func.now(),
+            },
+            # `xmax = 0` is true only of a freshly INSERTed row, so this tells
+            # a new bucket apart from an increment of an existing one.
+        ).returning(text("(xmax = 0) AS inserted"))
+    ).scalar()
+
+    # Retention is enforced here rather than by a scheduler. Production has no
+    # Redis broker, so the Celery beat that would otherwise own this does not
+    # run — and a retention policy that nothing executes is not a policy.
+    # Tying it to a NEW bucket bounds it to at most once per hour per location,
+    # and the delete is an indexed range scan that normally matches nothing.
+    if inserted:
+        purge_expired(db, now=moment)
     return True
 
 

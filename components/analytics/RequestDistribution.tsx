@@ -73,9 +73,11 @@ function countryName(code: string | null): string {
 
 function placeLabel(loc: Location): string {
   const country = countryName(loc.country);
-  if (loc.city) return `${loc.city}, ${country}`;
-  if (loc.region) return `${loc.region}, ${country}`;
-  return country;
+  // Country alone when there is no city. The edge's region field is a raw
+  // subdivision code — "GT", "00", "NCR" — and "GT, South Africa" reads as
+  // noise to anyone who does not already know the code. The city is the only
+  // sub-country label worth showing.
+  return loc.city ? `${loc.city}, ${country}` : country;
 }
 
 const nf = new Intl.NumberFormat("en-US");
@@ -376,8 +378,11 @@ function Panel({
           expanded ? "lg:grid-cols-[1.4fr_1fr]" : "lg:grid-cols-[1fr_18rem]"
         }`}
       >
-        <div className="min-w-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-2">
-          <div className={expanded ? "aspect-[2/1]" : "aspect-[2/1] max-h-[18rem]"}>
+        {/* `self-start` so the map keeps its own aspect instead of stretching
+            to whatever height the ranked list happens to need — without it the
+            card grows a large empty band under the map. */}
+        <div className="min-w-0 self-start overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-2">
+          <div className={expanded ? "aspect-[360/145]" : "aspect-[360/145] max-h-[18rem]"}>
             <WorldMap markers={markers} />
           </div>
         </div>
@@ -458,7 +463,7 @@ function PanelSkeleton() {
       <span className="sr-only">Loading request distribution</span>
       <Skeleton className="h-7 w-32" />
       <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_18rem]">
-        <Skeleton className="aspect-[2/1] max-h-[18rem] w-full" />
+        <Skeleton className="aspect-[360/145] max-h-[18rem] w-full" />
         <div className="flex flex-col gap-3">
           {Array.from({ length: 6 }, (_, i) => (
             <div key={i} className="flex flex-col gap-1.5">
