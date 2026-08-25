@@ -738,6 +738,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/affiliate/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What a provider export WOULD do. Writes nothing.
+         * @description Dry-run a Shopee or Lazada export.
+         *
+         *     Separate from the apply below because a moderator is about to move money on
+         *     the strength of a file they did not write, produced by a system they do not
+         *     control. Seeing the effect first — how many recognitions, how many
+         *     reversals, how much cannot be clawed back — is what makes that a decision
+         *     rather than a leap.
+         */
+        post: operations["preview_affiliate_import_api_v1_admin_affiliate_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/affiliate/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a provider export into the canonical lifecycle
+         * @description Apply a Shopee or Lazada export.
+         *
+         *     Idempotent on the provider's own transaction identity rather than on the
+         *     file, so re-importing the same order from a different export is a no-op
+         *     instead of a second credit.
+         */
+        post: operations["import_affiliate_report_api_v1_admin_affiliate_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/analytics/geo-probe": {
         parameters: {
             query?: never;
@@ -1565,6 +1615,14 @@ export interface components {
              */
             awarded_at: string;
         };
+        /** Body_import_affiliate_report_api_v1_admin_affiliate_import_post */
+        Body_import_affiliate_report_api_v1_admin_affiliate_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_import_commissions_api_v1_admin_commissions_import_post */
         Body_import_commissions_api_v1_admin_commissions_import_post: {
             /**
@@ -1596,6 +1654,14 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /** Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post */
+        Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
         };
         /** Body_set_avatar_api_v1_users_me_avatar_post */
         Body_set_avatar_api_v1_users_me_avatar_post: {
@@ -1973,6 +2039,38 @@ export interface components {
          * @enum {string}
          */
         Language: "en" | "fil" | "tl-x-taglish";
+        /**
+         * LifecycleImportResult
+         * @description What an affiliate lifecycle import did, or would do.
+         */
+        LifecycleImportResult: {
+            /** Format */
+            format: string;
+            /** Total Rows */
+            total_rows: number;
+            /** Recognised */
+            recognised: number;
+            /** Reversed */
+            reversed: number;
+            /** Dropped */
+            dropped: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Refused */
+            refused: number;
+            /** Unattributed */
+            unattributed: number;
+            /** Unidentified */
+            unidentified: number;
+            /** Recognised Amount */
+            recognised_amount: string;
+            /** Reversed Amount */
+            reversed_amount: string;
+            /** Unrecovered Amount */
+            unrecovered_amount: string;
+            /** Dry Run */
+            dry_run: boolean;
+        };
         /**
          * LocationOut
          * @description One ranked place. Both metrics are resolved server-side so the client
@@ -4811,6 +4909,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetentionSweepResult"];
+                };
+            };
+        };
+    };
+    preview_affiliate_import_api_v1_admin_affiliate_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_affiliate_report_api_v1_admin_affiliate_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_affiliate_report_api_v1_admin_affiliate_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

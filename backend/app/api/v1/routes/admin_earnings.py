@@ -13,7 +13,12 @@ from app.core.errors import AppError
 from app.core.security import require_role
 from app.db.session import get_db
 from app.models.user import User
-from app.services import commission_service, honesty_fund_service, retention_service
+from app.services import (
+    affiliate_ingest,
+    commission_service,
+    honesty_fund_service,
+    retention_service,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin: earnings"],
                    dependencies=[Depends(require_role("moderator"))])
@@ -102,3 +107,61 @@ def run_pii_retention(db: Session = Depends(get_db),
     """
     counts = retention_service.run_retention_sweep(db)
     return RetentionSweepResult(**counts)
+
+
+class LifecycleImportResult(BaseModel):
+    """What an affiliate lifecycle import did, or would do."""
+
+    format: str
+    total_rows: int
+    recognised: int
+    reversed: int
+    dropped: int
+    unchanged: int
+    #: Transitions the matrix refuses. Never applied, always surfaced.
+    refused: int
+    #: Real sales with no attributable review — recorded, paid to nobody.
+    unattributed: int
+    #: Rows with no stable provider identity. Recorded as a count rather than
+    #: guessed at: an invented key double-credits on the next import.
+    unidentified: int
+    recognised_amount: str
+    reversed_amount: str
+    #: Money a reversal could not claw back because it was already paid out.
+    #: Bluntly absorbs this; no wallet is driven negative.
+    unrecovered_amount: str
+    dry_run: bool
+
+
+@router.post("/affiliate/preview", response_model=LifecycleImportResult,
+             summary="What a provider export WOULD do. Writes nothing.")
+def preview_affiliate_import(
+    file: UploadFile, db: Session = Depends(get_db),
+) -> LifecycleImportResult:
+    """Dry-run a Shopee or Lazada export.
+
+    Separate from the apply below because a moderator is about to move money on
+    the strength of a file they did not write, produced by a system they do not
+    control. Seeing the effect first — how many recognitions, how many
+    reversals, how much cannot be clawed back — is what makes that a decision
+    rather than a leap.
+    """
+    summary = affiliate_ingest.preview(db, file.file.read())
+    return LifecycleImportResult(**summary.as_dict())
+
+
+@router.post("/affiliate/import", response_model=LifecycleImportResult,
+             summary="Import a provider export into the canonical lifecycle")
+def import_affiliate_report(
+    file: UploadFile, db: Session = Depends(get_db),
+    mod: User = Depends(require_role("moderator")),
+) -> LifecycleImportResult:
+    """Apply a Shopee or Lazada export.
+
+    Idempotent on the provider's own transaction identity rather than on the
+    file, so re-importing the same order from a different export is a no-op
+    instead of a second credit.
+    """
+    summary = affiliate_ingest.apply(
+        db, mod.id, file.filename or "upload.csv", file.file.read())
+    return LifecycleImportResult(**summary.as_dict())

@@ -198,3 +198,160 @@ def _lazada_row(line: int, row: dict):
                          order_ref=order_ref, gross_amount=amount, currency=currency,
                          order_status=status,
                          occurred_on=_parse_date(row.get("conversion time") or "")), None, None
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle parsing
+# ---------------------------------------------------------------------------
+#
+# `parse()` above answers "what can we pay right now", so it DROPS every row
+# that is not payable. That is the right question for the legacy one-shot
+# import and the wrong one for a lifecycle: a returned order arrives as a
+# non-payable row, and dropping it is exactly why a return could never reverse
+# the commission it was meant to undo. The order simply vanished from the
+# import and its earlier `completed` row stood forever.
+#
+# `parse_lifecycle()` keeps every row and decides nothing about money. The
+# canonical status comes from `affiliate_status`, and what the ledger does
+# about a change comes from `affiliate_transitions`.
+
+
+@dataclass
+class LifecycleRow:
+    """One provider row, kept whole so the mappers can read it."""
+
+    line: int
+    platform: str
+    #: Provider-scoped identity. Stable across exports, which is what makes
+    #: importing the same order twice from two different files a no-op.
+    identity: str
+    #: The provider's own row, keys lowercased. `affiliate_status` reads this
+    #: directly so provider vocabulary stays in one place.
+    raw: dict
+    sub_id: str | None
+    order_ref: str | None
+    gross_amount: Decimal
+    currency: str
+    occurred_on: date | None = None
+
+
+@dataclass
+class ParsedLifecycle:
+    format: str
+    rows: list[LifecycleRow]
+    #: Rows that could not be given a stable identity. Reported, never guessed
+    #: at: an import that invents a key can double-credit on the next file.
+    unidentified: list[dict]
+    errors: list[dict]
+
+
+def _clean_cell(row: dict, *names: str) -> str:
+    for name in names:
+        value = (row.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def shopee_identity(row: dict) -> str | None:
+    """A key that is unique per Shopee affiliate item.
+
+    Measured against the owner's 108-row export rather than assumed. `Order id`
+    alone collides 29 times, and even Order+Conversion+Item+Model still
+    collides 3 times — one group of four rows differing only by `Promotion id`,
+    which are promotion splits of a single physical item where only one carries
+    commission. Adding `Promotion id` gives 108 distinct keys in 108 rows.
+    """
+    parts = [
+        _clean_cell(row, "order id", "order_id"),
+        _clean_cell(row, "conversion id", "conversion_id"),
+        _clean_cell(row, "item id", "item_id"),
+        _clean_cell(row, "model id", "model_id"),
+        _clean_cell(row, "promotion id", "promotion_id"),
+    ]
+    return "|".join(parts) if any(parts) else None
+
+
+def lazada_identity(row: dict) -> str | None:
+    """Lazada's `Sub Order ID`, which is unique on its own.
+
+    Measured: 218 distinct values in 218 rows of the owner's export. Falls back
+    to the SKU/check-out pair only when the column is absent, so an older
+    export shape still imports rather than being refused wholesale.
+    """
+    sub_order = _clean_cell(row, "sub order id", "sub_order_id", "suborder id")
+    if sub_order:
+        return sub_order
+    fallback = [_clean_cell(row, "check out id"), _clean_cell(row, "sku order id")]
+    return "|".join(fallback) if any(fallback) else None
+
+
+_IDENTITY = {
+    "shopee_commission_report": ("shopee", shopee_identity),
+    "lazada_conversion_report": ("lazada", lazada_identity),
+}
+
+
+def _lifecycle_amount(platform: str, row: dict) -> Decimal:
+    """The commission the provider reports for this row, or zero.
+
+    Zero is a legitimate value here, unlike in `parse()`: a cancelled or
+    returned row often reports no commission, and it still has to be recorded
+    so its lifecycle can be tracked.
+    """
+    if platform == "shopee":
+        raw = _clean_cell(row, "affiliate net commission(₱)",
+                          "total order commission(₱)", "affiliate net commission")
+    else:
+        raw = _clean_cell(row, "payout", "est payout", "estpayout")
+    return _money(raw) or Decimal("0")
+
+
+def parse_lifecycle(raw: bytes) -> ParsedLifecycle:
+    """Every row of a provider export, with a stable identity. Never raises."""
+    reader = csv.reader(io.StringIO(_decode(raw)))
+    all_rows = list(reader)
+    if not all_rows:
+        return ParsedLifecycle("unknown", [], [], [{"line": 0, "issue": "empty_file"}])
+
+    fmt = detect_format(all_rows[0])
+    if fmt not in _IDENTITY:
+        return ParsedLifecycle(
+            fmt, [], [], [{"line": 1, "issue": "unrecognised_report_header"}])
+
+    platform, identity_of = _IDENTITY[fmt]
+    cols = [_norm(c) for c in all_rows[0]]
+    rows: list[LifecycleRow] = []
+    unidentified: list[dict] = []
+
+    for line, values in enumerate(all_rows[1:], start=2):
+        if not any(v.strip() for v in values):
+            continue
+        row = dict(zip(cols, values, strict=False))
+        identity = identity_of(row)
+        if not identity:
+            unidentified.append({"line": line, "issue": "no_stable_identity"})
+            continue
+
+        sub_keys = (["sub_id1", "sub_id2", "sub_id3", "sub_id4", "sub_id5"]
+                    if platform == "shopee"
+                    else ["aff sub id", "sub id 1", "sub id 2", "sub id 3",
+                          "sub id 4", "sub id 5", "sub id 6"])
+        date_cell = (_clean_cell(row, "complete time", "order time")
+                     if platform == "shopee"
+                     else _clean_cell(row, "conversion time", "order time"))
+
+        rows.append(LifecycleRow(
+            line=line,
+            platform=platform,
+            identity=identity,
+            raw=row,
+            sub_id=_first_sub_id(row, sub_keys),
+            order_ref=_clean_cell(row, "order id", "check out id",
+                                  "sku order id") or None,
+            gross_amount=_lifecycle_amount(platform, row),
+            currency="PHP",
+            occurred_on=_parse_date(date_cell),
+        ))
+
+    return ParsedLifecycle(fmt, rows, unidentified, [])

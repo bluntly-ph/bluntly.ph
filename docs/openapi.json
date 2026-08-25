@@ -2479,6 +2479,100 @@
         ]
       }
     },
+    "/api/v1/admin/affiliate/preview": {
+      "post": {
+        "tags": [
+          "admin: earnings"
+        ],
+        "summary": "What a provider export WOULD do. Writes nothing.",
+        "description": "Dry-run a Shopee or Lazada export.\n\nSeparate from the apply below because a moderator is about to move money on\nthe strength of a file they did not write, produced by a system they do not\ncontrol. Seeing the effect first \u2014 how many recognitions, how many\nreversals, how much cannot be clawed back \u2014 is what makes that a decision\nrather than a leap.",
+        "operationId": "preview_affiliate_import_api_v1_admin_affiliate_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/affiliate/import": {
+      "post": {
+        "tags": [
+          "admin: earnings"
+        ],
+        "summary": "Import a provider export into the canonical lifecycle",
+        "description": "Apply a Shopee or Lazada export.\n\nIdempotent on the provider's own transaction identity rather than on the\nfile, so re-importing the same order from a different export is a no-op\ninstead of a second credit.",
+        "operationId": "import_affiliate_report_api_v1_admin_affiliate_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_affiliate_report_api_v1_admin_affiliate_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/analytics/geo-probe": {
       "get": {
         "tags": [
@@ -5146,6 +5240,20 @@
         ],
         "title": "BadgeOut"
       },
+      "Body_import_affiliate_report_api_v1_admin_affiliate_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_affiliate_report_api_v1_admin_affiliate_import_post"
+      },
       "Body_import_commissions_api_v1_admin_commissions_import_post": {
         "properties": {
           "file": {
@@ -5218,6 +5326,20 @@
           "password"
         ],
         "title": "Body_login_api_v1_auth_login_post"
+      },
+      "Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_affiliate_import_api_v1_admin_affiliate_preview_post"
       },
       "Body_set_avatar_api_v1_users_me_avatar_post": {
         "properties": {
@@ -6197,6 +6319,80 @@
           "tl-x-taglish"
         ],
         "title": "Language"
+      },
+      "LifecycleImportResult": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows"
+          },
+          "recognised": {
+            "type": "integer",
+            "title": "Recognised"
+          },
+          "reversed": {
+            "type": "integer",
+            "title": "Reversed"
+          },
+          "dropped": {
+            "type": "integer",
+            "title": "Dropped"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "refused": {
+            "type": "integer",
+            "title": "Refused"
+          },
+          "unattributed": {
+            "type": "integer",
+            "title": "Unattributed"
+          },
+          "unidentified": {
+            "type": "integer",
+            "title": "Unidentified"
+          },
+          "recognised_amount": {
+            "type": "string",
+            "title": "Recognised Amount"
+          },
+          "reversed_amount": {
+            "type": "string",
+            "title": "Reversed Amount"
+          },
+          "unrecovered_amount": {
+            "type": "string",
+            "title": "Unrecovered Amount"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          }
+        },
+        "type": "object",
+        "required": [
+          "format",
+          "total_rows",
+          "recognised",
+          "reversed",
+          "dropped",
+          "unchanged",
+          "refused",
+          "unattributed",
+          "unidentified",
+          "recognised_amount",
+          "reversed_amount",
+          "unrecovered_amount",
+          "dry_run"
+        ],
+        "title": "LifecycleImportResult",
+        "description": "What an affiliate lifecycle import did, or would do."
       },
       "LocationOut": {
         "properties": {
