@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -59,8 +59,16 @@ class AffiliatePostback(Base, UUIDPrimaryKey, Timestamps):
 
     raw: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
                                       server_default="{}")
-    received_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), index=True)
+    # Migration 0020 creates this NOT NULL with `server_default=now()`. The
+    # model has to say so: without `server_default` here SQLAlchemy does not
+    # know the database supplies a value, so it writes an explicit
+    # `received_at = NULL` into the INSERT and the default never applies. It
+    # went unnoticed because nothing inserted a postback through the ORM until
+    # the lifecycle importer did, and then every one of its tests failed on a
+    # not-null violation.
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True,
+        server_default=text("now()"))
 
     reconciled_commission_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("commissions.id", ondelete="SET NULL"))

@@ -350,3 +350,47 @@ def test_constructing_a_postback_the_way_the_importer_does_succeeds():
         raw={"order id": "ORD1"},
     )
     assert postback.platform is Platform.shopee
+
+
+def test_every_required_postback_column_has_a_value_from_somewhere():
+    """The second half of the guard above, and the one that was missing.
+
+    Checking that the importer only sets REAL columns does not catch the
+    opposite mistake: a column the table requires that nobody supplies. That is
+    how `received_at` got through — migration 0020 creates it NOT NULL with
+    `server_default=now()`, but the model declared it optional with no default,
+    so SQLAlchemy did not know the database would fill it and wrote an explicit
+    `received_at = NULL` into every INSERT.
+
+    Nothing had inserted a postback through the ORM before the lifecycle
+    importer, so it surfaced as ten failures 74 minutes into CI. This asserts
+    the property directly, with no database: every non-nullable column must get
+    its value from a Python default, a server default, or the importer.
+    """
+    import inspect
+
+    from app.models.postback import AffiliatePostback
+    from app.services import affiliate_ingest
+
+    source = inspect.getsource(affiliate_ingest)
+    block = source.split("AffiliatePostback(", 1)[1].split(")", 1)[0]
+    set_by_importer = {
+        line.split("=", 1)[0].strip()
+        for line in block.splitlines()
+        if "=" in line and not line.strip().startswith("#")
+    }
+
+    unsupplied = [
+        c.name
+        for c in AffiliatePostback.__table__.columns
+        if not c.nullable
+        and c.default is None
+        and c.server_default is None
+        and not c.primary_key
+        and c.name not in set_by_importer
+    ]
+    assert not unsupplied, (
+        f"these columns are NOT NULL but nothing supplies them: {unsupplied}. "
+        "Give the model a server_default matching the migration, or set them "
+        "in the importer."
+    )
