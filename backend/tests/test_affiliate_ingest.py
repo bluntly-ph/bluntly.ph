@@ -308,3 +308,45 @@ def test_the_owners_real_exports_parse_completely(db, name, expected_rows):
     assert summary.total_rows == expected_rows
     assert summary.unidentified == 0, "a row could not be given a stable identity"
     assert summary.refused == 0, "a first sighting should never be refused"
+
+
+def test_the_importer_only_sets_columns_that_exist():
+    """A model constructed with a keyword the table does not have raises at
+    construction — no database needed. That is worth its own test because the
+    importer's own tests all require Postgres and therefore skip on developer
+    machines: an invented column name passed lint, typecheck and the local
+    suite, and was only caught 68 minutes into CI.
+    """
+    import inspect
+
+    from app.models.postback import AffiliatePostback
+    from app.services import affiliate_ingest
+
+    columns = {c.name for c in AffiliatePostback.__table__.columns}
+    source = inspect.getsource(affiliate_ingest)
+
+    # The keywords the importer passes when it constructs a postback.
+    block = source.split("AffiliatePostback(", 1)[1].split(")", 1)[0]
+    passed = {
+        line.split("=", 1)[0].strip()
+        for line in block.splitlines()
+        if "=" in line and not line.strip().startswith("#")
+    }
+    unknown = {k for k in passed if k and not k.startswith("#")} - columns
+    assert not unknown, f"importer sets columns that do not exist: {unknown}"
+
+
+def test_constructing_a_postback_the_way_the_importer_does_succeeds():
+    """The direct version of the same guard."""
+    from app.models.enums import Platform
+    from app.models.postback import AffiliatePostback
+
+    postback = AffiliatePostback(
+        platform=Platform.shopee,
+        external_order_id="ORD1",
+        external_sub_order_id="ORD1|CNV1",
+        review_sub_id="blt_x",
+        currency="PHP",
+        raw={"order id": "ORD1"},
+    )
+    assert postback.platform is Platform.shopee

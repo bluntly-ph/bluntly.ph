@@ -324,8 +324,10 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
 
         if postback is None:
             postback = AffiliatePostback(
+                # `platform` is the enum column and the only required one;
+                # there is no separate `provider` field, and `event_type`
+                # defaults to "order".
                 platform=platform,
-                provider=row.platform,
                 external_order_id=row.order_ref,
                 external_sub_order_id=row.identity,
                 review_sub_id=row.sub_id,
