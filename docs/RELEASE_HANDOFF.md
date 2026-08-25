@@ -699,6 +699,7 @@ Each is a place the implementation intentionally differs from its Figma frame.
 | Authenticated visual verification of `/dashboard` and `/moderate` **in situ** | `BLOCKED AUTH` | A moderator browser session. The Claude-in-Chrome channel is not connected, and engineering will not mint a privileged production token. Both surfaces were verified component-by-component against fixture data at 390/768/1280/1440 with zero console errors, and their APIs verified against production data — but neither has been seen rendered end-to-end behind a real login. |
 | `Avg. Read time` | `OWNER DECISION REQUIRED` | See the deviation above. |
 | PayPal payouts | `BLOCKED EXTERNAL` | Unchanged — sandbox credentials absent. |
+| CI database suite sits at ~90% of its timeout | `BLOCKED EXTERNAL` | A workflow change. The `Backend (isolated database)` step has a 75-minute ceiling and the suite took 67:53 on its last completed run — 831 tests against a database in Singapore from a GitHub runner, ~4.9s each, almost all network latency. It tipped over the ceiling once this sprint. Avoidable round trips were removed (652 in one test alone) to buy headroom back, but the structural fixes — `pytest-xdist`, or a database closer to the runner — both need an edit under `.github/workflows`, which this credential cannot push. **Anyone with the `workflow` scope can fix it in one line.** |
 
 ---
 
