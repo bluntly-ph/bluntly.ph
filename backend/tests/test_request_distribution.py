@@ -21,6 +21,19 @@ from tests.conftest import register_and_token, requires_db
 ENDPOINT = "/api/v1/admin/analytics/request-distribution"
 
 
+@pytest.fixture(scope="module")
+def mod_headers(client):
+    """One moderator for the whole module.
+
+    Every test using this only reads, so sharing is safe — and each
+    `register_and_token` is a full registration round-trip to a database in
+    Singapore. Nine of them was several minutes of a CI step that runs against
+    a 75-minute ceiling.
+    """
+    _, token, _ = register_and_token(client, role="moderator")
+    return {"Authorization": f"Bearer {token}"}
+
+
 def _geo(country="PH", city="Manila", region="NCR", pop="sin1"):
     return RequestGeo(country=country, region=region, city=city,
                       latitude=14.5995, longitude=120.9842, pop=pop)
@@ -41,10 +54,8 @@ def test_a_normal_user_is_denied(client):
 
 
 @requires_db
-def test_a_moderator_is_allowed(client):
-    _, token, _ = register_and_token(client, role="moderator")
-    resp = client.get(ENDPOINT, headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 200
+def test_a_moderator_is_allowed(client, mod_headers):
+    assert client.get(ENDPOINT, headers=mod_headers).status_code == 200
 
 
 @requires_db
@@ -56,14 +67,12 @@ def test_the_ingest_endpoint_is_not_readable(client):
 # Privacy -------------------------------------------------------------------
 
 @requires_db
-def test_response_carries_no_address_or_identity(client, db):
+def test_response_carries_no_address_or_identity(client, db, mod_headers):
     """The justification for this panel is that it cannot be narrowed to a
     person. If a field ever appears that could, this fails."""
     svc.record(db, _geo())
     db.commit()
-    _, token, _ = register_and_token(client, role="moderator")
-    body = client.get(ENDPOINT,
-                      headers={"Authorization": f"Bearer {token}"}).text.lower()
+    body = client.get(ENDPOINT, headers=mod_headers).text.lower()
     for forbidden in ("ip_address", "x-forwarded", "email",
                       "user_id", "session", "authorization"):
         assert forbidden not in body, f"{forbidden} leaked into the response"
@@ -87,12 +96,15 @@ def test_repeat_requests_increment_one_bucket(db):
     assert row.request_count == 5
 
 
-@requires_db
-def test_a_request_the_edge_could_not_place_is_not_recorded(db):
+def test_a_request_the_edge_could_not_place_is_not_recorded():
     """An unknown bar would dominate a chart about where traffic comes from and
-    says nothing a reader can act on."""
-    assert svc.record(db, RequestGeo()) is False
-    assert svc.record(db, RequestGeo(pop="sin1")) is False
+    says nothing a reader can act on.
+
+    No database: `record` returns before touching the session when there is no
+    location, and passing None proves that rather than assuming it.
+    """
+    assert svc.record(None, RequestGeo()) is False
+    assert svc.record(None, RequestGeo(pop="sin1")) is False
 
 
 @requires_db
@@ -186,25 +198,25 @@ def test_an_unknown_range_is_refused_not_silently_defaulted():
 
 
 @requires_db
-@pytest.mark.parametrize("query", ["range=all-time", "range=1y", "metric=bogus",
-                                   "limit=0", "limit=-5"])
-def test_invalid_parameters_are_rejected(client, query):
-    _, token, _ = register_and_token(client, role="moderator")
-    resp = client.get(f"{ENDPOINT}?{query}",
-                      headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 422
+def test_invalid_parameters_are_rejected(client, mod_headers):
+    """Looped rather than parametrised: each case is one HTTP call, and
+    parametrising made it one registration and one test set-up each against a
+    remote database."""
+    for query in ("range=all-time", "range=1y", "metric=bogus",
+                  "limit=0", "limit=-5"):
+        resp = client.get(f"{ENDPOINT}?{query}", headers=mod_headers)
+        assert resp.status_code == 422, f"{query} was accepted"
 
 
 @requires_db
-@pytest.mark.parametrize("metric", ["count", "rps"])
-def test_both_metrics_are_served(client, metric):
-    _, token, _ = register_and_token(client, role="moderator")
-    resp = client.get(f"{ENDPOINT}?metric={metric}",
-                      headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["metric"] == metric
-    assert "requests_per_second" in body and "total_requests" in body
+def test_both_metrics_are_served(client, mod_headers):
+    for metric in ("count", "rps"):
+        resp = client.get(f"{ENDPOINT}?metric={metric}", headers=mod_headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["metric"] == metric
+        # Both are always returned regardless of which was asked for.
+        assert "requests_per_second" in body and "total_requests" in body
 
 
 # Retention -----------------------------------------------------------------

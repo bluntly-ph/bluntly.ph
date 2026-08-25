@@ -292,22 +292,45 @@ def test_preview_totals_match_what_the_ledger_would_store(db):
 
 # --- the real exports ------------------------------------------------------
 
-@requires_db
 @pytest.mark.parametrize("name,expected_rows", [
     ("shopee_commission_report", 108),
     ("lazada_conversion_report", 218),
 ])
-def test_the_owners_real_exports_parse_completely(db, name, expected_rows):
+def test_the_owners_real_exports_parse_completely(name, expected_rows):
     """Every row is kept, including the ones the old parser dropped as
     unpayable — 11 Lazada returns and 5 Shopee cancellations that a lifecycle
-    has to see."""
+    has to see.
+
+    Deliberately DATABASE-FREE. Running it through `preview()` asserted the
+    same three things while doing one postback lookup per row — 652 round trips
+    to a database in Singapore for two files — inside a CI step that runs
+    against a 75-minute ceiling. Parsing, identity and the first-sighting
+    transition are all pure, so they are tested purely; the persistence path
+    has its own tests above.
+    """
     import pathlib
 
+    from app.services.affiliate_status import map_status
+    from app.services.affiliate_transitions import evaluate
+    from app.services.report_formats import parse_lifecycle
+
     raw = (pathlib.Path(__file__).parent / "fixtures" / f"{name}.csv").read_bytes()
-    summary = affiliate_ingest.preview(db, raw)
-    assert summary.total_rows == expected_rows
-    assert summary.unidentified == 0, "a row could not be given a stable identity"
-    assert summary.refused == 0, "a first sighting should never be refused"
+    parsed = parse_lifecycle(raw)
+
+    assert len(parsed.rows) == expected_rows
+    assert parsed.unidentified == [], "a row could not be given a stable identity"
+    assert parsed.errors == []
+    # Identity must be unique across the whole file, or a later import
+    # double-credits.
+    identities = [r.identity for r in parsed.rows]
+    assert len(set(identities)) == len(identities), "identity collision"
+
+    for row in parsed.rows:
+        mapped = map_status(row.platform, row.raw)
+        decision = evaluate(None, mapped.status)
+        assert decision.allowed, (
+            f"line {row.line}: a first sighting of {mapped.status.value} was refused"
+        )
 
 
 def test_the_importer_only_sets_columns_that_exist():
