@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 
+// A Client Component, imported directly. `next/dynamic` with `ssr: false` is
+// not permitted in a Server Component in this version, and it would buy
+// nothing here: Next already splits client bundles per route, so this panel
+// and its inline map ship only to /moderate and never to the landing page or
+// the feed. Verified by the route's First Load JS in the build output.
+import { RequestDistribution } from "@/components/analytics/RequestDistribution";
 import { ModerationQueue } from "@/components/moderation/ModerationQueue";
 import { ReportQueue } from "@/components/moderation/ReportQueue";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -10,6 +16,7 @@ import { getQueue, getReports } from "@/lib/moderation";
 export const metadata: Metadata = {
   title: "Moderation — bluntly",
 };
+
 
 export default async function ModeratePage() {
   // Redirects: to /login if signed out, to / if not a moderator.
@@ -22,7 +29,7 @@ export default async function ModeratePage() {
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
-      <main className="mx-auto w-full max-w-[52rem] flex-1 px-6 py-8 lg:py-10">
+      <main className="mx-auto w-full max-w-[68rem] flex-1 px-6 py-8 lg:py-10">
         <h1 className="text-[24px] font-bold text-[var(--text-primary)]">
           Moderation queue
         </h1>
@@ -38,6 +45,10 @@ export default async function ModeratePage() {
               same structure rather than demoting the cards. */}
           <h2 className="sr-only">Reviews awaiting moderation</h2>
           <ModerationQueue initial={pending} />
+        </section>
+
+        <section className="mt-10">
+          <RequestDistribution />
         </section>
 
         <section className="mt-10">
