@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from app.models.commission import Commission
 from app.models.enums import (
+    AffiliateTxStatus,
     CommissionTarget,
     ModerationAction,
     Platform,
@@ -295,7 +296,26 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
         postback.source_import_id = _import_id(file_bytes)
 
         unrecovered = ZERO
-        if decision.effect is Effect.recognise:
+
+        # A sale that was completed but unattributable stays `completed`, so a
+        # later import evaluates completed -> completed and gets `none` — and
+        # the money is orphaned forever, even once the referral link exists.
+        # Retrying attribution here is safe precisely because nothing was ever
+        # recognised for it: there is no entry to double.
+        # `current` is the STORED status, read before the overwrite above —
+        # `postback.canonical_status` has already been reassigned by this point
+        # and would make the test tautological.
+        effect = decision.effect
+        if (effect is Effect.none
+                and current is AffiliateTxStatus.completed
+                and mapped.status is AffiliateTxStatus.completed
+                and postback.settlement_status is SettlementStatus.not_earned
+                and postback.reconciled_commission_id is None):
+            effect = Effect.recognise
+            outcome.effect = effect.value
+            outcome.reason = "previously unattributable; retrying attribution"
+
+        if effect is Effect.recognise:
             review = _attribute(db, row)
             if review is None:
                 # Real sale, nobody to pay. Recorded so the gap is visible.
@@ -309,17 +329,17 @@ def _run(db: Session, file_bytes: bytes, *, dry_run: bool) -> ImportSummary:
             postback.reconciled_commission_id = commission.id
             postback.review_id = review.id
             postback.settlement_status = SettlementStatus.earned
-        elif decision.effect is Effect.reverse:
+        elif effect is Effect.reverse:
             reversed_amount, unrecovered = _reverse(db, postback)
             outcome.amount = reversed_amount
             outcome.unrecovered = unrecovered
             postback.settlement_status = SettlementStatus.reversed
             postback.unrecovered_amount = unrecovered or None
-        elif decision.effect is Effect.drop_pending:
+        elif effect is Effect.drop_pending:
             postback.settlement_status = SettlementStatus.not_earned
 
         outcome.applied = True
-        _tally(summary, decision.effect, outcome.amount, unrecovered)
+        _tally(summary, effect, outcome.amount, unrecovered)
         summary.outcomes.append(outcome)
         db.flush()
 

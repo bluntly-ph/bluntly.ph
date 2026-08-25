@@ -230,6 +230,36 @@ def test_an_unattributable_sale_is_recorded_but_pays_nobody(db):
 
 
 @requires_db
+def test_a_sale_attributable_later_is_still_paid(db):
+    """An unattributable completed sale is stored as `completed`, so the next
+    import evaluates completed -> completed and gets `none`. Without a retry
+    the money is orphaned forever, even once the referral link exists — and
+    nothing would ever surface that, because the import reports success."""
+    raw = shopee_csv(sub_id="blt_attached_later", commission="100.00")
+    first = affiliate_ingest.apply(db, uuid.uuid4(), "orphan.csv", raw)
+    assert first.unattributed == 1 and first.recognised == 0
+
+    # The moderator attaches the referral link afterwards.
+    author = make_user(db)
+    product = Product(canonical_name=f"Later {uuid.uuid4().hex[:6]}")
+    db.add(product)
+    db.flush()
+    review = Review(product_id=product.id, author_id=author.id,
+                    title="Attached later", discussion="Body.",
+                    verdict=Verdict.yes_absolutely.value, star_rating=5)
+    db.add(review)
+    db.flush()
+    db.add(ReferralLink(review_id=review.id, platform=Platform.shopee,
+                        url="https://shopee.ph/x", sub_id="blt_attached_later",
+                        review_version=1))
+    db.commit()
+
+    second = affiliate_ingest.apply(db, uuid.uuid4(), "again.csv", raw)
+    assert second.recognised == 1, "the sale stayed orphaned after attribution"
+    assert len(_commissions_for(db, review)) == 1
+
+
+@requires_db
 def test_preview_writes_nothing(db):
     """A moderator is about to move money on the strength of a file they did not
     write. Preview has to be safe to run."""
