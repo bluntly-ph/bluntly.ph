@@ -1,7 +1,8 @@
 # Release handoff — engineering → QA
 
-**Prepared 2026-08-21, revised the same day after GitHub and Vercel were
-re-authorised.** Covers the full-stack engagement (frontend + backend
+**Prepared 2026-08-21; revised the same day after GitHub and Vercel were
+re-authorised; extended 2026-08-26 for a second post-freeze sprint (see
+"Owner-approved changes after the freeze (2026-08-26)").** Covers the full-stack engagement (frontend + backend
 agreements) against the capstone PRD as amended by `docs/DEVIATIONS.md` and the
 owner's scope decisions.
 
@@ -460,6 +461,204 @@ reader — the fallback is the same quality-and-recency feed, not an empty one.
 **Privacy:** both surfaces use the existing `FeedItemOut` serializer, which
 carries `has_receipt` as a boolean and no locator, and a `FeedAuthor` that has
 never included email or wallet fields.
+
+---
+
+## Owner-approved changes after the freeze (2026-08-26)
+
+A second post-freeze sprint, authorised in the owner's "UI fidelity + anti-AI
+design + production quality" and "Request Distribution" briefs. QA is retesting
+a build that has moved well past the previous handoff.
+
+**Every number on every new surface is queried.** Where the approved design
+shows a figure nothing measures, the surface says so rather than substituting a
+plausible one. Those cases are listed under *Documented deviations* below and
+are the only places an implementation intentionally differs from its frame.
+
+### C. Request Distribution — new operational analytics
+
+**Where it lives.** `/moderate`, not `/dashboard`. It is moderator-only
+operational analytics; `/dashboard` is a contributor's own earnings screen.
+
+**Data source, in the order the brief asked them to be evaluated.**
+
+| Candidate | Verdict |
+|---|---|
+| Vercel Web Analytics | **Not enabled** for this project — the API returns `Web Analytics not found`. No historical geography exists to backfill. |
+| Vercel runtime logs | The connector's token cannot reach this project (403). Not available to the application. |
+| Existing backend telemetry | **None existed.** No analytics table; `rate_limit_counters` is a rate limiter, not traffic history. |
+| **Vercel edge request headers** | **Chosen.** Present, first-party, free, and privacy-preferable. |
+
+Because nothing historical existed, **collection began the day this shipped**
+and the panel says so in its empty state rather than drawing a demonstration
+world.
+
+**Geography level.** Country, region and city as the edge resolves them, plus
+the edge's own coarse coordinates for the marker. The serving Vercel POP is
+kept as a *separate* field and labelled "served via SIN" — it is where the
+request was served, not where the reader is. Production data already shows the
+distinction: a reader in Parañaque served from `sin1`.
+
+**Count** = total page requests in the window.
+**RPS** = `request_count / covered_seconds`, where `covered_seconds` is the span
+actually backed by data, never the nominal window. Collection started
+recently, so dividing a 30-day window by its full length would report a rate
+hundreds of times lower than reality. The denominator is returned to the client
+so the UI states what the rate is averaged over.
+
+**What is counted.** Page requests only — not `/api/*`, not prefetches, not RSC
+payload fetches, not assets. Excluding `/api` also stops the beacon (itself an
+API request) from recursing.
+
+**Retention.** 90 days of hourly buckets, enforced in application code, tied to
+the opening of a new bucket. There is no scheduler behind it because production
+has no Redis broker, and a retention policy nothing executes is not a policy.
+The published privacy policy already discloses "basic device, log, and
+analytics information" with general retention; a hard 90-day cap on aggregates
+is stricter, so no policy change is implied.
+
+**Privacy.** No IP address is read, sent, stored or logged anywhere in this
+path — the edge resolves location before the request reaches the application,
+so the address never enters it. The table has no user column, so a row cannot be
+joined back to a person. A test asserts no address or identity appears in the
+API response.
+
+**API.** `GET /api/v1/admin/analytics/request-distribution?metric=count|rps&range=24h|7d|30d|90d&limit=N`
+— moderator only, aggregate geography only. An unknown range is a 422 rather
+than a silent fallback: a dashboard that quietly answers a different question
+than the one asked is worse than one that refuses.
+
+**UI.** Map plus ranked list, where **the list is the primary reading**. Every
+figure appears as text beside its bar; the bar restates the number above it;
+each marker carries its own value. No charting or WebGL dependency — the map is
+inline SVG whose code is smaller than a library's import would be, and the panel
+ships only to `/moderate` (verified absent from `/`, `/feed` and `/search`).
+Expand uses a native `<dialog>`, so Escape, focus containment and focus
+restoration come from the platform.
+
+**Responsive.** Verified 390 / 768 / 1440: map above list on narrow screens,
+side by side on wide, no horizontal overflow at any width.
+
+### D. `/dashboard` — rebuilt to the approved reviewer frame
+
+Was a plain earnings list against Figma frame `5572:7130` (orange hero,
+floating action bar, stats card with area chart, medal-ranked review list with
+sparklines). Classified `MAJOR_FIDELITY_GAP`; now built to the frame's own
+geometry.
+
+Real sources: the headline is net recognised commission (reversals **included**,
+so it is the net position); "Earned" is the selected window; "Total Views" comes
+from a new per-review view counter; "helped" is `helpful_votes`; per-review
+sparklines are that review's daily views.
+
+Wallet, payouts and tier detail keep their place below — the frame is silent
+about them, and deleting working payout UI to match a silent frame would be a
+regression.
+
+### E. `/moderate` — rebuilt as the approved admin console
+
+The owner's repeated "still not 1:1" was **structural, not cosmetic**. Admin
+frame `5017:1738` is a console — a 220px sidebar with four labelled groups and a
+user card, beside a working area with four headline counts, a recent-activity
+feed and a queue breakdown. `/moderate` was a single scrolling page. No amount
+of spacing work would have closed that.
+
+All figures queried. The queue count uses the **same predicate as the queue
+list** beneath it. "Approved today" is a Manila calendar day, not UTC — a
+moderator approving at 08:00 local is 00:00 UTC, and a UTC day would file a
+morning's work under yesterday.
+
+`receipt_view` is deliberately excluded from the activity feed: it is the audit
+record of a moderator opening someone's proof of purchase, and putting it in a
+dashboard feed would advertise private-evidence access as routine.
+
+### F. Affiliate — canonical import, provider identity, real reversals
+
+Two latent money defects closed. Both were latent only because production holds
+zero commissions.
+
+**Cross-file double credit.** The old idempotency key was
+`(filename:sha256, line number)`, so the same order arriving in a *different*
+export was credited twice. The key is now the provider's own transaction
+identity, measured against the owner's real exports rather than assumed:
+
+| Provider | Key | Result |
+|---|---|---|
+| Shopee | Order + Conversion + Item + Model + Promotion | 108 distinct in 108 rows |
+| Lazada | Sub Order ID | 218 distinct in 218 rows |
+
+**Returns could never reverse.** The old parser drops non-payable rows — and a
+return *is* a non-payable row, so it vanished and the earlier `completed` row
+stood forever. Every row is kept now: 108/108 and 218/218 retained, including
+the 11 Lazada returns and 5 Shopee cancellations previously discarded.
+
+A reversal is a **new opposing entry** pointing at the original, never an edit —
+editing destroys the record that money was once recognised, which is the audit
+trail.
+
+**Post-payout returns follow the owner's decision.** The wallet is debited only
+by what is actually in it; the shortfall is recorded as `unrecovered_amount` and
+absorbed by the platform. `wallet_balance >= 0` therefore holds **by
+construction**, not because the database refuses the write.
+
+**Withdrawability:** only `completed` recognises. Pending never credits.
+
+**Preview** is a separate endpoint that writes nothing, with totals quantized to
+the centavo exactly as the ledger will store them — providers report more
+precision than money has (Shopee carries five decimal places), and a preview
+total that never matches the entries written afterwards is worse than none.
+
+### G. Images — the `/search` LCP
+
+Root cause was **not** loading priority. Supabase Storage answers
+`Cache-Control: no-cache` for every public object in this project, so full-size
+files came down on every visit. Fixed at the upload site, the stored metadata
+backfilled, and images moved to Supabase's render endpoint (the built-in Next
+optimizer is unreachable behind this project's service rewrite — `/_next/image`
+404s, which broke every image for ~20 minutes until caught and fixed).
+
+| Page | Image bytes before | After |
+|---|---|---|
+| landing | 118 KB | 33 KB |
+| feed | 984 KB | 51 KB |
+| search | 312 KB | 5 KB |
+| review | 984 KB | 14 KB |
+
+---
+
+## Documented deviations from approved frames (2026-08-26)
+
+Each is a place the implementation intentionally differs from its Figma frame.
+
+### Avg. Read time — `/dashboard`
+
+| | |
+|---|---|
+| **Figma** | A third stat reading "4m 3s". |
+| **Implementation** | "—", labelled "Not measured yet". |
+| **Why required** | Nothing measures read time. Doing so means timing how long a reader stays on a page — reader-behaviour tracking, not the aggregate counting used elsewhere — and needs a privacy ruling that is the owner's, not engineering's. The API returns `null` and names the field in `unavailable[]`. |
+| **Evidence** | Brief: "Do not fake analytics"; "Dashboard graphs and analytics must use real data". |
+| **To close** | Owner ruling on whether reader-session timing is acceptable, and a privacy-policy line if so. |
+
+### Unbuilt admin destinations — `/moderate`
+
+| | |
+|---|---|
+| **Figma** | Ten navigation items, rendered identically. |
+| **Implementation** | The three with a real destination link; the other seven keep position and label, marked "Soon", not focusable. |
+| **Why required** | Products, Sellers, Reviewers, Affiliate Links, Honesty Fund, Activity Log and Settings have no page behind them. Shipping them live would put seven dead controls in an admin tool's primary navigation. |
+| **Evidence** | Brief: "Do not implement a dead fullscreen icon… omit it rather than leaving fake controls." |
+| **To close** | Build the seven screens, or owner confirmation that they are out of scope for this release. |
+
+---
+
+## Still blocked (2026-08-26)
+
+| Item | Status | What unblocks it |
+|---|---|---|
+| Authenticated visual verification of `/dashboard` and `/moderate` **in situ** | `BLOCKED AUTH` | A moderator browser session. The Claude-in-Chrome channel is not connected, and engineering will not mint a privileged production token. Both surfaces were verified component-by-component against fixture data at 390/768/1280/1440 with zero console errors, and their APIs verified against production data — but neither has been seen rendered end-to-end behind a real login. |
+| `Avg. Read time` | `OWNER DECISION REQUIRED` | See the deviation above. |
+| PayPal payouts | `BLOCKED EXTERNAL` | Unchanged — sandbox credentials absent. |
 
 ---
 
