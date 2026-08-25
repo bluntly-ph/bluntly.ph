@@ -6,8 +6,14 @@ import { PayoutAccountForm } from "@/components/dashboard/PayoutAccountForm";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
+import { ReviewerDashboard } from "@/components/dashboard/ReviewerDashboard";
 import { requireOnboardedUser } from "@/lib/dal";
-import { getDashboard, PAYOUT_MIN_PHP, peso } from "@/lib/dashboard";
+import {
+  getDashboard,
+  getDashboardSummary,
+  PAYOUT_MIN_PHP,
+  peso,
+} from "@/lib/dashboard";
 import { bpsToPercent, getTiers } from "@/lib/membership";
 
 export const metadata: Metadata = {
@@ -31,11 +37,17 @@ const STATUS_NOTE: Record<string, string> = {
   cancelled: "Called off. The amount was returned to your wallet.",
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   const me = await requireOnboardedUser();
-  const [{ balance, payouts }, tiers] = await Promise.all([
+  const range = (await searchParams).range ?? "7d";
+  const [{ balance, payouts }, tiers, summary] = await Promise.all([
     getDashboard(),
     getTiers(),
+    getDashboardSummary(range),
   ]);
 
   const wallet = balance ? Number(balance.wallet_balance) : 0;
@@ -45,9 +57,24 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      {/* The approved frame carries its own nav — a back arrow and the
+          Contributor pill — so SiteHeader would be a second one stacked on top
+          of it. It returns from `md`, where the frame stops describing the
+          layout, matching how the review page handles the same overlap. */}
+      <div className="hidden md:block">
+        <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      </div>
+
+      <ReviewerDashboard
+        summary={summary}
+        range={range}
+        displayName={me.display_name ?? me.username ?? "Your"}
+      />
+
       <main className="mx-auto w-full max-w-[64rem] flex-1 px-6 py-8 lg:px-10 lg:py-10">
-        <h1 className="text-[24px] font-bold text-[var(--text-primary)]">Earnings</h1>
+        <h1 id="transfer" className="text-[24px] font-bold text-[var(--text-primary)]">
+          Wallet and payouts
+        </h1>
         <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
           Your affiliate earnings and Honesty Fund share, paid out via PayPal.
         </p>
@@ -141,7 +168,7 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <section className="mt-6">
+        <section id="history" className="mt-6 scroll-mt-6">
           <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
             Payment history
           </h2>

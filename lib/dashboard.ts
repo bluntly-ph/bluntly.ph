@@ -49,3 +49,69 @@ export function peso(amount: string | number): string {
   const n = typeof amount === "string" ? Number(amount) : amount;
   return `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+export type DashboardSeriesPoint = { day: string; amount: string };
+
+export type DashboardReviewRow = {
+  review_id: string;
+  title: string;
+  photo_url: string | null;
+  earnings: string;
+  views: number;
+  helped: number;
+  series: DashboardSeriesPoint[];
+};
+
+export type DashboardSummary = {
+  range: string;
+  window_start: string;
+  window_end: string;
+  estimated_commission: string;
+  earned_in_window: string;
+  total_views: number;
+  /** Null while nothing measures read time; `unavailable` names it. */
+  average_read_seconds: number | null;
+  unavailable: string[];
+  has_earnings: boolean;
+  series: DashboardSeriesPoint[];
+  reviews: DashboardReviewRow[];
+};
+
+export const DASHBOARD_RANGES = [
+  { key: "7d", label: "This week" },
+  { key: "30d", label: "This month" },
+  { key: "90d", label: "Last 90 days" },
+] as const;
+
+export async function getDashboardSummary(
+  range: string,
+): Promise<DashboardSummary | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  const key = DASHBOARD_RANGES.some((r) => r.key === range) ? range : "7d";
+  return apiFetch<DashboardSummary>(
+    `/api/v1/users/me/dashboard?range=${key}`, { token },
+  ).catch(() => null);
+}
+
+/**
+ * Compact counts, the way the design writes them: "47k views", "1.3k helped".
+ *
+ * Below 1000 the exact number is short enough to be worth keeping — "900
+ * helped" is more useful than "0.9k".
+ */
+export function compactCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) {
+    const k = n / 1000;
+    return `${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.round(k)}k`;
+  }
+  const m = n / 1_000_000;
+  return `${m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.round(m)}m`;
+}
+
+/** ₱ with no decimals — the list rows in the design read "₱536", not "₱536.00". */
+export function pesoWhole(amount: string | number): string {
+  const n = typeof amount === "string" ? Number(amount) : amount;
+  return `₱${Math.round(n).toLocaleString("en-PH")}`;
+}
