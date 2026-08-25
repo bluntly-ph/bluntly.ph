@@ -21,6 +21,7 @@ from app.api.v1.routes import (
     requests,
     reviews,
     tokens,
+    traffic_ingest,
     users,
 )
 
@@ -35,6 +36,7 @@ api_v1_router.include_router(comments.router)
 api_v1_router.include_router(admin_referral.router)
 api_v1_router.include_router(admin_earnings.router)
 api_v1_router.include_router(admin_analytics.router)
+api_v1_router.include_router(traffic_ingest.router)
 api_v1_router.include_router(admin_reports.router)
 api_v1_router.include_router(membership.router)
 api_v1_router.include_router(ai.router)

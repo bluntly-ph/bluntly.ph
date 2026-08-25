@@ -768,6 +768,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/analytics/request-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Aggregate request geography, ranked
+         * @description Where requests came from over a window.
+         *
+         *     `metric` selects which number the UI leads with; both are always returned,
+         *     because they are the same ranking scaled by a constant and recomputing on
+         *     toggle would cost a round trip for data already in hand.
+         *
+         *     An unknown `range` is a 422 from the enum below rather than a silent
+         *     fallback to 24h: a dashboard that quietly answers a different question than
+         *     the one asked is worse than one that refuses.
+         */
+        get: operations["request_distribution_api_v1_admin_analytics_request_distribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/traffic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record one request's aggregate geography
+         * @description Increment the (hour x location) bucket for one request.
+         *
+         *     Returns 204 in every non-rate-limited case, including when the location was
+         *     unusable. The caller is a fire-and-forget beacon that cannot act on an
+         *     error, and answering it with a 4xx would only turn an untracked page view
+         *     into a logged exception on a page that rendered perfectly well.
+         */
+        post: operations["ingest_api_v1_internal_traffic_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reports": {
         parameters: {
             query?: never;
@@ -1920,6 +1973,31 @@ export interface components {
          * @enum {string}
          */
         Language: "en" | "fil" | "tl-x-taglish";
+        /**
+         * LocationOut
+         * @description One ranked place. Both metrics are resolved server-side so the client
+         *     never re-derives a rate and reaches a different number than the total.
+         */
+        LocationOut: {
+            /** Country */
+            country: string | null;
+            /** Region */
+            region: string | null;
+            /** City */
+            city: string | null;
+            /** Pop */
+            pop: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Request Count */
+            request_count: number;
+            /** Requests Per Second */
+            requests_per_second: number;
+            /** Share */
+            share: number;
+        };
         /** MarkPaidRequest */
         MarkPaidRequest: {
             /** Provider Ref */
@@ -2636,6 +2714,39 @@ export interface components {
             /** Source Url */
             source_url?: string | null;
         };
+        /** RequestDistributionOut */
+        RequestDistributionOut: {
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+            /**
+             * Window End
+             * Format: date-time
+             */
+            window_end: string;
+            /** Covered Seconds */
+            covered_seconds: number;
+            /** Total Requests */
+            total_requests: number;
+            /** Requests Per Second */
+            requests_per_second: number;
+            /** Locations */
+            locations: components["schemas"]["LocationOut"][];
+            /** Other Request Count */
+            other_request_count: number;
+            /** Other Location Count */
+            other_location_count: number;
+            /** Has Data */
+            has_data: boolean;
+            /** Range */
+            range: string;
+            /** Metric */
+            metric: string;
+            /** Retention Days */
+            retention_days: number;
+        };
         /** RequestOut */
         RequestOut: {
             /**
@@ -2982,6 +3093,24 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * TrafficBeacon
+         * @description One request's resolved location, as the proxy read it from the edge.
+         */
+        TrafficBeacon: {
+            /** Country */
+            country?: string | null;
+            /** Region */
+            region?: string | null;
+            /** City */
+            city?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Pop */
+            pop?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -4702,6 +4831,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeoProbeOut"];
+                };
+            };
+        };
+    };
+    request_distribution_api_v1_admin_analytics_request_distribution_get: {
+        parameters: {
+            query?: {
+                metric?: "count" | "rps";
+                range?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestDistributionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_api_v1_internal_traffic_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrafficBeacon"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

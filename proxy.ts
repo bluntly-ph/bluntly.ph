@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextProxy } from "next/server";
+
+import { trafficBeacon } from "@/lib/traffic-beacon";
 
 /**
  * Next 16 renamed Middleware to Proxy
@@ -43,9 +45,17 @@ const PROTECTED = [
 /** Routes that make no sense while already signed in. */
 const AUTH_ONLY = ["/login", "/signup", "/welcome"];
 
-export function proxy(request: NextRequest) {
+export const proxy: NextProxy = (request, event) => {
   const { pathname } = request.nextUrl;
   const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+
+  // Traffic geography for the moderator panel. Handed to `waitUntil` so it
+  // settles after the response is already on its way: analytics must never sit
+  // on the critical path of a page load, and this one is allowed to fail
+  // silently because a reader whose page rendered fine should never learn that
+  // a counter did not increment.
+  const beacon = trafficBeacon(request);
+  if (beacon) event.waitUntil(beacon);
 
   if (!hasSession && PROTECTED.some((p) => pathname.startsWith(p))) {
     const url = new URL("/login", request.url);
@@ -58,7 +68,7 @@ export function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
+};
 
 export const config = {
   matcher: [

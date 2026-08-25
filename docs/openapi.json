@@ -2506,6 +2506,116 @@
         ]
       }
     },
+    "/api/v1/admin/analytics/request-distribution": {
+      "get": {
+        "tags": [
+          "admin: analytics"
+        ],
+        "summary": "Aggregate request geography, ranked",
+        "description": "Where requests came from over a window.\n\n`metric` selects which number the UI leads with; both are always returned,\nbecause they are the same ranking scaled by a constant and recomputing on\ntoggle would cost a round trip for data already in hand.\n\nAn unknown `range` is a 422 from the enum below rather than a silent\nfallback to 24h: a dashboard that quietly answers a different question than\nthe one asked is worse than one that refuses.",
+        "operationId": "request_distribution_api_v1_admin_analytics_request_distribution_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "count",
+                "rps"
+              ],
+              "type": "string",
+              "default": "count",
+              "title": "Metric"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "24h",
+              "title": "Range"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 15,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDistributionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/traffic": {
+      "post": {
+        "tags": [
+          "internal: traffic"
+        ],
+        "summary": "Record one request's aggregate geography",
+        "description": "Increment the (hour x location) bucket for one request.\n\nReturns 204 in every non-rate-limited case, including when the location was\nunusable. The caller is a fire-and-forget beacon that cannot act on an\nerror, and answering it with a 4xx would only turn an untracked page view\ninto a logged exception on a page that rendered perfectly well.",
+        "operationId": "ingest_api_v1_internal_traffic_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrafficBeacon"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/reports": {
       "get": {
         "tags": [
@@ -6088,6 +6198,102 @@
         ],
         "title": "Language"
       },
+      "LocationOut": {
+        "properties": {
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "pop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pop"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count"
+          },
+          "requests_per_second": {
+            "type": "number",
+            "title": "Requests Per Second"
+          },
+          "share": {
+            "type": "number",
+            "title": "Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country",
+          "region",
+          "city",
+          "pop",
+          "latitude",
+          "longitude",
+          "request_count",
+          "requests_per_second",
+          "share"
+        ],
+        "title": "LocationOut",
+        "description": "One ranked place. Both metrics are resolved server-side so the client\nnever re-derives a rate and reaches a different number than the total."
+      },
       "MarkPaidRequest": {
         "properties": {
           "provider_ref": {
@@ -7913,6 +8119,79 @@
         ],
         "title": "RequestCreate"
       },
+      "RequestDistributionOut": {
+        "properties": {
+          "window_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Window Start"
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Window End"
+          },
+          "covered_seconds": {
+            "type": "integer",
+            "title": "Covered Seconds"
+          },
+          "total_requests": {
+            "type": "integer",
+            "title": "Total Requests"
+          },
+          "requests_per_second": {
+            "type": "number",
+            "title": "Requests Per Second"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/LocationOut"
+            },
+            "type": "array",
+            "title": "Locations"
+          },
+          "other_request_count": {
+            "type": "integer",
+            "title": "Other Request Count"
+          },
+          "other_location_count": {
+            "type": "integer",
+            "title": "Other Location Count"
+          },
+          "has_data": {
+            "type": "boolean",
+            "title": "Has Data"
+          },
+          "range": {
+            "type": "string",
+            "title": "Range"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_start",
+          "window_end",
+          "covered_seconds",
+          "total_requests",
+          "requests_per_second",
+          "locations",
+          "other_request_count",
+          "other_location_count",
+          "has_data",
+          "range",
+          "metric",
+          "retention_days"
+        ],
+        "title": "RequestDistributionOut"
+      },
       "RequestOut": {
         "properties": {
           "id": {
@@ -8941,6 +9220,87 @@
           "created_at"
         ],
         "title": "TokenTransactionOut"
+      },
+      "TrafficBeacon": {
+        "properties": {
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "pop": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pop"
+          }
+        },
+        "type": "object",
+        "title": "TrafficBeacon",
+        "description": "One request's resolved location, as the proxy read it from the edge."
       },
       "UserOut": {
         "properties": {
