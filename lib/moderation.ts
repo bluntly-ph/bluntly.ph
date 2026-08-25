@@ -113,3 +113,28 @@ export async function getQueue(): Promise<{
     return { pending: [], edited: [] };
   }
 }
+
+export type AdminOverviewData = {
+  queue_total: number;
+  high_priority: number;
+  approved_today: number;
+  approved_delta: number;
+  pending_affiliate: number;
+  honesty_fund_pool: string;
+  honesty_fund_month: string;
+  urgent: number;
+  breakdown: { label: string; count: number }[];
+  activity: {
+    action: string;
+    actor: string | null;
+    target_ref: string | null;
+    at: string;
+  }[];
+};
+
+export async function getAdminOverview(): Promise<AdminOverviewData | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  return apiFetch<AdminOverviewData>("/api/v1/admin/analytics/overview", { token })
+    .catch(() => null);
+}

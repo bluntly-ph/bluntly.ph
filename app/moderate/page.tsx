@@ -6,12 +6,14 @@ import type { Metadata } from "next";
 // and its inline map ship only to /moderate and never to the landing page or
 // the feed. Verified by the route's First Load JS in the build output.
 import { RequestDistribution } from "@/components/analytics/RequestDistribution";
+import { AdminOverview } from "@/components/admin/AdminOverview";
+import { AdminShell } from "@/components/admin/AdminShell";
 import { ModerationQueue } from "@/components/moderation/ModerationQueue";
 import { ReportQueue } from "@/components/moderation/ReportQueue";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { requireRole } from "@/lib/dal";
-import { getQueue, getReports } from "@/lib/moderation";
+import { getAdminOverview, getQueue, getReports } from "@/lib/moderation";
 
 export const metadata: Metadata = {
   title: "Moderation — bluntly",
@@ -21,18 +23,34 @@ export const metadata: Metadata = {
 export default async function ModeratePage() {
   // Redirects: to /login if signed out, to / if not a moderator.
   const me = await requireRole("moderator");
-  const [{ pending, edited }, reports] = await Promise.all([
+  const [{ pending, edited }, reports, overview] = await Promise.all([
     getQueue(),
     getReports(),
+    getAdminOverview(),
   ]);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
-      <main className="mx-auto w-full max-w-[68rem] flex-1 px-6 py-8 lg:py-10">
-        <h1 className="text-[24px] font-bold text-[var(--text-primary)]">
-          Moderation queue
-        </h1>
+    <AdminShell
+      active="Overview"
+      title="Overview"
+      urgent={overview?.urgent ?? 0}
+      moderator={{
+        name: me.display_name ?? me.username ?? "Moderator",
+        role: me.role ?? "moderator",
+      }}
+    >
+      {/* Below `lg` the sidebar is hidden, so the site header is what gives a
+          moderator a way out of the console on a phone. */}
+      <div className="mb-4 lg:hidden">
+        <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      </div>
+
+      <AdminOverview data={overview} />
+
+      <div className="mt-10">
+        <h2 id="queue" className="scroll-mt-6 text-[20px] font-bold text-[var(--text-primary)]">
+          Review queue
+        </h2>
         <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
           {pending.length} review{pending.length === 1 ? "" : "s"} awaiting review.
           Approve with an affiliate link to monetize, publish without one, or reject.
@@ -78,8 +96,9 @@ export default async function ModeratePage() {
             </div>
           </section>
         ) : null}
-      </main>
+      </div>
+
       <SiteFooter />
-    </div>
+    </AdminShell>
   );
 }

@@ -11,7 +11,7 @@ there is no separate `admin` role and one is not invented here.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import require_role
 from app.db.session import get_db
-from app.services import request_traffic_service
+from app.services import admin_overview_service, request_traffic_service
 from app.services.request_geo import GEO_HEADERS, from_headers
 
 router = APIRouter(prefix="/admin/analytics", tags=["admin: analytics"],
@@ -139,4 +139,58 @@ def request_distribution(
         has_data=result.has_data,
         range=range, metric=metric,
         retention_days=request_traffic_service.RETENTION_DAYS,
+    )
+
+
+class ActivityItemOut(BaseModel):
+    action: str
+    #: None for actions the system took rather than a person (a scheduled
+    #: payout, a distribution run). The client renders those as "System".
+    actor: str | None
+    target_ref: str | None
+    at: datetime
+
+
+class BreakdownBarOut(BaseModel):
+    label: str
+    count: int
+
+
+class AdminOverviewOut(BaseModel):
+    queue_total: int
+    high_priority: int
+    approved_today: int
+    #: Signed, so the client never has to infer the comparison itself.
+    approved_delta: int
+    pending_affiliate: int
+    honesty_fund_pool: str
+    honesty_fund_month: date
+    urgent: int
+    breakdown: list[BreakdownBarOut]
+    activity: list[ActivityItemOut]
+
+
+@router.get("/overview", response_model=AdminOverviewOut,
+            summary="Headline counts, queue breakdown and recent activity")
+def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
+    """The Overview screen's figures.
+
+    The queue count uses the same predicate as the queue list itself — a
+    headline that disagrees with the list underneath it is worse than no
+    headline at all.
+    """
+    o = admin_overview_service.overview(db)
+    return AdminOverviewOut(
+        queue_total=o.queue_total, high_priority=o.high_priority,
+        approved_today=o.approved_today, approved_delta=o.approved_delta,
+        pending_affiliate=o.pending_affiliate,
+        honesty_fund_pool=str(o.honesty_fund_pool),
+        honesty_fund_month=o.honesty_fund_month,
+        urgent=o.urgent,
+        breakdown=[BreakdownBarOut(label=b.label, count=b.count) for b in o.breakdown],
+        activity=[
+            ActivityItemOut(action=a.action, actor=a.actor,
+                            target_ref=a.target_ref, at=a.at)
+            for a in o.activity
+        ],
     )

@@ -846,6 +846,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Headline counts, queue breakdown and recent activity
+         * @description The Overview screen's figures.
+         *
+         *     The queue count uses the same predicate as the queue list itself — a
+         *     headline that disagrees with the list underneath it is worse than no
+         *     headline at all.
+         */
+        get: operations["admin_overview_api_v1_admin_analytics_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/traffic": {
         parameters: {
             query?: never;
@@ -1562,6 +1586,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivityItemOut */
+        ActivityItemOut: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string | null;
+            /** Target Ref */
+            target_ref: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+        };
+        /** AdminOverviewOut */
+        AdminOverviewOut: {
+            /** Queue Total */
+            queue_total: number;
+            /** High Priority */
+            high_priority: number;
+            /** Approved Today */
+            approved_today: number;
+            /** Approved Delta */
+            approved_delta: number;
+            /** Pending Affiliate */
+            pending_affiliate: number;
+            /** Honesty Fund Pool */
+            honesty_fund_pool: string;
+            /**
+             * Honesty Fund Month
+             * Format: date
+             */
+            honesty_fund_month: string;
+            /** Urgent */
+            urgent: number;
+            /** Breakdown */
+            breakdown: components["schemas"]["BreakdownBarOut"][];
+            /** Activity */
+            activity: components["schemas"]["ActivityItemOut"][];
+        };
         /** AdminTokenGrant */
         AdminTokenGrant: {
             /**
@@ -1710,6 +1774,13 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /** BreakdownBarOut */
+        BreakdownBarOut: {
+            /** Label */
+            label: string;
+            /** Count */
+            count: number;
         };
         /** BuyoutOffer */
         BuyoutOffer: {
@@ -5115,6 +5186,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_overview_api_v1_admin_analytics_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOverviewOut"];
                 };
             };
         };

@@ -2675,6 +2675,33 @@
         }
       }
     },
+    "/api/v1/admin/analytics/overview": {
+      "get": {
+        "tags": [
+          "admin: analytics"
+        ],
+        "summary": "Headline counts, queue breakdown and recent activity",
+        "description": "The Overview screen's figures.\n\nThe queue count uses the same predicate as the queue list itself \u2014 a\nheadline that disagrees with the list underneath it is worse than no\nheadline at all.",
+        "operationId": "admin_overview_api_v1_admin_analytics_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverviewOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/internal/traffic": {
       "post": {
         "tags": [
@@ -5112,6 +5139,114 @@
   },
   "components": {
     "schemas": {
+      "ActivityItemOut": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "target_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Ref"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "actor",
+          "target_ref",
+          "at"
+        ],
+        "title": "ActivityItemOut"
+      },
+      "AdminOverviewOut": {
+        "properties": {
+          "queue_total": {
+            "type": "integer",
+            "title": "Queue Total"
+          },
+          "high_priority": {
+            "type": "integer",
+            "title": "High Priority"
+          },
+          "approved_today": {
+            "type": "integer",
+            "title": "Approved Today"
+          },
+          "approved_delta": {
+            "type": "integer",
+            "title": "Approved Delta"
+          },
+          "pending_affiliate": {
+            "type": "integer",
+            "title": "Pending Affiliate"
+          },
+          "honesty_fund_pool": {
+            "type": "string",
+            "title": "Honesty Fund Pool"
+          },
+          "honesty_fund_month": {
+            "type": "string",
+            "format": "date",
+            "title": "Honesty Fund Month"
+          },
+          "urgent": {
+            "type": "integer",
+            "title": "Urgent"
+          },
+          "breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownBarOut"
+            },
+            "type": "array",
+            "title": "Breakdown"
+          },
+          "activity": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityItemOut"
+            },
+            "type": "array",
+            "title": "Activity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "queue_total",
+          "high_priority",
+          "approved_today",
+          "approved_delta",
+          "pending_affiliate",
+          "honesty_fund_pool",
+          "honesty_fund_month",
+          "urgent",
+          "breakdown",
+          "activity"
+        ],
+        "title": "AdminOverviewOut"
+      },
       "AdminTokenGrant": {
         "properties": {
           "amount": {
@@ -5431,6 +5566,24 @@
           "file"
         ],
         "title": "Body_upload_receipt_route_api_v1_reviews_receipt_post"
+      },
+      "BreakdownBarOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "BreakdownBarOut"
       },
       "BuyoutOffer": {
         "properties": {
