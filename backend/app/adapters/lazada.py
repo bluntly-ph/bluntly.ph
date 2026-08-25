@@ -23,7 +23,7 @@ import hashlib
 import hmac
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -130,6 +130,34 @@ class Conversion:
         return (self.status or "").strip().lower() in {"returned", "cancelled", "canceled"}
 
 
+#: Buyer identity the conversion API returns and this application must never
+#: hold. Scrubbed at the boundary rather than at each write, because `raw` is
+#: persisted verbatim into `affiliate_postbacks.raw` — so anything that reaches
+#: a Conversion object is one ordinary code path away from the database.
+#: Matching is case-insensitive and by substring: Lazada has shipped both
+#: `memberEmail` and `member_email` in different envelope versions.
+_PII_FIELD_MARKERS = (
+    "memberemail", "membername", "memberid", "member_email", "member_name",
+    "member_id", "buyeremail", "buyername", "buyerid", "buyer_email",
+    "buyer_name", "buyer_id", "email", "phone", "mobile",
+)
+
+
+def scrub_buyer_identity(row: dict) -> dict:
+    """A provider row with buyer identity removed.
+
+    The affiliate ledger needs to know that a sale happened and what it earned;
+    it never needs to know who bought. Removing the fields here means no
+    downstream caller has to remember to, and the removal is verifiable in one
+    place.
+    """
+    return {
+        key: value for key, value in row.items()
+        if not any(marker in str(key).lower().replace(" ", "")
+                   for marker in _PII_FIELD_MARKERS)
+    }
+
+
 def _as_conversion(row: dict) -> Conversion:
     return Conversion(
         order_id=str(row.get("orderId") or ""),
@@ -142,7 +170,7 @@ def _as_conversion(row: dict) -> Conversion:
         sub_id1=row.get("subId1"),
         sub_id2=row.get("subId2"),
         validity=row.get("validity"),
-        raw=row,
+        raw=scrub_buyer_identity(row),
     )
 
 
@@ -158,10 +186,37 @@ def _rows(body: dict) -> list[dict]:
     return []
 
 
-def fetch_conversions(date_start: date, date_end: date, *,
-                      page_size: int = DEFAULT_PAGE_SIZE,
-                      max_pages: int = 50) -> list[Conversion]:
-    """Every conversion in [date_start, date_end], following pagination.
+def month_windows(date_start: date, date_end: date) -> list[tuple[date, date]]:
+    """Split an inclusive range into per-calendar-month windows.
+
+    Lazada refuses a multi-month request outright — the API answers
+    "only support fetch single month data" — so asking for a quarter returns an
+    error rather than three months of rows. Callers should not have to know
+    that, so the range is split here and the results merged.
+
+    Windows are clipped to the caller's own bounds, so a range starting on the
+    17th begins on the 17th rather than the 1st.
+    """
+    if date_end < date_start:
+        return []
+
+    windows: list[tuple[date, date]] = []
+    cursor = date_start
+    while cursor <= date_end:
+        # First day of the following month, without dateutil.
+        if cursor.month == 12:
+            next_month = date(cursor.year + 1, 1, 1)
+        else:
+            next_month = date(cursor.year, cursor.month + 1, 1)
+        window_end = min(next_month - timedelta(days=1), date_end)
+        windows.append((cursor, window_end))
+        cursor = window_end + timedelta(days=1)
+    return windows
+
+
+def _fetch_one_month(date_start: date, date_end: date, *, page_size: int,
+                     max_pages: int) -> list[Conversion]:
+    """One single-month window, following pagination.
 
     `max_pages` is a guard, not a limit to tune: without it a malformed envelope
     that never reports exhaustion would loop against a rate-limited API.
@@ -182,8 +237,35 @@ def fetch_conversions(date_start: date, date_end: date, *,
     else:
         log.warning("conversion report hit the page guard; results may be truncated",
                     extra={"extra_fields": {"max_pages": max_pages}})
+    return out
+
+
+def fetch_conversions(date_start: date, date_end: date, *,
+                      page_size: int = DEFAULT_PAGE_SIZE,
+                      max_pages: int = 50) -> list[Conversion]:
+    """Every conversion in [date_start, date_end], across as many months as it spans.
+
+    Deduplicated on `subOrderId`, which the owner's real export proves is unique
+    on its own (218 distinct values in 218 rows). Windows are clipped so they
+    never overlap, but a row whose status changes between two calls would
+    otherwise appear twice; the LAST sighting wins, because it is the more
+    recent word from the provider about the same sub-order.
+    """
+    seen: dict[str, Conversion] = {}
+    windows = month_windows(date_start, date_end)
+    for window_start, window_end in windows:
+        for conversion in _fetch_one_month(window_start, window_end,
+                                           page_size=page_size,
+                                           max_pages=max_pages):
+            # A row with no sub-order id cannot be deduplicated, and dropping it
+            # would silently lose a sale; key it by identity instead.
+            key = conversion.sub_order_id or f"_row{id(conversion)}"
+            seen[key] = conversion
+
+    out = list(seen.values())
     log.info("fetched lazada conversions", extra={"extra_fields": {
-        "count": len(out), "from": date_start.isoformat(), "to": date_end.isoformat()}})
+        "count": len(out), "windows": len(windows),
+        "from": date_start.isoformat(), "to": date_end.isoformat()}})
     return out
 
 
