@@ -63,6 +63,61 @@ would close it.
 
 ---
 
+## Finding (2026-08-27): the approved dashboard is a five-frame flow
+
+Found while preparing the authenticated acceptance pass, by reading Figma rather
+than the browser — so it stands regardless of the browser channel.
+
+`/dashboard` was built against frame `5572:7130`. That frame is the **entry
+screen of a flow**, and its floating action bar leads to four more approved
+frames that are separate screens, not sections of it:
+
+| Frame | Screen | What it contains | Implemented? |
+|---|---|---|---|
+| `5572:7130` | Reviewer Dashboard | hero, action bar, Est. Comm card, ranked reviews | **Yes** |
+| `5762:332` | Transfer | hero with balance and a **Request Withdrawal** button | No — the action links to the wallet/payout section on the same page |
+| `5762:472` | History | payout history | No — links to the payout history section |
+| `6159:1510` | Reviews | the reviewer's own reviews | No — links to `/profile` |
+| `5762:752` | Insights | a **Streak** card (flame, "6 days", dot-grid month calendar) and a dated-axis chart | No |
+
+**Every destination reaches working functionality** — the action bar has no dead
+controls — but four of the five approved screens are not built as screens, so
+the dashboard *flow* is not 1:1 even though its entry screen is.
+
+Two of these are ordinary work. Two are not:
+
+* **Insights** shows a reading/earning **streak** — six days, a month-grid of
+  filled dots. Nothing in the platform tracks a streak. Building the frame means
+  building a feature and the telemetry under it, which is the same class of
+  question as *Avg. Read time*, not a fidelity fix.
+* **Transfer** shows a `Request Withdrawal` action against a balance. The
+  underlying payout flow exists and is verified, but it is presented as a
+  section rather than as this screen, and payouts remain
+  `BLOCKED EXTERNAL` on PayPal sandbox credentials.
+
+### Classification
+
+`MAJOR_FIDELITY_GAP` for the dashboard **flow**; the entry screen itself remains
+built-to-frame.
+
+### Why this is not being silently "fixed"
+
+The instruction is to fix fidelity gaps and not to redesign Figma. Building four
+new screens — one of which requires a streak-tracking feature that does not
+exist — is new product scope rather than a fidelity correction, and doing it
+unasked would be exactly the kind of scope expansion this project has been
+careful to avoid. It is surfaced here as an **owner decision**:
+
+1. build the four screens (and rule on streak telemetry), or
+2. confirm the current single-page composition supersedes the flow for this
+   release, in which case it becomes an approved deviation rather than a gap.
+
+Until one of those, `/dashboard` is recorded as **built to its entry frame with
+the flow outstanding**, and no 1:1 claim is made for the flow.
+
+
+---
+
 ## Outstanding — authenticated visual comparison
 
 `/dashboard` and `/moderate` have **not** been rendered end-to-end behind a real
