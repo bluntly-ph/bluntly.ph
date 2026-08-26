@@ -248,7 +248,13 @@ def _reverse(db: Session, postback: AffiliatePostback) -> tuple[Decimal, Decimal
         contract_status=original.contract_status,
         currency=original.currency,
         csv_source=original.csv_source,
-        row_reference=original.row_reference,
+        # NOT the original's reference. `commissions` carries
+        # UNIQUE (csv_source, row_reference), so copying both would make the
+        # reversal collide with the entry it is undoing and no reversal could
+        # ever be written. The suffix keeps the provider identity legible while
+        # making the pair distinct; `uq_commission_one_reversal` already
+        # guarantees there is at most one of these per original.
+        row_reference=f"{original.row_reference}#reversal",
         order_status="returned",
         cycle_month=original.cycle_month,
         reverses_commission_id=original.id,

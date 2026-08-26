@@ -61,6 +61,22 @@ def attributed_review(db) -> tuple[Review, str, object]:
 
 
 @pytest.fixture
+def order_id():
+    """A provider order id unique to this test.
+
+    `commissions` carries UNIQUE (csv_source, row_reference) and the importer
+    puts the provider identity in `row_reference` — which is exactly the
+    cross-file idempotency this feature is for. These tests commit, so a
+    hardcoded "ORD1" makes the SECOND test that recognises a commission collide
+    with the first one's row, and every later test then reads leftover state.
+
+    Unique per test, not per call: several tests import the same order twice on
+    purpose and need the identity to be stable across both files.
+    """
+    return f"ORD{uuid.uuid4().hex[:12]}"
+
+
+@pytest.fixture
 def moderator(db):
     """A real moderator row.
 
@@ -80,18 +96,18 @@ def _commissions_for(db, sub_id_review: Review) -> list[Commission]:
 # --- idempotency -----------------------------------------------------------
 
 @requires_db
-def test_the_same_order_in_two_different_files_is_credited_once(db, moderator):
+def test_the_same_order_in_two_different_files_is_credited_once(db, moderator, order_id):
     """The defect this replaces: the old key is (filename+hash, line number), so
     the same order arriving in a DIFFERENT export is not recognised as a
     duplicate and is credited twice. The provider's own identity is stable
     across files, which is the whole point of keying on it."""
     review, sub_id, _ = attributed_review(db)
 
-    first = shopee_csv(sub_id=sub_id, commission="100.00")
+    first = shopee_csv(order=order_id, sub_id=sub_id, commission="100.00")
     # A genuinely different file: the export timestamp differs, so the bytes and
     # therefore the OLD file-hash key differ — while the order's own identity is
     # unchanged. Under the old key this is a second, uncaught credit.
-    second = shopee_csv(sub_id=sub_id, commission="100.00",
+    second = shopee_csv(order=order_id, sub_id=sub_id, commission="100.00",
                         completed_at="2026-08-02 11:30:00")
     assert first != second, "the two files must differ, or this proves nothing"
 
@@ -103,12 +119,12 @@ def test_the_same_order_in_two_different_files_is_credited_once(db, moderator):
 
 
 @requires_db
-def test_pending_never_credits_a_wallet(db, moderator):
+def test_pending_never_credits_a_wallet(db, moderator, order_id):
     """Owner rule: commission is not withdrawable before provider finality."""
     review, sub_id, author = attributed_review(db)
     before = author.wallet_balance or Decimal("0")
 
-    affiliate_ingest.apply(db, moderator.id, "p.csv", shopee_csv(
+    affiliate_ingest.apply(db, moderator.id, "p.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, status="Pending", item_status="Pending"))
 
     db.refresh(author)
@@ -117,7 +133,7 @@ def test_pending_never_credits_a_wallet(db, moderator):
 
 
 @requires_db
-def test_pending_then_completed_earns_exactly_once(db, moderator):
+def test_pending_then_completed_earns_exactly_once(db, moderator, order_id):
     """The ordinary happy path across two imports, and the one most likely to
     double-pay: a provider reports an order as pending in one export and
     completed in the next.
@@ -127,21 +143,21 @@ def test_pending_then_completed_earns_exactly_once(db, moderator):
     """
     review, sub_id, author = attributed_review(db)
 
-    affiliate_ingest.apply(db, moderator.id, "month1.csv", shopee_csv(
+    affiliate_ingest.apply(db, moderator.id, "month1.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, status="Pending", item_status="Pending", commission="100.00"))
     db.refresh(author)
     assert (author.wallet_balance or Decimal("0")) == 0, "pending paid out"
     assert _commissions_for(db, review) == []
 
     affiliate_ingest.apply(db, moderator.id, "month2.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
     db.refresh(author)
     after_first = author.wallet_balance or Decimal("0")
     assert after_first > 0, "the completion did not earn"
     assert len(_commissions_for(db, review)) == 1
 
     # A third export still reporting completed must change nothing.
-    third = affiliate_ingest.apply(db, moderator.id, "month3.csv", shopee_csv(
+    third = affiliate_ingest.apply(db, moderator.id, "month3.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, commission="100.00", completed_at="2026-08-03 09:00:00"))
     db.refresh(author)
     assert third.recognised == 0
@@ -152,18 +168,18 @@ def test_pending_then_completed_earns_exactly_once(db, moderator):
 # --- reversal --------------------------------------------------------------
 
 @requires_db
-def test_a_return_reverses_a_recognised_commission(db, moderator):
+def test_a_return_reverses_a_recognised_commission(db, moderator, order_id):
     """The other defect this replaces: the old parser drops non-payable rows, so
     a return never arrived and the earlier `completed` row stood forever."""
     review, sub_id, author = attributed_review(db)
     affiliate_ingest.apply(db, moderator.id, "sale.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
     db.refresh(author)
     credited = author.wallet_balance or Decimal("0")
     assert credited > 0, "nothing was recognised, so the reversal proves nothing"
 
     # Shopee reports a return as a refunded item on an otherwise complete order.
-    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(
+    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, commission="100.00", refund="500.00"))
 
     entries = _commissions_for(db, review)
@@ -175,13 +191,13 @@ def test_a_return_reverses_a_recognised_commission(db, moderator):
 
 
 @requires_db
-def test_the_reversal_is_the_exact_negation_of_its_original(db, moderator):
+def test_the_reversal_is_the_exact_negation_of_its_original(db, moderator, order_id):
     """A reversal that is not the exact opposite leaves the ledger and the
     wallet quietly disagreeing."""
     review, sub_id, _ = attributed_review(db)
     affiliate_ingest.apply(db, moderator.id, "sale.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
-    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
+    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, commission="100.00", refund="500.00"))
 
     entries = _commissions_for(db, review)
@@ -197,13 +213,13 @@ def test_the_reversal_is_the_exact_negation_of_its_original(db, moderator):
 
 
 @requires_db
-def test_a_return_seen_twice_reverses_only_once(db, moderator):
+def test_a_return_seen_twice_reverses_only_once(db, moderator, order_id):
     """Providers repeat rows across exports; a second sighting of the same
     return must not claw back the money twice."""
     review, sub_id, _ = attributed_review(db)
     affiliate_ingest.apply(db, moderator.id, "sale.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
-    returned = shopee_csv(sub_id=sub_id, commission="100.00", refund="500.00")
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
+    returned = shopee_csv(order=order_id, sub_id=sub_id, commission="100.00", refund="500.00")
     affiliate_ingest.apply(db, moderator.id, "return1.csv", returned)
     affiliate_ingest.apply(db, moderator.id, "return2.csv", returned)
 
@@ -215,21 +231,21 @@ def test_a_return_seen_twice_reverses_only_once(db, moderator):
 # --- the owner's post-payout policy ---------------------------------------
 
 @requires_db
-def test_a_post_payout_return_absorbs_the_shortfall_instead_of_creating_debt(db, moderator):
+def test_a_post_payout_return_absorbs_the_shortfall_instead_of_creating_debt(db, moderator, order_id):
     """Owner decision: Bluntly absorbs an unrecoverable return rather than
     pushing a user into debt for a buyer's return they had no part in. The
     wallet must never go negative, and the shortfall must be recorded rather
     than silently forgotten."""
     review, sub_id, author = attributed_review(db)
     affiliate_ingest.apply(db, moderator.id, "sale.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
 
     # Simulate the payout: the money has left the wallet before the return.
     db.refresh(author)
     author.wallet_balance = Decimal("0")
     db.flush()
 
-    summary = affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(
+    summary = affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, commission="100.00", refund="500.00"))
 
     db.refresh(author)
@@ -242,16 +258,16 @@ def test_a_post_payout_return_absorbs_the_shortfall_instead_of_creating_debt(db,
 
 
 @requires_db
-def test_wallet_balance_never_goes_negative_across_the_whole_flow(db, moderator):
+def test_wallet_balance_never_goes_negative_across_the_whole_flow(db, moderator, order_id):
     """The database CHECK would catch this by raising; the point of asserting it
     here is that the import must not RELY on the database refusing the write."""
     review, sub_id, author = attributed_review(db)
     affiliate_ingest.apply(db, moderator.id, "sale.csv",
-                           shopee_csv(sub_id=sub_id, commission="100.00"))
+                           shopee_csv(order=order_id, sub_id=sub_id, commission="100.00"))
     db.refresh(author)
     author.wallet_balance = Decimal("0.01")
     db.flush()
-    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(
+    affiliate_ingest.apply(db, moderator.id, "return.csv", shopee_csv(order=order_id, 
         sub_id=sub_id, commission="100.00", refund="500.00"))
     db.refresh(author)
     assert (author.wallet_balance or Decimal("0")) >= 0
@@ -260,12 +276,12 @@ def test_wallet_balance_never_goes_negative_across_the_whole_flow(db, moderator)
 # --- attribution and preview ----------------------------------------------
 
 @requires_db
-def test_an_unattributable_sale_is_recorded_but_pays_nobody(db, moderator):
+def test_an_unattributable_sale_is_recorded_but_pays_nobody(db, moderator, order_id):
     """The sale happened; we just cannot say whose review caused it. Dropping
     the row would hide a real gap in attribution."""
     before = db.execute(select(func.count()).select_from(Commission)).scalar()
     summary = affiliate_ingest.apply(db, moderator.id, "orphan.csv",
-                                     shopee_csv(sub_id="blt_does_not_exist"))
+                                     shopee_csv(order=order_id, sub_id="blt_does_not_exist"))
     after = db.execute(select(func.count()).select_from(Commission)).scalar()
 
     assert summary.unattributed == 1
@@ -275,12 +291,12 @@ def test_an_unattributable_sale_is_recorded_but_pays_nobody(db, moderator):
 
 
 @requires_db
-def test_a_sale_attributable_later_is_still_paid(db, moderator):
+def test_a_sale_attributable_later_is_still_paid(db, moderator, order_id):
     """An unattributable completed sale is stored as `completed`, so the next
     import evaluates completed -> completed and gets `none`. Without a retry
     the money is orphaned forever, even once the referral link exists — and
     nothing would ever surface that, because the import reports success."""
-    raw = shopee_csv(sub_id="blt_attached_later", commission="100.00")
+    raw = shopee_csv(order=order_id, sub_id="blt_attached_later", commission="100.00")
     first = affiliate_ingest.apply(db, moderator.id, "orphan.csv", raw)
     assert first.unattributed == 1 and first.recognised == 0
 
@@ -305,14 +321,14 @@ def test_a_sale_attributable_later_is_still_paid(db, moderator):
 
 
 @requires_db
-def test_preview_writes_nothing(db):
+def test_preview_writes_nothing(db, order_id):
     """A moderator is about to move money on the strength of a file they did not
     write. Preview has to be safe to run."""
     _, sub_id, _ = attributed_review(db)
     before_c = db.execute(select(func.count()).select_from(Commission)).scalar()
     before_p = db.execute(select(func.count()).select_from(AffiliatePostback)).scalar()
 
-    summary = affiliate_ingest.preview(db, shopee_csv(sub_id=sub_id))
+    summary = affiliate_ingest.preview(db, shopee_csv(order=order_id, sub_id=sub_id))
 
     assert summary.dry_run is True
     assert summary.recognised == 1, "preview should still say what it WOULD do"
@@ -322,16 +338,16 @@ def test_preview_writes_nothing(db):
 
 
 @requires_db
-def test_preview_totals_match_what_the_ledger_would_store(db, moderator):
+def test_preview_totals_match_what_the_ledger_would_store(db, moderator, order_id):
     """Providers report more precision than money has — Shopee's commissions
     carry five decimal places. A preview total that does not match the entries
     written afterwards is worse than no preview."""
     _, sub_id, _ = attributed_review(db)
-    raw = shopee_csv(sub_id=sub_id, commission="10.12345")
+    raw = shopee_csv(order=order_id, sub_id=sub_id, commission="10.12345")
     previewed = affiliate_ingest.preview(db, raw).recognised_amount
     affiliate_ingest.apply(db, moderator.id, "x.csv", raw)
     stored = db.scalar(select(Commission.gross_amount)
-                       .where(Commission.row_reference.like("ORD1%")))
+                       .where(Commission.row_reference.like(f"{order_id}%")))
     assert previewed == stored
 
 
@@ -462,3 +478,24 @@ def test_every_required_postback_column_has_a_value_from_somewhere():
         "Give the model a server_default matching the migration, or set them "
         "in the importer."
     )
+
+
+def test_a_reversal_does_not_reuse_its_original_idempotency_key():
+    """`commissions` carries UNIQUE (csv_source, row_reference).
+
+    The reversal copied both from the entry it undoes, so inserting one raised a
+    unique violation and NO reversal could ever be written — a silent, total
+    failure of the return path. This asserts the keys differ without needing a
+    database, because the money path should not depend on a 83-minute CI run to
+    notice.
+    """
+    import inspect
+
+    from app.services import affiliate_ingest
+
+    source = inspect.getsource(affiliate_ingest._reverse)
+    assert "row_reference=original.row_reference," not in source, (
+        "the reversal reuses its original's (csv_source, row_reference), which "
+        "the unique constraint forbids"
+    )
+    assert "#reversal" in source, "the reversal's row_reference is not distinguished"
