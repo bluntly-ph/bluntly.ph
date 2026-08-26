@@ -741,7 +741,43 @@ Full Playwright suite against production: **60 passed, 6 skipped, 0 failures** �
 route guards, redirect safety, responsive layout, accessibility and console
 health all intact after the sprint.
 
-### 4. Backend
+### 4. Backend — CI GREEN (2026-08-26)
+
+All four jobs pass on `32975485354`:
+
+| Job | Result |
+|---|---|
+| Backend (isolated database) | **885 passed, 0 failed, 0 errors, 0 unexpected skips** — 1:57:22 |
+| Backend (no database) | 717 passed, 168 skipped |
+| Production guard | 18 passed |
+| Frontend | pass |
+
+Also in that run: migrations applied to head, revision verified at head, and
+**milestones 58/58**.
+
+Getting there took six runs and surfaced two genuine product defects plus a
+string of test defects. Worth separating, because only the first pair were the
+product's fault:
+
+**Product defects** — the importer set a column the table does not have; and
+the reversal copied its original's `(csv_source, row_reference)`, which the
+unique constraint forbids, so **no reversal could ever be written**. That
+second one is the return path failing silently and completely — exactly what
+this subsystem exists to prevent. Both are fixed and guarded without a
+database.
+
+**Test defects** — an invented moderator id against a foreign key; hardcoded
+order ids, city names and a referral sub_id colliding with their own previous
+runs because these tests commit; and a fixture review with no contract, so
+every ledger assertion ran against a reviewer share of zero. In that last case
+the product was right and the test was describing a state the product would
+never be in.
+
+The common thread is that all of it was invisible locally: these tests need
+Postgres and skip on developer machines. The database-free guards added along
+the way close the part of that gap which can be closed.
+
+### 4b. Backend (historical)
 
 **712 tests pass locally; 831 in CI** (the difference is the ~120 that need
 Postgres and skip on developer machines). Ruff clean, TypeScript clean, ESLint
