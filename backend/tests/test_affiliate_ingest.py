@@ -104,6 +104,39 @@ def test_pending_never_credits_a_wallet(db):
     assert _commissions_for(db, review) == []
 
 
+@requires_db
+def test_pending_then_completed_earns_exactly_once(db):
+    """The ordinary happy path across two imports, and the one most likely to
+    double-pay: a provider reports an order as pending in one export and
+    completed in the next.
+
+    Recognition must happen on the transition, once — not on the pending
+    sighting, and not again on any later export that still says completed.
+    """
+    review, sub_id, author = attributed_review(db)
+
+    affiliate_ingest.apply(db, uuid.uuid4(), "month1.csv", shopee_csv(
+        sub_id=sub_id, status="Pending", item_status="Pending", commission="100.00"))
+    db.refresh(author)
+    assert (author.wallet_balance or Decimal("0")) == 0, "pending paid out"
+    assert _commissions_for(db, review) == []
+
+    affiliate_ingest.apply(db, uuid.uuid4(), "month2.csv",
+                           shopee_csv(sub_id=sub_id, commission="100.00"))
+    db.refresh(author)
+    after_first = author.wallet_balance or Decimal("0")
+    assert after_first > 0, "the completion did not earn"
+    assert len(_commissions_for(db, review)) == 1
+
+    # A third export still reporting completed must change nothing.
+    third = affiliate_ingest.apply(db, uuid.uuid4(), "month3.csv", shopee_csv(
+        sub_id=sub_id, commission="100.00", completed_at="2026-08-03 09:00:00"))
+    db.refresh(author)
+    assert third.recognised == 0
+    assert (author.wallet_balance or Decimal("0")) == after_first
+    assert len(_commissions_for(db, review)) == 1, "a repeat export paid twice"
+
+
 # --- reversal --------------------------------------------------------------
 
 @requires_db
