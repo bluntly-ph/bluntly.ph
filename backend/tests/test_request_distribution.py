@@ -8,6 +8,7 @@ assumed from the shape of the code.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -19,6 +20,11 @@ from app.services.request_geo import RequestGeo
 from tests.conftest import register_and_token, requires_db
 
 ENDPOINT = "/api/v1/admin/analytics/request-distribution"
+
+#: Suffix making every city in this module unique to this run. These tests
+#: commit on purpose, so fixed names accumulate rows across CI runs and turn
+#: later assertions into tests of leftover data.
+_RUN = uuid.uuid4().hex[:8]
 
 
 @pytest.fixture(scope="module")
@@ -82,17 +88,24 @@ def test_response_carries_no_address_or_identity(client, db, mod_headers):
 
 @requires_db
 def test_repeat_requests_increment_one_bucket(db):
-    """This is what makes the table an aggregate rather than a request log."""
+    """This is what makes the table an aggregate rather than a request log.
+
+    The city name is unique per run. These tests commit, so a fixed name
+    accumulates a row per hourly bucket across CI runs and `scalar_one()`
+    eventually raises MultipleResultsFound — a test failing on its own history
+    rather than on the behaviour it asserts.
+    """
+    city = f"AggTest{uuid.uuid4().hex[:10]}"
     before = db.execute(select(func.count()).select_from(RequestGeoBucket)).scalar()
     for _ in range(5):
-        svc.record(db, _geo(city="AggregationTestCity"))
+        svc.record(db, _geo(city=city))
     db.commit()
     after = db.execute(select(func.count()).select_from(RequestGeoBucket)).scalar()
     assert after == before + 1, "five requests created more than one row"
 
     row = db.execute(
         select(RequestGeoBucket)
-        .where(RequestGeoBucket.city == "AggregationTestCity")).scalar_one()
+        .where(RequestGeoBucket.city == city)).scalar_one()
     assert row.request_count == 5
 
 
@@ -109,11 +122,11 @@ def test_a_request_the_edge_could_not_place_is_not_recorded():
 
 @requires_db
 def test_ranking_is_descending_by_count(db):
-    svc.record(db, _geo(city="RankSmall"), count=3)
-    svc.record(db, _geo(city="RankBig"), count=99)
+    svc.record(db, _geo(city="RankSmall" + _RUN), count=3)
+    svc.record(db, _geo(city="RankBig" + _RUN), count=99)
     db.commit()
     cities = [loc.city for loc in svc.summary(db, range_key="24h", limit=50).locations]
-    assert cities.index("RankBig") < cities.index("RankSmall")
+    assert cities.index("RankBig" + _RUN) < cities.index("RankSmall" + _RUN)
 
 
 @requires_db
@@ -137,7 +150,7 @@ def test_limit_cannot_exceed_the_maximum(db):
 
 @requires_db
 def test_shares_are_fractions(db):
-    svc.record(db, _geo(city="ShareCity"), count=7)
+    svc.record(db, _geo(city="ShareCity" + _RUN), count=7)
     db.commit()
     result = svc.summary(db, range_key="24h", limit=svc.MAX_LIMIT)
     assert all(0.0 <= loc.share <= 1.0 for loc in result.locations)
@@ -160,7 +173,7 @@ def test_rps_survives_a_zero_denominator():
 def test_rps_uses_observed_coverage_not_the_nominal_window(db):
     """If collection began an hour ago, dividing a 30-day window by its full
     length would report a rate hundreds of times lower than reality."""
-    svc.record(db, _geo(city="CoverageCity"), count=10)
+    svc.record(db, _geo(city="CoverageCity" + _RUN), count=10)
     db.commit()
     result = svc.summary(db, range_key="30d", limit=svc.MAX_LIMIT)
     assert result.covered_seconds < svc.RANGES["30d"] * 3600
@@ -171,12 +184,12 @@ def test_rps_uses_observed_coverage_not_the_nominal_window(db):
 @requires_db
 def test_a_window_excludes_older_buckets(db):
     old = datetime.now(UTC) - timedelta(days=40)
-    svc.record(db, _geo(city="AncientCity"), now=old, count=50)
+    svc.record(db, _geo(city="AncientCity" + _RUN), now=old, count=50)
     db.commit()
     recent = svc.summary(db, range_key="24h", limit=svc.MAX_LIMIT)
-    assert "AncientCity" not in [loc.city for loc in recent.locations]
+    assert "AncientCity" + _RUN not in [loc.city for loc in recent.locations]
     wide = svc.summary(db, range_key="90d", limit=svc.MAX_LIMIT)
-    assert "AncientCity" in [loc.city for loc in wide.locations]
+    assert "AncientCity" + _RUN in [loc.city for loc in wide.locations]
 
 
 @requires_db
@@ -224,23 +237,23 @@ def test_both_metrics_are_served(client, mod_headers):
 @requires_db
 def test_expired_buckets_are_purged(db):
     stale = datetime.now(UTC) - timedelta(days=svc.RETENTION_DAYS + 5)
-    svc.record(db, _geo(city="ExpiredCity"), now=stale)
+    svc.record(db, _geo(city="ExpiredCity" + _RUN), now=stale)
     db.commit()
     svc.purge_expired(db)
     db.commit()
     assert db.execute(select(RequestGeoBucket)
-                      .where(RequestGeoBucket.city == "ExpiredCity")).first() is None
+                      .where(RequestGeoBucket.city == "ExpiredCity" + _RUN)).first() is None
 
 
 @requires_db
 def test_purge_keeps_data_inside_the_window(db):
     fresh = datetime.now(UTC) - timedelta(days=svc.RETENTION_DAYS - 5)
-    svc.record(db, _geo(city="KeptCity"), now=fresh)
+    svc.record(db, _geo(city="KeptCity" + _RUN), now=fresh)
     db.commit()
     svc.purge_expired(db)
     db.commit()
     assert db.execute(select(RequestGeoBucket)
-                      .where(RequestGeoBucket.city == "KeptCity")).first() is not None
+                      .where(RequestGeoBucket.city == "KeptCity" + _RUN)).first() is not None
 
 
 @requires_db
@@ -250,7 +263,7 @@ def test_opening_a_new_bucket_enforces_retention(db):
     hourly bucket is what triggers the purge, and if that link breaks the
     policy silently stops being enforced while everything still looks fine."""
     stale = datetime.now(UTC) - timedelta(days=svc.RETENTION_DAYS + 5)
-    svc.record(db, _geo(city="StaleBeforeNewBucket"), now=stale)
+    svc.record(db, _geo(city="StaleBeforeNewBucket" + _RUN), now=stale)
     db.commit()
 
     # A location that cannot already have a bucket this hour, so the write is
@@ -260,7 +273,7 @@ def test_opening_a_new_bucket_enforces_retention(db):
 
     assert db.execute(
         select(RequestGeoBucket)
-        .where(RequestGeoBucket.city == "StaleBeforeNewBucket")).first() is None
+        .where(RequestGeoBucket.city == "StaleBeforeNewBucket" + _RUN)).first() is None
 
 
 def test_no_range_outlives_retention():
@@ -274,13 +287,13 @@ def test_no_range_outlives_retention():
 @requires_db
 def test_ingest_records_a_beacon(client, db):
     resp = client.post("/api/v1/internal/traffic", json={
-        "country": "SG", "city": "IngestCity", "region": "01",
+        "country": "SG", "city": "IngestCity" + _RUN, "region": "01",
         "latitude": 1.35, "longitude": 103.8, "pop": "sin1"})
     assert resp.status_code in (204, 429)
     if resp.status_code == 204:
         assert db.execute(
             select(RequestGeoBucket)
-            .where(RequestGeoBucket.city == "IngestCity")).first() is not None
+            .where(RequestGeoBucket.city == "IngestCity" + _RUN)).first() is not None
 
 
 @requires_db
