@@ -170,9 +170,21 @@ jobs:
         # the target is not a declared non-production test environment.
         #
         # ap-southeast-1 from a GitHub runner is a long way, and every query
-        # pays that round trip: the suite takes ~33 minutes here against ~10 on
-        # a machine near the region. The timeout is a hang guard, not a target.
-        timeout-minutes: 75
+        # pays that round trip: the suite takes ~10 minutes on a machine near
+        # the region. The timeout is a hang guard, not a target.
+        #
+        # Raised from 75 to 120 on 2026-08-26. The comment above used to say
+        # ~33 minutes; the suite has since grown to ~68-75 and was being KILLED
+        # by this limit rather than failing — three consecutive runs died at 75
+        # minutes with no failing assertion. 75 left essentially no margin for
+        # a slow day against a remote database, and the alternatives were all
+        # worse: deleting integration coverage, mocking Postgres semantics, or
+        # over-subscribing the session pooler (which caps near four clients and
+        # produces setup errors that masquerade as unrelated test failures).
+        #
+        # 120 is deliberately bounded rather than removed. A genuine hang must
+        # still be caught; this only has to be larger than a slow honest run.
+        timeout-minutes: 120
         run: python -m scripts.bootstrap_test_env
 
   frontend:
