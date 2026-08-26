@@ -1102,6 +1102,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/earnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in reviewer's own earnings history
+         * @description Earnings for the caller and nobody else.
+         *
+         *     No user id in the path, for the same reason as the dashboard: an endpoint
+         *     that accepts one is an endpoint someone will eventually pass a different
+         *     one to.
+         */
+        get: operations["my_earnings_api_v1_users_me_earnings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/questions": {
         parameters: {
             query?: never;
@@ -2046,6 +2070,58 @@ export interface components {
          * @enum {string}
          */
         EarnEligibleStatus: "none" | "pending" | "approved" | "rejected" | "monetized" | "honesty_fund";
+        /**
+         * EarningBreakdownOut
+         * @description What the History frame reveals when a row is expanded.
+         */
+        EarningBreakdownOut: {
+            /** Gross Amount */
+            gross_amount: string;
+            /** Commission Rate */
+            commission_rate: string | null;
+            /** Platform Share */
+            platform_share: string;
+            /** Honesty Fund Share */
+            honesty_fund_share: string;
+            /** Reviewer Share */
+            reviewer_share: string;
+        };
+        /** EarningRowOut */
+        EarningRowOut: {
+            /** Commission Id */
+            commission_id: string;
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Review Id */
+            review_id: string | null;
+            /** Review Title */
+            review_title: string | null;
+            /** Product Name */
+            product_name: string | null;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Amount */
+            amount: string;
+            /** Status */
+            status: string;
+            breakdown: components["schemas"]["EarningBreakdownOut"];
+        };
+        /** EarningsHistoryOut */
+        EarningsHistoryOut: {
+            /** All Time */
+            all_time: string;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Rows */
+            rows: components["schemas"]["EarningRowOut"][];
+            /** Has Data */
+            has_data: boolean;
+        };
         /**
          * FeedAuthor
          * @description The author fields a public card needs (never email or wallet data).
@@ -5739,6 +5815,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_earnings_api_v1_users_me_earnings_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EarningsHistoryOut"];
                 };
             };
             /** @description Validation Error */

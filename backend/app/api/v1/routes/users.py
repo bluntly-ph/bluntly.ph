@@ -268,3 +268,80 @@ def my_dashboard(
             for r in result.reviews
         ],
     )
+
+
+class EarningBreakdownOut(BaseModel):
+    """What the History frame reveals when a row is expanded."""
+
+    gross_amount: str
+    #: Provider commission rate where the import recorded one; null otherwise.
+    #: Never derived by dividing, because the two are rounded independently.
+    commission_rate: str | None
+    platform_share: str
+    honesty_fund_share: str
+    reviewer_share: str
+
+
+class EarningRowOut(BaseModel):
+    commission_id: str
+    occurred_on: date
+    review_id: uuid.UUID | None
+    review_title: str | None
+    product_name: str | None
+    photo_url: str | None
+    amount: str
+    #: pending | to_earn | paid | returned — the reviewer-facing reading of the
+    #: canonical lifecycle/settlement pair, never a substitute for either.
+    status: str
+    breakdown: EarningBreakdownOut
+
+
+class EarningsHistoryOut(BaseModel):
+    all_time: str
+    counts: dict[str, int]
+    rows: list[EarningRowOut]
+    has_data: bool
+
+
+@router.get("/me/earnings", response_model=EarningsHistoryOut,
+            summary="The signed-in reviewer's own earnings history")
+def my_earnings(
+    status: str = Query(default="all"),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+) -> EarningsHistoryOut:
+    """Earnings for the caller and nobody else.
+
+    No user id in the path, for the same reason as the dashboard: an endpoint
+    that accepts one is an endpoint someone will eventually pass a different
+    one to.
+    """
+    if status not in dashboard_service.EARNING_FILTERS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"status must be one of {sorted(dashboard_service.EARNING_FILTERS)}")
+
+    result = dashboard_service.earnings_history(db, me.id, status=status, limit=limit)
+    return EarningsHistoryOut(
+        all_time=str(result.all_time),
+        counts=result.counts,
+        has_data=result.has_data,
+        rows=[
+            EarningRowOut(
+                commission_id=r.commission_id, occurred_on=r.occurred_on,
+                review_id=r.review_id, review_title=r.review_title,
+                product_name=r.product_name, photo_url=r.photo_url,
+                amount=str(r.amount), status=r.status,
+                breakdown=EarningBreakdownOut(
+                    gross_amount=str(r.gross_amount),
+                    commission_rate=(str(r.commission_rate)
+                                     if r.commission_rate is not None else None),
+                    platform_share=str(r.platform_share),
+                    honesty_fund_share=str(r.honesty_fund_share),
+                    reviewer_share=str(r.reviewer_share),
+                ),
+            )
+            for r in result.rows
+        ],
+    )

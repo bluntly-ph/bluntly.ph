@@ -115,3 +115,73 @@ export function pesoWhole(amount: string | number): string {
   const n = typeof amount === "string" ? Number(amount) : amount;
   return `₱${Math.round(n).toLocaleString("en-PH")}`;
 }
+
+export type EarningBreakdown = {
+  gross_amount: string;
+  commission_rate: string | null;
+  platform_share: string;
+  honesty_fund_share: string;
+  reviewer_share: string;
+};
+
+export type EarningRow = {
+  commission_id: string;
+  occurred_on: string;
+  review_id: string | null;
+  review_title: string | null;
+  product_name: string | null;
+  photo_url: string | null;
+  amount: string;
+  /** pending | to_earn | paid | returned */
+  status: string;
+  breakdown: EarningBreakdown;
+};
+
+export type EarningsHistory = {
+  all_time: string;
+  counts: Record<string, number>;
+  rows: EarningRow[];
+  has_data: boolean;
+};
+
+/**
+ * The History frame's filter tabs.
+ *
+ * These are the reviewer-facing reading of the canonical pair, not the
+ * canonical vocabulary itself — "To earn" is a completed sale that has not been
+ * paid, which is exactly the distinction a reviewer needs and exactly what
+ * "Completed" would blur.
+ */
+export const EARNING_TABS = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "to_earn", label: "To earn" },
+  { key: "paid", label: "Paid" },
+  { key: "returned", label: "Returned" },
+] as const;
+
+/** Badge tone per status. Each badge also carries its own words. */
+export const EARNING_TONE: Record<string, string> = {
+  pending: "bg-[var(--accent-star)]/15 text-[var(--accent-star)]",
+  to_earn: "bg-[var(--accent-success)]/15 text-[var(--accent-success)]",
+  paid: "bg-[var(--accent-trust)]/15 text-[var(--accent-trust)]",
+  returned: "bg-[var(--accent-danger)]/15 text-[var(--accent-danger)]",
+};
+
+export const EARNING_LABEL: Record<string, string> = {
+  pending: "Pending",
+  to_earn: "To earn",
+  paid: "Paid",
+  returned: "Returned",
+};
+
+export async function getEarnings(
+  status: string,
+): Promise<EarningsHistory | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  const key = EARNING_TABS.some((t) => t.key === status) ? status : "all";
+  return apiFetch<EarningsHistory>(
+    `/api/v1/users/me/earnings?status=${key}`, { token },
+  ).catch(() => null);
+}

@@ -197,3 +197,141 @@ def _review_series(db: Session, review_id: uuid.UUID,
     return [SeriesPoint(day=start + timedelta(days=i),
                         amount=by_day.get(start + timedelta(days=i), ZERO))
             for i in range((end - start).days + 1)]
+
+
+# ---------------------------------------------------------------------------
+# Earnings history (the approved History screen, frame 5762:472)
+# ---------------------------------------------------------------------------
+
+#: The frame's filter tabs. They are NOT the canonical vocabulary — they are the
+#: reviewer-facing reading of it, and the mapping is stated here rather than
+#: guessed at in the UI:
+#:
+#:   Pending   the marketplace has not finalised the sale, so nothing is earned
+#:   To earn   recognised and owed, but not yet paid out
+#:   Paid      settled into a payout
+#:   Returned  the buyer returned it and the entry was reversed
+#:
+#: Lifecycle and settlement stay separate underneath; this is a presentation of
+#: both, and "To earn" deliberately does NOT say "Completed" — a completed sale
+#: that has not been paid is exactly what the reviewer needs told apart.
+EARNING_FILTERS = ("all", "pending", "to_earn", "paid", "returned")
+
+
+@dataclass(frozen=True)
+class EarningRow:
+    commission_id: str
+    occurred_on: date
+    review_id: uuid.UUID | None
+    review_title: str | None
+    product_name: str | None
+    photo_url: str | None
+    #: What the reviewer receives — their share, not the gross.
+    amount: Decimal
+    status: str
+    #: The breakdown the frame reveals when a row is expanded.
+    gross_amount: Decimal
+    commission_rate: Decimal | None
+    platform_share: Decimal
+    honesty_fund_share: Decimal
+    reviewer_share: Decimal
+
+
+@dataclass(frozen=True)
+class EarningsHistory:
+    #: "Est. All time income" in the frame — the reviewer's share, net of
+    #: reversals, across everything.
+    all_time: Decimal
+    rows: list[EarningRow] = field(default_factory=list)
+    counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def has_data(self) -> bool:
+        return bool(self.rows) or self.all_time != ZERO
+
+
+def _earning_status(commission, postback) -> str:
+    """The reviewer-facing status for one commission.
+
+    Derived from the canonical pair rather than invented: the marketplace's
+    lifecycle says whether the sale is real yet, and settlement says whether the
+    money has moved. Neither alone answers the reviewer's question.
+    """
+    if commission.reverses_commission_id is not None:
+        return "returned"
+    if postback is not None:
+        settlement = getattr(postback.settlement_status, "value", postback.settlement_status)
+        lifecycle = getattr(postback.canonical_status, "value", postback.canonical_status)
+        if settlement == "reversed" or lifecycle == "returned":
+            return "returned"
+        if settlement == "paid":
+            return "paid"
+        if lifecycle == "pending":
+            return "pending"
+    return "to_earn"
+
+
+def earnings_history(db: Session, user_id: uuid.UUID, *, status: str = "all",
+                     limit: int = 50) -> EarningsHistory:
+    """The reviewer's own earnings, newest first.
+
+    Reversal entries are not listed as rows of their own. A reviewer reading
+    their history wants to see the sale and that it came back, not two entries
+    that look like two events — so the original carries the `returned` status
+    and the pair still nets to zero in `all_time`.
+    """
+    if status not in EARNING_FILTERS:
+        raise ValueError(f"unknown filter: {status}")
+
+    from app.models.postback import AffiliatePostback
+    from app.models.product import Product
+
+    all_time = db.scalar(
+        select(func.coalesce(func.sum(Commission.reviewer_share), 0))
+        .where(Commission.reviewer_id == user_id)
+    ) or ZERO
+
+    reversed_ids = set(db.scalars(
+        select(Commission.reverses_commission_id)
+        .where(Commission.reviewer_id == user_id,
+               Commission.reverses_commission_id.is_not(None))
+    ))
+
+    rows = db.execute(
+        select(Commission, Review, Product, AffiliatePostback)
+        .outerjoin(Review, Review.id == Commission.review_id)
+        .outerjoin(Product, Product.id == Review.product_id)
+        .outerjoin(AffiliatePostback,
+                   AffiliatePostback.reconciled_commission_id == Commission.id)
+        .where(Commission.reviewer_id == user_id,
+               Commission.reverses_commission_id.is_(None))
+        .order_by(Commission.created_at.desc())
+        .limit(200)
+    ).all()
+
+    out: list[EarningRow] = []
+    counts: dict[str, int] = {k: 0 for k in EARNING_FILTERS if k != "all"}
+    for commission, review, product, postback in rows:
+        state = ("returned" if commission.id in reversed_ids
+                 else _earning_status(commission, postback))
+        counts[state] = counts.get(state, 0) + 1
+        if status != "all" and state != status:
+            continue
+        out.append(EarningRow(
+            commission_id=commission.commission_id,
+            occurred_on=commission.created_at.date(),
+            review_id=review.id if review is not None else None,
+            review_title=review.title if review is not None else None,
+            product_name=product.canonical_name if product is not None else None,
+            photo_url=review.photo_url if review is not None else None,
+            amount=Decimal(commission.reviewer_share or 0),
+            status=state,
+            gross_amount=Decimal(commission.gross_amount or 0),
+            commission_rate=(postback.commission_rate if postback is not None else None),
+            platform_share=Decimal(commission.platform_share or 0),
+            honesty_fund_share=Decimal(commission.honesty_fund_share or 0),
+            reviewer_share=Decimal(commission.reviewer_share or 0),
+        ))
+
+    counts["all"] = sum(v for k, v in counts.items() if k != "all")
+    return EarningsHistory(all_time=Decimal(all_time), rows=out[:limit], counts=counts)

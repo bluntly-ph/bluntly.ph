@@ -3422,6 +3422,67 @@
         }
       }
     },
+    "/api/v1/users/me/earnings": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "The signed-in reviewer's own earnings history",
+        "description": "Earnings for the caller and nobody else.\n\nNo user id in the path, for the same reason as the dashboard: an endpoint\nthat accepts one is an endpoint someone will eventually pass a different\none to.",
+        "operationId": "my_earnings_api_v1_users_me_earnings_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EarningsHistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/questions": {
       "post": {
         "tags": [
@@ -6294,6 +6355,163 @@
           "honesty_fund"
         ],
         "title": "EarnEligibleStatus"
+      },
+      "EarningBreakdownOut": {
+        "properties": {
+          "gross_amount": {
+            "type": "string",
+            "title": "Gross Amount"
+          },
+          "commission_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission Rate"
+          },
+          "platform_share": {
+            "type": "string",
+            "title": "Platform Share"
+          },
+          "honesty_fund_share": {
+            "type": "string",
+            "title": "Honesty Fund Share"
+          },
+          "reviewer_share": {
+            "type": "string",
+            "title": "Reviewer Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gross_amount",
+          "commission_rate",
+          "platform_share",
+          "honesty_fund_share",
+          "reviewer_share"
+        ],
+        "title": "EarningBreakdownOut",
+        "description": "What the History frame reveals when a row is expanded."
+      },
+      "EarningRowOut": {
+        "properties": {
+          "commission_id": {
+            "type": "string",
+            "title": "Commission Id"
+          },
+          "occurred_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurred On"
+          },
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Id"
+          },
+          "review_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Title"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/EarningBreakdownOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "commission_id",
+          "occurred_on",
+          "review_id",
+          "review_title",
+          "product_name",
+          "photo_url",
+          "amount",
+          "status",
+          "breakdown"
+        ],
+        "title": "EarningRowOut"
+      },
+      "EarningsHistoryOut": {
+        "properties": {
+          "all_time": {
+            "type": "string",
+            "title": "All Time"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/EarningRowOut"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "has_data": {
+            "type": "boolean",
+            "title": "Has Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "all_time",
+          "counts",
+          "rows",
+          "has_data"
+        ],
+        "title": "EarningsHistoryOut"
       },
       "FeedAuthor": {
         "properties": {

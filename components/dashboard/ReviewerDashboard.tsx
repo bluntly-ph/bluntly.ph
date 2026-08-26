@@ -118,16 +118,18 @@ function EarningsHero({ amount }: { amount: string }) {
 }
 
 /**
- * Every action points at something that exists today. The frame implies four
- * destinations; three of them are sections already on this page and one is the
- * reviewer's own profile. A control that goes nowhere is worse than one the
- * design did not ask for.
+ * The four screens the approved flow leads to.
+ *
+ * These were same-page anchors while the screens did not exist. They are their
+ * own frames — Transfer 5762:332, History 5762:472, Reviews 6159:1510,
+ * Insights 5762:752 — and are now their own routes, so browser back/forward and
+ * direct navigation behave as the flow intends.
  */
 const ACTIONS = [
-  { href: "#transfer", label: "Transfer", Icon: PaperPlaneTilt },
-  { href: "#history", label: "History", Icon: ClockCounterClockwise },
-  { href: "/profile", label: "Reviews", Icon: Books },
-  { href: "#insights", label: "Insights", Icon: ChartLineUp },
+  { href: "/dashboard/transfer", label: "Transfer", Icon: PaperPlaneTilt },
+  { href: "/dashboard/history", label: "History", Icon: ClockCounterClockwise },
+  { href: "/dashboard/reviews", label: "Reviews", Icon: Books },
+  { href: "/dashboard/insights", label: "Insights", Icon: ChartLineUp },
 ];
 
 /** The floating white bar that straddles the curve. */
