@@ -231,7 +231,9 @@ def test_a_return_seen_twice_reverses_only_once(db, moderator, order_id):
 # --- the owner's post-payout policy ---------------------------------------
 
 @requires_db
-def test_a_post_payout_return_absorbs_the_shortfall_instead_of_creating_debt(db, moderator, order_id):
+def test_a_post_payout_return_absorbs_the_shortfall_instead_of_creating_debt(
+    db, moderator, order_id
+):
     """Owner decision: Bluntly absorbs an unrecoverable return rather than
     pushing a user into debt for a buyer's return they had no part in. The
     wallet must never go negative, and the shortfall must be recorded rather
