@@ -30,7 +30,7 @@ export default async function TransferPage() {
 
   return (
     <DashboardScreen
-      heroHeight={510}
+      heroHeight={401}
       hero={
         <HeroAmount label="Est. Comm" amount={peso(wallet)}>
           {/* Disabled rather than hidden when under the threshold: the frame

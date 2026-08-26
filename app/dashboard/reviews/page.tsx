@@ -28,7 +28,7 @@ export default async function DashboardReviewsPage() {
 
   return (
     <DashboardScreen
-      heroHeight={417}
+      heroHeight={118}
       hero={
         <div className="px-6 pb-16 pt-10 text-center">
           <p className="text-[13px] font-medium text-white/80">Your reviews</p>

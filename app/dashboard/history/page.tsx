@@ -12,6 +12,7 @@ import {
   getEarnings,
   peso,
   pesoWhole,
+  sumPeso,
   type EarningRow,
 } from "@/lib/dashboard";
 
@@ -41,7 +42,7 @@ export default async function HistoryPage({
 
   return (
     <DashboardScreen
-      heroHeight={300}
+      heroHeight={208}
       hero={
         <div className="px-4 pb-14 pt-2">
           {/* The frame's floating card, straddling the gradient. */}
@@ -194,14 +195,26 @@ function EarningItem({ row }: { row: EarningRow }) {
               </dd>
             </div>
             <div>
-              <dt className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                Earned
-                <Info size={12} weight="regular" />
-              </dt>
+              <dt className="text-[11px] text-[var(--text-muted)]">Earned</dt>
               <dd className="text-[13px] font-medium text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
-                {pesoWhole(row.breakdown.gross_amount)}
+                {/* The commission, not the price: the three shares added up.
+                    Rendering gross here would print Price twice. */}
+                {pesoWhole(
+                  sumPeso(
+                    row.breakdown.platform_share,
+                    row.breakdown.honesty_fund_share,
+                    row.breakdown.reviewer_share,
+                  ),
+                )}
               </dd>
             </div>
+            {/* The frame parks the info affordance at the right edge of the row. */}
+            <Info
+              size={14}
+              weight="regular"
+              aria-hidden
+              className="ml-auto mt-1 shrink-0 text-[var(--text-muted)]"
+            />
           </dl>
 
           <div className="mt-3 flex flex-wrap gap-x-8 gap-y-3 border-t border-[var(--border-subtle)] pt-3">

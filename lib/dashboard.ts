@@ -152,13 +152,41 @@ export type EarningsHistory = {
  * paid, which is exactly the distinction a reviewer needs and exactly what
  * "Completed" would blur.
  */
+/**
+ * The tabs frame 5762:472 actually draws: All / Pending / To earn / Returned.
+ *
+ * `paid` is a real settlement state and the API serves it, but the frame has no
+ * tab for it, so it is reachable by URL rather than shown as a fifth tab that
+ * the design does not have. Paid rows still appear under All.
+ */
 export const EARNING_TABS = [
   { key: "all", label: "All" },
   { key: "pending", label: "Pending" },
   { key: "to_earn", label: "To earn" },
-  { key: "paid", label: "Paid" },
   { key: "returned", label: "Returned" },
 ] as const;
+
+/** Every filter the API accepts, including the one with no tab. */
+export const EARNING_FILTERS = ["all", "pending", "to_earn", "paid", "returned"];
+
+/**
+ * Sum peso strings exactly, in centavos.
+ *
+ * The shares are rounded independently when they are written, so adding them as
+ * floats can land a centavo out on a screen whose entire job is showing a
+ * reviewer where their money went.
+ */
+export function sumPeso(...values: (string | null | undefined)[]): string {
+  const centavos = values.reduce((total, v) => {
+    if (!v) return total;
+    const [whole, frac = ""] = String(v).replace(/[^0-9.-]/g, "").split(".");
+    const sign = whole.trim().startsWith("-") ? -1 : 1;
+    const w = Math.abs(parseInt(whole, 10) || 0);
+    const c = parseInt((frac + "00").slice(0, 2), 10) || 0;
+    return total + sign * (w * 100 + c);
+  }, 0);
+  return (centavos / 100).toFixed(2);
+}
 
 /** Badge tone per status. Each badge also carries its own words. */
 export const EARNING_TONE: Record<string, string> = {
@@ -180,7 +208,7 @@ export async function getEarnings(
 ): Promise<EarningsHistory | null> {
   const token = await getSessionToken();
   if (!token) return null;
-  const key = EARNING_TABS.some((t) => t.key === status) ? status : "all";
+  const key = EARNING_FILTERS.includes(status) ? status : "all";
   return apiFetch<EarningsHistory>(
     `/api/v1/users/me/earnings?status=${key}`, { token },
   ).catch(() => null);
