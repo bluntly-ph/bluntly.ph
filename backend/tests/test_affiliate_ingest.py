@@ -9,13 +9,15 @@ to notice.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
 
 from app.models.commission import Commission
-from app.models.enums import Platform, Verdict
+from app.models.contract import ReviewContract
+from app.models.enums import ContractStatus, Platform, Verdict
 from app.models.postback import AffiliatePostback
 from app.models.product import Product
 from app.models.review import ReferralLink, Review
@@ -56,6 +58,20 @@ def attributed_review(db) -> tuple[Review, str, object]:
     sub_id = f"blt_{uuid.uuid4().hex[:10]}"
     db.add(ReferralLink(review_id=review.id, platform=Platform.shopee,
                         url="https://shopee.ph/x", sub_id=sub_id, review_version=1))
+
+    # An ACTIVE contract, because without one the reviewer's share is 0 bps and
+    # the platform takes it — `contract_service.reviewer_bps_for_review` is
+    # explicit about that, and it is correct behaviour, not a quirk. A review
+    # earning affiliate commission is by definition one under contract, so a
+    # fixture without one is not the situation these tests mean to describe:
+    # they would assert reversal and absorption mechanics against a reviewer
+    # share of zero, which proves nothing.
+    started = datetime.now(UTC)
+    db.add(ReviewContract(
+        review_id=review.id, reviewer_id=author.id,
+        status=ContractStatus.active, started_at=started,
+        term_months=12, expires_at=started + timedelta(days=365),
+    ))
     db.flush()
     return review, sub_id, author
 
