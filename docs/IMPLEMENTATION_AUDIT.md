@@ -121,6 +121,88 @@ So the chrome is reproduced exactly and the content is the reviewer's existing
 data in the design system, because there is no composition in Figma to build
 to. If one is added later, this screen should be rebuilt to it.
 
+### Measured against the frames (2026-08-27)
+
+The frames were measured rather than read, by rendering each one and scanning
+for the white sheet's top edge. **Scan at the left margin, not the centre**: on
+Transfer, History and Insights the centre column hits a floating white card and
+reports the sheet ~90px higher than it is.
+
+Four defects came out of it, none of which needed a browser:
+
+| Defect | Was | Now |
+|---|---|---|
+| History `Earned` rendered the price | `gross_amount` twice per row | sum of the three shares |
+| Transfer hero | 510 | 401 (sheet 369px below the nav) |
+| History hero | 300 | 208 (sheet 176px) |
+| Reviews hero | 417 | 118 (sheet 86px — the hero *is* the nav row) |
+| Insights chrome | shared back-arrow nav | `SiteHeader`, per the frame |
+| History tabs | five | the four the frame draws |
+
+The money one is the one that mattered. The expanded History row rendered
+`gross_amount` for both Price and Earned, so every row printed its price twice.
+The frame reads Price ₱1000 / Comm. % 10% / **Earned ₱100** — Earned is the
+commission, the three shares added up. `sumPeso` sums in centavos rather than
+as floats, because the shares are rounded independently when they are written.
+
+Insights was not a gap so much as the wrong screen: it had been built on the
+shared dashboard chrome, and frame 5762:752 does not use it. It uses the
+ordinary site header — wordmark, search, avatar — over a shallow gradient, with
+the Streak block and chart directly on white, no cards and no stats strip.
+
+Two claims that had rested on Figma metadata were re-checked against rendered
+pixels and both held: frame 6159:1510 really is chrome and nothing else, and
+`/moderate`'s four Queue Breakdown labels (Earn Eligible, Flagged, New Product,
+First Submission) are emitted by the backend exactly as the frame draws them.
+
+**This is not visual acceptance.** Geometry measured off a design file and
+source read in a repository are not a rendered page. `1:1` is not claimed for
+any screen until the authenticated pass below has run.
+
+### CI closure — run 33007431944, all four jobs green
+
+| Job | Result |
+|---|---|
+| Production guard | success (18 passed) |
+| Backend (no database) | success (727 passed, 178 skipped) |
+| Frontend | success |
+| Backend (isolated database) | success — **905 passed, 0 failed, 2:06:11** |
+
+The isolated-database job was previously reported as a permanent blocker. It is
+not: it takes **126 minutes**, so the original 75-minute timeout and the later
+120-minute one both cut it off mid-run. At 150 it completes.
+
+**That leaves only 24 minutes of headroom, and it will run out.** The job grows
+with the suite. When it next times out the answer is not another arbitrary bump
+— it is to shard the job or cut the per-test database setup cost, and the
+measured 126 minutes is the baseline to compare any such work against.
+
+Two earlier runs of this same code (33004509578, 33006482249) show `cancelled`
+and were misread as infrastructure trouble. They were not: the workflow sets
+`cancel-in-progress`, and each was killed by the next push — including pushes of
+mine. A run of a two-hour job only survives if nothing lands on the branch
+while it works.
+
+### Authenticated visual acceptance — still outstanding
+
+`.visual-acceptance.mjs` captures all six screens at 1440/1280/1024/768/393 and
+refuses to run against an expired session, so it cannot quietly photograph a
+login page. It needs a session, and the session needs one human OTP entry:
+`.auth-capture.mjs` opens a real browser, fills the address, requests the code,
+and waits for a person to type it. Nothing mints a token or weakens a guard.
+
+*(That script had a bug worth recording: it filled the email field and then
+waited for a code it had never asked for, because it never clicked "Send code".
+Two capture attempts were reported as the account holder being unavailable when
+no email had been sent at all. Fixed.)*
+
+### The four dashboard frames are 390px
+
+All four are drawn at 390 wide; only `/moderate` is drawn at 1280. Comparing a
+390px design at 1440 is a category error, which is what `max-w-[430px]` on the
+screen container exists to resolve — the frame's composition is the mobile one,
+and the wide viewports get the same composition centred, not a redesign.
+
 ### Insights — `5762:752`, and the streak question
 
 Elements split before anything was written:
