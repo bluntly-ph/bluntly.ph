@@ -63,58 +63,90 @@ would close it.
 
 ---
 
-## Finding (2026-08-27): the approved dashboard is a five-frame flow
+## The reviewer dashboard flow (2026-08-27)
 
-Found while preparing the authenticated acceptance pass, by reading Figma rather
-than the browser — so it stands regardless of the browser channel.
+The five approved frames are a flow, and `/dashboard` was only its entry screen.
+**Correcting an earlier misclassification of mine:** I recorded all four
+remaining frames as new product scope. That was wrong. Wallet, the ₱300
+threshold, payout requests, payment history and review/profile are already
+signed requirements, so these frames are Figma presentations of existing
+functionality. Only the streak is a new question.
 
-`/dashboard` was built against frame `5572:7130`. That frame is the **entry
-screen of a flow**, and its floating action bar leads to four more approved
-frames that are separate screens, not sections of it:
-
-| Frame | Screen | What it contains | Implemented? |
+| Frame | Screen | Classification | State |
 |---|---|---|---|
-| `5572:7130` | Reviewer Dashboard | hero, action bar, Est. Comm card, ranked reviews | **Yes** |
-| `5762:332` | Transfer | hero with balance and a **Request Withdrawal** button | No — the action links to the wallet/payout section on the same page |
-| `5762:472` | History | payout history | No — links to the payout history section |
-| `6159:1510` | Reviews | the reviewer's own reviews | No — links to `/profile` |
-| `5762:752` | Insights | a **Streak** card (flame, "6 days", dot-grid month calendar) and a dated-axis chart | No |
+| `5572:7130` | Reviewer Dashboard | original functionality / Figma implementation | Built |
+| `5762:332` | Transfer | original functionality / Figma implementation | **Built** — real wallet, ₱300 threshold, existing payout APIs |
+| `5762:472` | History | original functionality / Figma implementation | **Built** — canonical ledger, 40/30/30 split |
+| `6159:1510` | Reviews | original functionality / Figma implementation | **Built** — see the frame note below |
+| `5762:752` | Insights | partial original analytics UI | **Built except the streak** |
+| — | Reading-streak telemetry | `OWNER DECISION` | Not built |
 
-**Every destination reaches working functionality** — the action bar has no dead
-controls — but four of the five approved screens are not built as screens, so
-the dashboard *flow* is not 1:1 even though its entry screen is.
+### Transfer — `5762:332`
 
-Two of these are ordinary work. Two are not:
+Renders the real wallet, never the frame's ₱328.04 sample. Below ₱300 the
+`Request Withdrawal` control is disabled with the shortfall stated, rather than
+hidden — the frame has the control, and a reviewer needs to see that withdrawal
+exists and why it is not open yet. The frame's sheet below the button is empty,
+so it carries the threshold progress and payout account: the functionality the
+button needs in order to be honest. Live PayPal remains `BLOCKED EXTERNAL`; the
+screen is complete up to that provider boundary.
 
-* **Insights** shows a reading/earning **streak** — six days, a month-grid of
-  filled dots. Nothing in the platform tracks a streak. Building the frame means
-  building a feature and the telemetry under it, which is the same class of
-  question as *Avg. Read time*, not a fidelity fix.
-* **Transfer** shows a `Request Withdrawal` action against a balance. The
-  underlying payout flow exists and is verified, but it is presented as a
-  section rather than as this screen, and payouts remain
-  `BLOCKED EXTERNAL` on PayPal sandbox credentials.
+### History — `5762:472`
 
-### Classification
+The best-specified frame in the set, and it maps onto the canonical ledger
+without translation: Price, Comm. %, and the split as Bluntly / Honesty Fund /
+Yours are `gross_amount`, the recorded provider rate, and the three share
+columns.
 
-`MAJOR_FIDELITY_GAP` for the dashboard **flow**; the entry screen itself remains
-built-to-frame.
+Its tabs are the reviewer-facing reading of the canonical pair, and the mapping
+is written down rather than inferred:
 
-### Why this is not being silently "fixed"
+| Tab | Means |
+|---|---|
+| Pending | the marketplace has not finalised the sale |
+| To earn | recognised and owed, **not** yet paid |
+| Paid | settled into a payout |
+| Returned | reversed |
 
-The instruction is to fix fidelity gaps and not to redesign Figma. Building four
-new screens — one of which requires a streak-tracking feature that does not
-exist — is new product scope rather than a fidelity correction, and doing it
-unasked would be exactly the kind of scope expansion this project has been
-careful to avoid. It is surfaced here as an **owner decision**:
+`To earn` is deliberately not "Completed". A completed sale that has not been
+paid is exactly the distinction a reviewer needs, and "Completed" hides it. A
+return that lands *after* payout reads as `Returned`, not `Paid`. Reversal
+entries are never listed as rows of their own.
 
-1. build the four screens (and rule on streak telemetry), or
-2. confirm the current single-page composition supersedes the flow for this
-   release, in which case it becomes an approved deviation rather than a gap.
+### Reviews — `6159:1510`
 
-Until one of those, `/dashboard` is recorded as **built to its entry frame with
-the flow outstanding**, and no 1:1 claim is made for the flow.
+**The frame specifies chrome and nothing else.** Its only children are the hero
+rectangle, the white sheet and the nav bar — no list, no cards, no empty state.
+So the chrome is reproduced exactly and the content is the reviewer's existing
+data in the design system, because there is no composition in Figma to build
+to. If one is added later, this screen should be rebuilt to it.
 
+### Insights — `5762:752`, and the streak question
+
+Elements split before anything was written:
+
+| Element | Class | State |
+|---|---|---|
+| Dated area chart | `EXISTING_DATA` | Built — daily views, labelled explicitly |
+| Views, people helped, reviews, earnings | `EXISTING_DATA` | Built |
+| Streak: flame, "6 days", month dot-grid | `REQUIRES_NEW_BEHAVIORAL_TELEMETRY` *or* `DERIVABLE_WITHOUT_TRACKING` — **ambiguous** | Not built |
+
+The chart is labelled "Daily views" because the frame's series is unlabelled,
+and an unlabelled money-or-traffic curve on an earnings product gets misread.
+
+**The open question, and the only thing blocking this screen:**
+
+> Does the Insights streak count days the reviewer **contributed** (published a
+> review, question or answer), or days they **read/browsed** Bluntly?
+
+It matters because the two are different products. A contribution streak is
+derivable today from data already persisted and needs no tracking at all. A
+reading streak requires reader-session telemetry that does not exist and would
+need a privacy ruling, in the same class as *Avg. Read time*.
+
+Picking the convenient reading would be silently redefining a designed feature
+to make it implementable, so the card ships saying it is not available yet and
+why. It is **not** populated with placeholder days.
 
 ---
 
