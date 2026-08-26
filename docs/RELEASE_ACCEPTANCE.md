@@ -127,6 +127,33 @@ was untouched, the assertion was a proximity heuristic — but nothing else was
 watching, and before CI existed that would have landed silently. Fixed in
 `ecf7efa`, which asserts the structure from the parse tree instead.
 
+### ⚠️ The isolated-database job — timeout raised (2026-08-26)
+
+The job began failing on a **step timeout**, not on an assertion: three
+consecutive runs ended with *"The action 'Migrate, test, and verify milestones'
+has timed out after 75 minutes"*, while the last run that finished at all
+reported 831 passed against the same code.
+
+Every test runs against the test database in `ap-southeast-1` from a GitHub
+runner, so ~831 tests cost roughly 4.9 seconds each in almost pure network
+latency — about 68–75 minutes. The old 75-minute limit left no margin, and one
+slow day was enough to fail the build.
+
+**`timeout-minutes` is now 120**, bounded rather than removed so a genuine hang
+is still caught. What was deliberately NOT done: no DB test was deleted, no
+Postgres semantics were mocked, no money-critical test was skipped, no
+assertion was weakened, and the session pooler — which caps near four
+concurrent clients — was not over-subscribed with `pytest-xdist`.
+
+Avoidable slowness was fixed instead and stays fixed:
+
+* the real-export parser tests no longer make 652 round trips to assert three
+  properties that are pure;
+* nine registration round trips collapsed onto one module-scoped moderator;
+* two parametrised HTTP tests loop instead of re-registering per case.
+
+---
+
 ### ✅ The isolated-database job — GREEN (2026-08-21)
 
 All three secrets configured. `bootstrap_test_env` migrates `bluntly-ph-test`

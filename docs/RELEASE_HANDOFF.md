@@ -699,11 +699,7 @@ Each is a place the implementation intentionally differs from its Figma frame.
 | Authenticated visual verification of `/dashboard` and `/moderate` **in situ** | `BLOCKED AUTH` | A moderator browser session. The Claude-in-Chrome channel is not connected, and engineering will not mint a privileged production token. Both surfaces were verified component-by-component against fixture data at 390/768/1280/1440 with zero console errors, and their APIs verified against production data — but neither has been seen rendered end-to-end behind a real login. |
 | `Avg. Read time` | `OWNER DECISION REQUIRED` | See the deviation above. |
 | PayPal payouts | `BLOCKED EXTERNAL` | Unchanged — sandbox credentials absent. |
-| **CI `Backend (isolated database)` exceeds its 75-minute step timeout** | `BLOCKED EXTERNAL` | A workflow change. The `Backend (isolated database)` step has a 75-minute ceiling and the suite took 67:53 on its last completed run — 831 tests against a database in Singapore from a GitHub runner, ~4.9s each, almost all network latency. It tipped over the ceiling once this sprint. Avoidable round trips were removed (652 in one test alone) to buy headroom back, but the structural fixes — `pytest-xdist`, or a database closer to the runner — both need an edit under `.github/workflows`, which this credential cannot push. **Anyone with the `workflow` scope can fix it in one line** — raise `timeout-minutes` on that step.
-
-**Current state, stated precisely.** Three of the four CI jobs pass on every run: `Frontend`, `Backend (no database)` and `Production guard`. The fourth does not fail on an assertion — it is killed by the step timeout. Its last run that finished reported **831 passed, 9 failed**; all nine were one defect (the importer setting a column the table does not have), which is fixed and covered by two database-free guards, each verified by reintroducing its bug.
-
-Parallelising was considered and rejected rather than attempted: `pytest-xdist` is not installed, and the workflow's own comment records that the session-pooler credential caps at about four concurrent clients, where over-subscribing "produces setup errors late in the run that look like unrelated test failures". Introducing that failure mode into the money path, on a suite that takes 75 minutes per attempt to evaluate, is a worse outcome than a red badge with a known cause. |
+| ~~CI database job timeout~~ | ✅ **RESOLVED 2026-08-26** | Was reported as blocked on a missing `workflow` OAuth scope. That was **wrong** — the scope was granted on 2026-08-21 and `gh auth status` lists it. The step timeout is raised from 75 to 120 minutes, bounded rather than removed so a genuine hang is still caught. No test coverage was deleted, no Postgres semantics mocked, and the session pooler is not over-subscribed. |
 
 ---
 
@@ -848,3 +844,73 @@ URL is `https://www.bluntly.ph`.
 
 **Not for QA:** FR-4 (descoped), FR-8 layer 3 (no provider procured), payout
 execution (no sandbox credentials).
+
+### 9. Reviewer dashboard — Figma fidelity
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Precondition:** a signed-in contributor account.
+- **Steps:** open `/dashboard` at 1440, 1280, 1024, 768 and 393 and compare against Figma frame `5572:7130`.
+- **Expected:** orange hero with the back arrow and Contributor pill; the floating four-item action bar straddling the curve; the Est. Comm card with three stats and an orange area chart; the medal-ranked review list with green sparklines; "See more…". Below `md` the frame's own nav is the only header — `SiteHeader` must not also appear.
+- **Known deviation (approved):** "Avg. Read time" reads `—` / "Not measured yet". Nothing measures read time; see *Documented deviations*.
+- **Not yet verified by engineering:** the authenticated page has not been rendered end-to-end behind a real login (browser channel unavailable). Components and API were verified separately. **This retest is the first end-to-end check.**
+
+### 10. Administrative console — Figma fidelity
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Precondition:** a moderator account.
+- **Steps:** open `/moderate` at 1280 and compare against Figma frame `5017:1738`; then check 768 and 393.
+- **Expected:** a 220px sidebar with MAIN / MANAGE / FINANCE / SYSTEM groups and the user card at its foot; the "Overview" pill; the urgent pill with warning and bell; four KPI cards; the tinted recent-activity feed; the queue-breakdown bars. Below `lg` the sidebar gives way to the site header.
+- **Known deviation (approved):** seven navigation items have no page behind them and are shown in position, marked "Soon", not focusable.
+- **Same caveat as #9:** not yet rendered behind a real login by engineering.
+
+### 11. Request Distribution — Count and RPS
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Precondition:** a moderator account.
+- **Steps:** open `/moderate`, find *Request distribution*, toggle **Count** ↔ **RPS**, and cycle 24H / 7D / 30D / 90D.
+- **Expected:** Count shows total page requests for the window. RPS shows a per-second rate and states the span it is averaged over ("over 3h 20m of data") — it must never imply the full nominal window. Ranked locations are ordered by request count. A location shows its city and country; the serving edge appears separately as "served via SIN" and must never be presented as the reader's city.
+- **Honest empty state:** collection began when this shipped, so older windows may legitimately show *"No request location data for this period yet."* That is correct, not a defect.
+
+### 12. Request Distribution — accessibility
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Steps:** with the keyboard only, move to the Count/RPS group and the range group, change both, then activate **Expand** and press **Escape**.
+- **Expected:** every control is reachable and operable by keyboard; the selected metric and range are announced (`aria-pressed`), not signalled by colour alone; the expanded view traps focus, closes on Escape, and returns focus to the control that opened it.
+- **The map is never the only representation:** every figure in the map appears as text in the ranked list beside it, and each marker states its own value.
+
+### 13. Affiliate — overlapping imports must not double-credit
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Precondition:** a moderator account; two provider exports whose date ranges overlap on at least one order.
+- **Steps:** preview then import the first file; preview then import the second.
+- **Expected:** the second import reports the shared orders as **unchanged**, creates no second commission, and moves no money. Preview reports three separate axes — lifecycle (Pending/Completed/Cancelled/Returned), provenance (created/updated/unchanged) and ledger effect — each summing to the row count.
+- **Why it matters:** the previous idempotency key was the filename and line number, so the same order in a *different* export was credited twice.
+
+### 14. Affiliate — a return reverses a recognised commission
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Steps:** import an export where an order is `Completed`; confirm the reviewer's wallet rises. Import a later export where the same order is returned (Shopee reports this as a refunded item; Lazada as `Returned`).
+- **Expected:** a **new opposing ledger entry** appears pointing at the original — the original is never edited — and the wallet falls by the reviewer's share. Importing the same return again reverses nothing further.
+
+### 15. Affiliate — a post-payout return is absorbed, never charged back
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Steps:** recognise a commission, pay it out so the wallet no longer holds it, then import the return.
+- **Expected:** the wallet **never goes negative** and no debt is created for the reviewer. The unrecovered amount is recorded on the transaction and shown on the admin console's affiliate ledger as *Absorbed*.
+- **Owner policy:** provider finality before withdrawable; pre-payout return reverses; post-payout return is absorbed by the platform.
+
+### 16. Review loading state — no stray orange
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Steps:** open a review on a phone-width viewport and on a desktop one, watching the moment before content arrives (throttle the network if needed).
+- **Expected:** at phone width the orange bar is the review's own chrome and is correct. At `md` and above there must be **no orange band** — the placeholder is neutral and holds the desktop layout.
+- **Engineering verification:** rendered at 390 / 768 / 1440; orange elements present only at 390.
+
+### 17. Images — they must actually render
+
+- **Status:** `ENGINEERING COMPLETE` → `READY FOR QA RETEST`.
+- **Steps:** open `/`, `/feed`, `/search` and a review, scrolling so every image enters view. Try at least one non-Chromium browser.
+- **Expected:** every photograph renders — no broken icons, no empty boxes — with no console errors and no failed image requests. Thumbnails must be sharp, not upscaled.
+- **Acceptance rule:** *a performance score from a page with missing assets is not evidence.* Confirm the images loaded **before** recording any Lighthouse number. This is not theoretical: a previous optimisation scored well partly because the images were 404ing, and production imagery was broken for about twenty minutes.
+- **Automated equivalent:** `PLAYWRIGHT_BASE_URL=https://www.bluntly.ph npx playwright test e2e/images.spec.ts` — 20 assertions across five browsers.
+
