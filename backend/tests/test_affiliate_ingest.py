@@ -314,7 +314,11 @@ def test_a_sale_attributable_later_is_still_paid(db, moderator, order_id):
     import evaluates completed -> completed and gets `none`. Without a retry
     the money is orphaned forever, even once the referral link exists — and
     nothing would ever surface that, because the import reports success."""
-    raw = shopee_csv(order=order_id, sub_id="blt_attached_later", commission="100.00")
+    # Unique per run: `referral_links` carries a partial unique index on the
+    # active sub_id, and this test commits, so a hardcoded handle collides with
+    # its own previous run.
+    late_sub_id = f"blt_late_{uuid.uuid4().hex[:10]}"
+    raw = shopee_csv(order=order_id, sub_id=late_sub_id, commission="100.00")
     first = affiliate_ingest.apply(db, moderator.id, "orphan.csv", raw)
     assert first.unattributed == 1 and first.recognised == 0
 
@@ -329,7 +333,7 @@ def test_a_sale_attributable_later_is_still_paid(db, moderator, order_id):
     db.add(review)
     db.flush()
     db.add(ReferralLink(review_id=review.id, platform=Platform.shopee,
-                        url="https://shopee.ph/x", sub_id="blt_attached_later",
+                        url="https://shopee.ph/x", sub_id=late_sub_id,
                         review_version=1))
     db.commit()
 

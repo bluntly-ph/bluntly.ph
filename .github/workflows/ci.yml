@@ -182,9 +182,17 @@ jobs:
         # over-subscribing the session pooler (which caps near four clients and
         # produces setup errors that masquerade as unrelated test failures).
         #
-        # 120 is deliberately bounded rather than removed. A genuine hang must
-        # still be caught; this only has to be larger than a slow honest run.
-        timeout-minutes: 120
+        # Raised again to 150 on 2026-08-26 after measuring. The first run to
+        # complete under the 120 limit took 1:52:51 — six percent of headroom,
+        # which is the same fragility that caused the original failures, just
+        # further along. Observed honest runs are 68-113 minutes depending on
+        # how the remote database is behaving, so 150 gives roughly a quarter
+        # of margin.
+        #
+        # Still bounded rather than removed: a genuine hang must be caught.
+        # This only has to be larger than a slow honest run, and 150 is set
+        # from measurement rather than taste.
+        timeout-minutes: 150
         run: python -m scripts.bootstrap_test_env
 
   frontend:
