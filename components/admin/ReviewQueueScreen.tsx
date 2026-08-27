@@ -198,7 +198,7 @@ export function ReviewQueueScreen({
           </div>
 
           {/* Table + detail. Each scrolls in its own pane; the shell does not. */}
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
             <section
               aria-labelledby="queue-table-heading"
               className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
@@ -208,10 +208,10 @@ export function ReviewQueueScreen({
               </h2>
 
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[42rem] border-collapse text-left">
+                <table className="w-full min-w-[36rem] border-collapse text-left">
                   <thead className="sticky top-0 z-10 bg-[var(--surface-app)]">
                     <tr className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      <th className="px-4 py-3 font-medium">ID</th>
+                      <th className="px-3 py-3 font-medium">ID</th>
                       <th className="px-4 py-3 font-medium">Review</th>
                       <th className="px-4 py-3 font-medium">Author</th>
                       <th className="px-4 py-3 font-medium">Score</th>
@@ -243,7 +243,7 @@ export function ReviewQueueScreen({
                             <td className="px-4 py-3 font-mono text-[12px] text-[var(--text-secondary)]">
                               {item.review.review_id ?? item.review.id.slice(0, 8)}
                             </td>
-                            <td className="max-w-[16rem] truncate px-4 py-3 text-[var(--text-primary)]">
+                            <td className="max-w-[13rem] truncate px-3 py-3 text-[var(--text-primary)]">
                               {item.review.title}
                             </td>
                             <td className="px-4 py-3 text-[var(--text-secondary)]">
