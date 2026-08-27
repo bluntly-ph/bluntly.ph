@@ -64,8 +64,18 @@ export function AdminShell({
           ) : null}
         </header>
 
-        {/* The only scrolling region on the page. */}
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6">{children}</main>
+        {/* The only scrolling region on the page.
+            `relative` is load-bearing, not decoration. Tailwind's `sr-only` is
+            position:absolute, so a visually-hidden heading with no positioned
+            ancestor resolves its containing block to the document, escapes this
+            box's overflow:hidden entirely, and extends the page. That is
+            precisely what it did: at 1024 one sr-only h2 landed at y=1243 and
+            the whole console scrolled 379px, taking the rail with it. Making
+            this the containing block clips such descendants here, where they
+            belong. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-6">
+          {children}
+        </main>
       </div>
     </div>
   );

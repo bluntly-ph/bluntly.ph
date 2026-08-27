@@ -59,8 +59,13 @@ export default async function ProductsPage() {
               products.map((p) => (
                 <tr key={p.id} className="border-t border-[var(--border-subtle)] text-[13px]">
                   <td className="px-4 py-2.5">
+                    {/* There is no /products/[id] route in this build, and
+                        linking to one made Next prefetch a 404 for every row.
+                        Search is the real destination: it finds the reviews
+                        written about the product, which is what a moderator is
+                        actually looking for. */}
                     <Link
-                      href={`/products/${p.id}`}
+                      href={`/search?q=${encodeURIComponent(p.canonical_name ?? "")}`}
                       className="font-medium text-[var(--text-primary)] underline hover:text-[var(--accent-primary)]"
                     >
                       {p.canonical_name ?? "Unnamed product"}
