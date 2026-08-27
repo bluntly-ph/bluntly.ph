@@ -870,6 +870,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The moderation audit log, newest first
+         * @description Every recorded moderator action, including the ones the Overview's
+         *     five-item feed deliberately leaves out.
+         */
+        get: operations["activity_log_api_v1_admin_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Contributors, with trust stage and published counts
+         * @description Deliberately carries no email, no address and no session data: a
+         *     moderator managing contributors needs standing and output, not identity.
+         */
+        get: operations["reviewers_api_v1_admin_reviewers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/traffic": {
         parameters: {
             query?: never;
@@ -1643,6 +1685,34 @@ export interface components {
             action: string;
             /** Actor */
             actor: string | null;
+            /** Target Ref */
+            target_ref: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+        };
+        /** ActivityPage */
+        ActivityPage: {
+            /** Rows */
+            rows: components["schemas"]["ActivityRow"][];
+            /** Total */
+            total: number;
+        };
+        /** ActivityRow */
+        ActivityRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string | null;
+            /** Target Type */
+            target_type: string | null;
             /** Target Ref */
             target_ref: string | null;
             /**
@@ -3396,6 +3466,38 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ReviewerPage */
+        ReviewerPage: {
+            /** Rows */
+            rows: components["schemas"]["ReviewerRow"][];
+            /** Total */
+            total: number;
+        };
+        /** ReviewerRow */
+        ReviewerRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string | null;
+            /** Display Name */
+            display_name: string | null;
+            /** Role */
+            role: string;
+            /** Trust Stage */
+            trust_stage: number;
+            /** Reputation Score */
+            reputation_score: string;
+            /** Published Reviews */
+            published_reviews: number;
+            /**
+             * Joined
+             * Format: date-time
+             */
+            joined: string;
         };
         /**
          * RoleUpdate
@@ -5381,6 +5483,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminOverviewOut"];
+                };
+            };
+        };
+    };
+    activity_log_api_v1_admin_activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reviewers_api_v1_admin_reviewers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

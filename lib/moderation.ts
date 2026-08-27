@@ -17,6 +17,13 @@ export type QueueItem = {
      *  caller and returns a short-lived signed URL. */
     has_receipt: boolean;
     created_at: string;
+    /** Already served by ReviewOut; the queue screen's Score column and the
+     *  detail panel read these rather than inventing a ranking. */
+    review_id: string | null;
+    photo_url: string | null;
+    wilson_score: string;
+    helpful_votes: number;
+    unhelpful_votes: number;
   };
   product: {
     id: string;
@@ -147,4 +154,46 @@ export async function getAdminOverview(): Promise<AdminOverviewData | null> {
   if (!token) return null;
   return apiFetch<AdminOverviewData>("/api/v1/admin/analytics/overview", { token })
     .catch(() => null);
+}
+
+/** One row of the moderation audit log (GET /admin/activity). */
+export type ActivityRow = {
+  id: string;
+  action: string;
+  actor: string | null;
+  target_type: string | null;
+  target_ref: string | null;
+  at: string;
+};
+
+/** One contributor (GET /admin/reviewers). Carries no email or session data. */
+export type ReviewerRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  role: string;
+  trust_stage: number;
+  reputation_score: string;
+  published_reviews: number;
+  joined: string;
+};
+
+export async function getActivityLog(
+  limit = 60,
+): Promise<{ rows: ActivityRow[]; total: number } | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  return apiFetch<{ rows: ActivityRow[]; total: number }>(
+    `/api/v1/admin/activity?limit=${limit}`, { token },
+  ).catch(() => null);
+}
+
+export async function getReviewers(
+  limit = 60,
+): Promise<{ rows: ReviewerRow[]; total: number } | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  return apiFetch<{ rows: ReviewerRow[]; total: number }>(
+    `/api/v1/admin/reviewers?limit=${limit}`, { token },
+  ).catch(() => null);
 }

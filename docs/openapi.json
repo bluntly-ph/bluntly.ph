@@ -2702,6 +2702,130 @@
         ]
       }
     },
+    "/api/v1/admin/activity": {
+      "get": {
+        "tags": [
+          "admin: console"
+        ],
+        "summary": "The moderation audit log, newest first",
+        "description": "Every recorded moderator action, including the ones the Overview's\nfive-item feed deliberately leaves out.",
+        "operationId": "activity_log_api_v1_admin_activity_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/reviewers": {
+      "get": {
+        "tags": [
+          "admin: console"
+        ],
+        "summary": "Contributors, with trust stage and published counts",
+        "description": "Deliberately carries no email, no address and no session data: a\nmoderator managing contributors needs standing and output, not identity.",
+        "operationId": "reviewers_api_v1_admin_reviewers_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewerPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/traffic": {
       "post": {
         "tags": [
@@ -5269,6 +5393,88 @@
           "at"
         ],
         "title": "ActivityItemOut"
+      },
+      "ActivityPage": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows",
+          "total"
+        ],
+        "title": "ActivityPage"
+      },
+      "ActivityRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "target_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Ref"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "actor",
+          "target_type",
+          "target_ref",
+          "at"
+        ],
+        "title": "ActivityRow"
       },
       "AdminOverviewOut": {
         "properties": {
@@ -9859,6 +10065,91 @@
           "created_at"
         ],
         "title": "ReviewVersionOut"
+      },
+      "ReviewerPage": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows",
+          "total"
+        ],
+        "title": "ReviewerPage"
+      },
+      "ReviewerRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "trust_stage": {
+            "type": "integer",
+            "title": "Trust Stage"
+          },
+          "reputation_score": {
+            "type": "string",
+            "title": "Reputation Score"
+          },
+          "published_reviews": {
+            "type": "integer",
+            "title": "Published Reviews"
+          },
+          "joined": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Joined"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "trust_stage",
+          "reputation_score",
+          "published_reviews",
+          "joined"
+        ],
+        "title": "ReviewerRow"
       },
       "RoleUpdate": {
         "properties": {

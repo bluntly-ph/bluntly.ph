@@ -982,3 +982,81 @@ per-table JSON in the manifest's order, parents before children.
 **Never run against production:** `reset_and_seed` (no override exists),
 `verify_milestones` (writes fixtures, no cleanup), `pytest`, or `api_smoke`.
 The guards refuse all of them; the guards are not the reason not to.
+
+## Release 86a434a — engineering complete, ready for independent QA retest
+
+POST-RELEASE DOCUMENTATION ONLY. NO APPLICATION CHANGE. RELEASE SHA REMAINS 86a434a.
+
+    Engineering release SHA   86a434a
+    CI run                    33070952642 — all four jobs green
+    Isolated database         953 passed, 0 failed, 2:14:41
+    Backend (no database)     766 passed, 187 skipped
+    Production guard          18 passed
+    Deployed revision         86a434a (deployment 6122453125)
+    Alembic head              0033_review_view_buckets — code-only release
+    Authenticated acceptance  6 screens x 5 viewports, 30/30 clean
+    Public smoke              8/8 clean
+
+Evidence converges on one revision. CI, the deployed application, the visual
+acceptance and the QA handoff all name 86a434a; nothing is combined across
+commits.
+
+### Confirmed root cause — admin Overview production 500
+
+    Caused by a UUID/string boundary mismatch in ActivityItem.target_ref.
+
+`moderation_logs.target_ref` is a UUID column. `ActivityItem` and
+`ActivityItemOut` both declare `str | None`, and Pydantic v2 does not coerce
+UUID to str. The construction sits in the route's return statement, outside
+both service guards, which is why guarding them changed nothing and why local
+reproduction kept passing — every fake used a string, because the dataclass
+said it was one.
+
+### Related latent defect, fixed in the same change
+
+    Reported-review UUIDs were compared against string queue IDs, preventing
+    Flagged / high-priority classification from ever being non-zero.
+
+### Eliminated hypotheses — none contributed
+
+Missing `Decimal` import (the line was introduced by the later fix itself, so
+it cannot explain a 500 that predates it), route shadowing, enum drift,
+schema/column drift, timezone/tzdata, response-model mismatch, function
+timeout, failing SQL, stale deployment, session teardown, platform failure.
+
+### Why it survived 905 green tests
+
+The endpoint had no route-level coverage against a real database. Coverage
+count was the misleading signal.
+
+### Non-blocking engineering follow-up
+
+    COVERAGE_FOLLOWUP  Add an isolated-DB/API regression test inserting a
+                       reported review by UUID and verifying the matching
+                       queued review contributes to Flagged / high-priority
+                       state; unrelated UUIDs must not match; duplicate
+                       reports must not multiply unique flagged reviews.
+                       The identifier mismatch itself is already guarded.
+
+    DEPLOY_PIPELINE    Vercel deploys production on push, before CI finishes.
+                       A documentation-only commit would replace the accepted
+                       revision. Target: push -> CI -> approval -> deploy of
+                       the exact green SHA.
+
+    CI_RUNTIME         Isolated-DB job at 2:14:41 against a 150-minute cap.
+                       ~15 minutes of headroom. Shard or cut per-test setup
+                       when it next times out; do not raise the cap again.
+
+Neither is a product defect and neither is QA work.
+
+### External — unchanged
+
+    PAYPAL_SANDBOX   BLOCKED_EXTERNAL — Zient
+    AVG_READ_TIME    OWNER/PRIVACY DECISION (not the same as an estimated
+                     reading time computed from word count)
+    QA_SIGNOFF       BLOCKED_EXTERNAL — Independent QA
+
+Status: ENGINEERING COMPLETE / DEPLOYED TO AUTHORIZED PRODUCTION DEV/QA
+ENVIRONMENT / READY FOR INDEPENDENT QA RETEST. Never QA PASSED — only the
+independent QA team can close that.
+

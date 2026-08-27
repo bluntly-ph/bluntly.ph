@@ -89,6 +89,14 @@ function relative(iso: string): string {
   return `${days}d ago`;
 }
 
+/** Which queue view each breakdown bar opens. */
+const BAR_HREF: Record<string, string> = {
+  "Earn Eligible": "/moderate/review-queue?priority=low",
+  Flagged: "/moderate/review-queue?priority=high",
+  "New Product": "/moderate/review-queue",
+  "First Submission": "/moderate/review-queue",
+};
+
 export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
   if (!data) {
     return (
@@ -212,10 +220,10 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
           )}
 
           <Link
-            href="/moderate#queue"
+            href="/moderate/activity"
             className="mt-4 inline-block text-[13px] text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
           >
-            See more...
+            See the full activity log
           </Link>
         </section>
 
@@ -239,14 +247,20 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
               const max = Math.max(...data.breakdown.map((b) => b.count), 1);
               return (
                 <div key={bar.label}>
-                  <div className="flex items-baseline justify-between">
-                    <dt className="text-[14px] text-[var(--text-primary)]">
+                  {/* Each bar opens the queue rather than only reporting a
+                      number: the count is the moderator's way in to the work
+                      it describes. */}
+                  <Link
+                    href={BAR_HREF[bar.label] ?? "/moderate/review-queue"}
+                    className="flex items-baseline justify-between rounded-[var(--radius-sm)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+                  >
+                    <dt className="text-[14px] text-[var(--text-primary)] hover:text-[var(--accent-primary)]">
                       {bar.label}
                     </dt>
                     <dd className="text-[14px] font-semibold text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
                       {bar.count}
                     </dd>
-                  </div>
+                  </Link>
                   <div
                     aria-hidden="true"
                     className="mt-1.5 h-2 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--surface-app)]"
