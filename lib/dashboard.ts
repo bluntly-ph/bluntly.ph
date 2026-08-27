@@ -213,3 +213,29 @@ export async function getEarnings(
     `/api/v1/users/me/earnings?status=${key}`, { token },
   ).catch(() => null);
 }
+
+/**
+ * The Insights contribution streak (frame 5762:752).
+ *
+ * Owner decision, 2026-08-27: this counts days the reviewer CONTRIBUTED —
+ * published a review, asked a question, answered one, or submitted a price
+ * observation. It is not an attendance metric, and nothing here tracks reading
+ * or browsing. Every date comes from a timestamp the backend already stores.
+ */
+export type StreakDay = { day: string; contributed: boolean };
+
+export type ContributionStreak = {
+  current_streak: number;
+  last_contribution: string | null;
+  active_today: boolean;
+  total_days: number;
+  calendar_month: string;
+  calendar: StreakDay[];
+};
+
+export async function getStreak(): Promise<ContributionStreak | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  return apiFetch<ContributionStreak>("/api/v1/users/me/streak", { token })
+    .catch(() => null);
+}

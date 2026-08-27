@@ -17,10 +17,14 @@ const STATE = process.argv[2];
 const EMAIL = "bluntly.ph@gmail.com";
 const BASE = "https://www.bluntly.ph";
 
-const browser = await chromium.launch({ headless: false, args: ["--window-size=1440,980"] });
+const browser = await chromium.launch({
+  headless: false,
+  args: ["--window-size=1440,980", "--window-position=40,40"],
+});
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 
+await page.bringToFront();
 await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 60000 });
 await page.waitForTimeout(1500);
 
@@ -47,17 +51,27 @@ console.log("      Send yourself the code, enter it, and finish signing in.");
 console.log("      I am waiting for the app to leave /login.");
 console.log("");
 
+const DEADLINE = Date.now() + 45 * 60 * 1000;
 let ok = false;
-try {
-  await page.waitForFunction(
-    () => !location.pathname.startsWith("/login") && !location.pathname.startsWith("/signup"),
-    null,
-    { timeout: 8 * 60 * 1000, polling: 1000 },
-  );
-  ok = true;
-} catch {
-  console.log("  timed out waiting for sign-in.");
+let lastPath = "";
+await page.bringToFront().catch(() => {});
+
+while (Date.now() < DEADLINE) {
+  let here = "";
+  try {
+    here = new URL(page.url()).pathname;
+  } catch {
+    console.log("  the browser window was closed before sign-in completed.");
+    break;
+  }
+  if (!here.startsWith("/login") && !here.startsWith("/signup")) { ok = true; break; }
+  if (here !== lastPath) {
+    console.log(`  still on ${here}`);
+    lastPath = here;
+  }
+  await page.waitForTimeout(3000);
 }
+if (!ok && Date.now() >= DEADLINE) console.log("  timed out waiting for sign-in (45 min).");
 
 if (ok) {
   await page.waitForTimeout(2500);

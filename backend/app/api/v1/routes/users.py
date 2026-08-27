@@ -27,7 +27,7 @@ from app.models.user import User, UserBadge
 from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
-from app.services import dashboard_service
+from app.services import contribution_streak, dashboard_service
 from app.services.storage import delete_avatar_object, upload_avatar
 from app.services.username import MAX_LENGTH, MIN_LENGTH, is_valid_username
 
@@ -343,5 +343,48 @@ def my_earnings(
                 ),
             )
             for r in result.rows
+        ],
+    )
+
+
+class StreakDayOut(BaseModel):
+    day: date
+    contributed: bool
+
+
+class ContributionStreakOut(BaseModel):
+    current_streak: int
+    last_contribution: date | None
+    active_today: bool
+    total_days: int
+    calendar_month: date
+    calendar: list[StreakDayOut]
+
+
+@router.get("/me/streak", response_model=ContributionStreakOut,
+            summary="The signed-in reviewer's contribution streak and calendar")
+def my_streak(
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+) -> ContributionStreakOut:
+    """Days the caller contributed — never days they visited.
+
+    Owner decision, 2026-08-27: this is a contribution streak. It is derived
+    entirely from timestamps the application already stores (published reviews,
+    questions, answers, price observations), so nothing here tracks reading or
+    browsing, and no new telemetry was added to build it.
+
+    No user id in the path, for the same reason as the dashboard and earnings.
+    """
+    result = contribution_streak.insights_streak(db, me.id)
+    return ContributionStreakOut(
+        current_streak=result.current_streak,
+        last_contribution=result.last_contribution,
+        active_today=result.active_today,
+        total_days=result.total_days,
+        calendar_month=result.calendar_month,
+        calendar=[
+            StreakDayOut(day=c.day, contributed=c.contributed)
+            for c in result.calendar
         ],
     )

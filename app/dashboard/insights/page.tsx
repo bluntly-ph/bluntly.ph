@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CaretRight } from "@phosphor-icons/react/dist/ssr";
 
 import { AreaChart, type Point } from "@/components/dashboard/MiniChart";
+import { StreakCard } from "@/components/dashboard/StreakCard";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { requireOnboardedUser } from "@/lib/dal";
-import { compactCount, getDashboardSummary } from "@/lib/dashboard";
+import { compactCount, getDashboardSummary, getStreak } from "@/lib/dashboard";
 
 export const metadata: Metadata = { title: "Insights — bluntly" };
 
@@ -19,23 +19,24 @@ export const metadata: Metadata = { title: "Insights — bluntly" };
  * block and a dated chart sitting directly on the white sheet: no cards around
  * them, and no stats strip.
  *
- * The frame's elements were split by what can be built truthfully:
+ * The Streak block was open on an ambiguity — days CONTRIBUTED or days READ —
+ * and the owner settled it on 2026-08-27 as a CONTRIBUTION streak. It is built
+ * from timestamps the application already persists (published reviews,
+ * questions, answers, price observations), so no reading or browsing telemetry
+ * was added, and none is implied. The frame's "6 days" is a sample: the number
+ * rendered is whatever the reviewer has actually earned, including zero.
  *
- *   EXISTING DATA          the dated area chart — real daily views
- *   REQUIRES NEW TELEMETRY the Streak block: a flame, "6 days", and a month
- *                          grid of filled dots
- *
- * The streak is not built, and deliberately not faked. "Streak" here can
- * honestly mean days the reviewer CONTRIBUTED (derivable today from reviews,
- * questions and answers) or days they READ the site (which needs reader-session
- * tracking that does not exist and would need a privacy ruling). Those are
- * different products, and picking the convenient one would be silently
- * redefining a designed feature to make it implementable. It is an owner
- * question instead, and the block says so where the number would go.
+ * Avg. read time remains absent and remains an OWNER/PRIVACY DECISION. It is
+ * not the same thing as an estimated reading time computed from word count,
+ * and one must never be shown in the other's place.
  */
 export default async function InsightsPage() {
   const me = await requireOnboardedUser();
-  const summary = await getDashboardSummary("30d");
+  // Independent of each other, so they are not serialised.
+  const [summary, streak] = await Promise.all([
+    getDashboardSummary("30d"),
+    getStreak(),
+  ]);
 
   // Total daily views across the reviewer's own reviews. Every row carries a
   // dense per-day series over the same window, so summing them is exact.
@@ -77,30 +78,7 @@ export default async function InsightsPage() {
         />
 
         <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] px-5 pb-12 pt-8">
-          <section aria-labelledby="streak-heading">
-            <div className="flex items-baseline justify-between">
-              <h2
-                id="streak-heading"
-                className="text-[13px] font-semibold text-[var(--text-primary)]"
-              >
-                Streak
-              </h2>
-              <span className="flex items-center gap-0.5 text-[12px] text-[var(--text-secondary)]">
-                This month
-                <CaretRight size={11} weight="bold" />
-              </span>
-            </div>
-
-            {/* Where the flame and "6 days" sit in the frame. Left empty of a
-                number rather than filled with a plausible one. */}
-            <p className="mt-3 max-w-[34rem] text-[13px] leading-relaxed text-[var(--text-secondary)]">
-              Not available yet. Showing a streak means deciding what it counts
-              &mdash; days you published something, or days you visited &mdash;
-              and those are different measurements. It will appear here once
-              that is settled, rather than showing a number that might mean the
-              wrong thing.
-            </p>
-          </section>
+          <StreakCard streak={streak} />
 
           <section aria-labelledby="views-heading" className="mt-10">
             <h2 id="views-heading" className="sr-only">
