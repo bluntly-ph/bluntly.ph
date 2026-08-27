@@ -82,7 +82,14 @@ class DashboardSummary:
     #: first-run state rather than a chart of zeroes.
     @property
     def has_earnings(self) -> bool:
-        return self.estimated_commission != ZERO or bool(self.series)
+        # `or bool(self.series)` used to be the second clause, which defeated
+        # the purpose stated directly above it: the series is a DENSE range of
+        # one point per day and is never empty, so this was always True and the
+        # UI drew exactly the chart of zeroes it was meant to prevent — a bare
+        # line pinned to the axis, which reads as broken rather than as an empty
+        # month. What matters is whether any of the points carry money.
+        return (self.estimated_commission != ZERO
+                or any(point.amount != ZERO for point in self.series))
 
 
 def _window(range_key: str, now: datetime | None = None) -> tuple[date, date]:

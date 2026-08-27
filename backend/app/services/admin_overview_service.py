@@ -112,7 +112,11 @@ def _reported_review_ids(db: Session) -> set:
             ModerationLog.target_type == ModerationTargetType.review,
         )
     )
-    return {r for r in rows if r}
+    # Compared against `str(review.id)`, so they must be strings. As UUIDs the
+    # intersection was always empty, which quietly pinned "high priority", the
+    # design's "urgent" pill and the Flagged bar to zero no matter how much was
+    # reported.
+    return {str(r) for r in rows if r}
 
 
 def _approved_on(db: Session, day: date) -> int:
@@ -223,7 +227,12 @@ def _activity(db: Session) -> list[ActivityItem]:
         ActivityItem(
             action=log.action.value if hasattr(log.action, "value") else str(log.action),
             actor=display or username,
-            target_ref=log.target_ref,
+            # `moderation_logs.target_ref` is a UUID column while this
+            # dataclass and the response model both say `str | None`. Pydantic
+            # does not coerce UUID to str, so passing it through raised a
+            # ValidationError in the route's return statement — outside every
+            # guard — and the whole Overview became a bare 500.
+            target_ref=str(log.target_ref) if log.target_ref is not None else None,
             at=log.created_at,
         )
         for log, display, username in rows

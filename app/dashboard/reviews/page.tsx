@@ -37,15 +37,17 @@ export default async function DashboardReviewsPage() {
       hero={null}
     >
       <div className="pb-12">
-        <div className="px-4 pb-2">
-          <p className="text-[13px] text-[var(--text-secondary)]">Your reviews</p>
+        <section aria-labelledby="reviews-heading" className="px-4 pb-2">
+          <h2 id="reviews-heading" className="text-[13px] text-[var(--text-secondary)]">
+            Your reviews
+          </h2>
           <p className="mt-0.5 text-[28px] font-bold leading-none text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
             {reviews.length}
           </p>
           <p className="mt-1 text-[12px] text-[var(--text-muted)]">
             ranked by what they have earned
           </p>
-        </div>
+        </section>
         {reviews.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="text-[14px] text-[var(--text-primary)]">

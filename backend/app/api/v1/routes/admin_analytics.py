@@ -195,12 +195,6 @@ class AdminOverviewOut(BaseModel):
     #: say which panel is missing instead of blanking the whole screen. Empty on
     #: a healthy response.
     unavailable: list[str] = []
-    #: The exception class for each unavailable section, e.g. "affiliate:
-    #: LookupError". Class names only — never a message, a traceback, or any
-    #: row data. This exists because the Overview failed in production with a
-    #: bare 500 and the platform's function logs were not reachable, so there
-    #: was no other way to learn which half broke.
-    diagnostics: list[str] = []
 
 
 @router.get("/overview", response_model=AdminOverviewOut,
@@ -217,14 +211,12 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
     # bare 500 and the moderator lost the entire screen — including four counts
     # that had nothing to do with the failure.
     unavailable: list[str] = []
-    diagnostics: list[str] = []
 
     try:
         o = admin_overview_service.overview(db)
-    except Exception as exc:  # noqa: BLE001 - the panel degrades, the request does not fail
+    except Exception:  # noqa: BLE001 - the panel degrades, the request does not fail
         logger.exception("admin overview: headline counts failed")
         unavailable.append("overview")
-        diagnostics.append(f"overview: {type(exc).__name__}")
         o = admin_overview_service.AdminOverview(
             queue_total=0, high_priority=0, approved_today=0, approved_delta=0,
             pending_affiliate=0, honesty_fund_pool=Decimal("0"),
@@ -233,12 +225,32 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
 
     try:
         health = admin_overview_service.affiliate_health(db)
-    except Exception as exc:  # noqa: BLE001 - same reasoning
+    except Exception:  # noqa: BLE001 - same reasoning
         logger.exception("admin overview: affiliate health failed")
         unavailable.append("affiliate")
-        diagnostics.append(f"affiliate: {type(exc).__name__}")
         health = admin_overview_service.AffiliateHealth()
 
+    try:
+        return _overview_payload(o, health, unavailable)
+    except Exception:  # noqa: BLE001
+        # Assembling the payload must not be able to blank the screen either.
+        # 3a1bef4 guarded both service calls and production still returned a
+        # bare 500, which proves the fault is outside them — so the assembly is
+        # guarded too, and names itself the same way.
+        logger.exception("admin overview: payload assembly failed")
+        return AdminOverviewOut(
+            queue_total=0, high_priority=0, approved_today=0, approved_delta=0,
+            pending_affiliate=0, honesty_fund_pool="0",
+            honesty_fund_month=date.today().replace(day=1), urgent=0,
+            breakdown=[], activity=[],
+            affiliate=AffiliateHealthOut(
+                lifecycle=[], settlement=[], recognised_amount="0",
+                reversed_amount="0", unrecovered_amount="0", has_data=False),
+            unavailable=[*unavailable, "payload"],
+        )
+
+
+def _overview_payload(o, health, unavailable: list[str]) -> AdminOverviewOut:
     return AdminOverviewOut(
         queue_total=o.queue_total, high_priority=o.high_priority,
         approved_today=o.approved_today, approved_delta=o.approved_delta,
@@ -263,5 +275,4 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
             has_data=health.has_data,
         ),
         unavailable=unavailable,
-        diagnostics=diagnostics,
     )

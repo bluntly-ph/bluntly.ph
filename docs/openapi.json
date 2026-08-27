@@ -5329,14 +5329,6 @@
             "type": "array",
             "title": "Unavailable",
             "default": []
-          },
-          "diagnostics": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Diagnostics",
-            "default": []
           }
         },
         "type": "object",

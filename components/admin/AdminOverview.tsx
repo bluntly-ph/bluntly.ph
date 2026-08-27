@@ -36,8 +36,6 @@ export type AdminOverviewData = {
   }[];
   /** Sections the backend could not compute for this request. */
   unavailable?: string[];
-  /** Exception class per failed section, e.g. "affiliate: LookupError". */
-  diagnostics?: string[];
 };
 
 /** Bar colours, in the frame's order. Each bar also states its own number, so
@@ -127,7 +125,10 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Stable hook for acceptance: the four headline counts are the
+          panel that vanished in production, and a check for them must not
+          depend on the wording inside them. */}
+      <div id="admin-kpis" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           label="Queue Total"
           value={String(data.queue_total)}

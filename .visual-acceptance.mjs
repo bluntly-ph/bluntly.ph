@@ -17,19 +17,43 @@ const STATE = process.argv[2];
 const OUT = process.argv[3];
 const BASE = "https://www.bluntly.ph";
 
+/**
+ * Per route: text that must NOT appear, and structure that MUST.
+ *
+ * The first pass called /moderate clean while the page visibly said "Unable to
+ * load the overview right now." The failing fetch happened server-side, so
+ * nothing reached the browser's console or network log. A clean console is not
+ * a clean page.
+ *
+ * `must` uses ids and ARIA hooks rather than copy wherever the app exposes
+ * them, so acceptance does not break when wording changes.
+ */
+const FAILURE_TEXT =
+  /unable to load|something went wrong|failed to load|error loading|went wrong|try again later/i;
+
 const SCREENS = [
   { route: "/dashboard", name: "dashboard", frame: "5572:7130",
-    expect: [/wallet|balance|earn/i], controls: ['a[href*="/dashboard/"]'] },
+    must: ['a[href="/dashboard/transfer"]', 'a[href="/dashboard/history"]',
+           'a[href="/dashboard/insights"]'],
+    expect: [/wallet|balance|earn/i] },
   { route: "/dashboard/transfer", name: "transfer", frame: "5762:332",
-    expect: [/est\.?\s*comm|withdraw/i], controls: ["button, [role=progressbar]"] },
+    must: ["#threshold-heading", "#account-heading", '[role="progressbar"]'],
+    expect: [/est\.?\s*comm|withdraw/i] },
   { route: "/dashboard/history", name: "history", frame: "5762:472",
-    expect: [/all time income|historical bill/i], controls: ['a[href*="status="], details'] },
+    must: ['nav[aria-label="Filter earnings"]', 'a[href*="status=pending"]'],
+    expect: [/all time income|historical bill/i] },
   { route: "/dashboard/reviews", name: "reviews", frame: "6159:1510",
-    expect: [/review/i], controls: ['a[href="/dashboard"]'] },
+    must: ["#reviews-heading", 'a[href="/dashboard"]'],
+    expect: [/your reviews/i] },
   { route: "/dashboard/insights", name: "insights", frame: "5762:752",
-    expect: [/streak/i], controls: ["svg, section"] },
+    must: ["#streak-heading", "#views-heading"],
+    expect: [/streak/i] },
   { route: "/moderate", name: "moderate", frame: "5017:1738",
-    expect: [/queue|overview|honesty/i], controls: ['a[href*="/moderate"], button'] },
+    // The three panels that vanished in production, plus the traffic panel
+    // the overview fix must not regress.
+    must: ["#admin-kpis", "#recent-activity-heading", "#queue-breakdown-heading",
+           "#request-distribution-heading", '[role="group"][aria-label="Metric"]'],
+    expect: [/queue|overview/i] },
 ];
 const WIDTHS = [1440, 1280, 1024, 768, 393];
 
@@ -60,7 +84,7 @@ for (const screen of SCREENS) {
   for (const width of WIDTHS) {
     consoleErrors = []; httpBad = [];
     await page.setViewportSize({ width, height: 900 });
-    let row = { ...screen, width, expect: undefined, controls: undefined };
+    let row = { ...screen, width, expect: undefined, must: undefined };
     try {
       const resp = await page.goto(BASE + screen.route, { waitUntil: "domcontentloaded", timeout: 45000 });
       await page.waitForTimeout(2600);
@@ -89,18 +113,20 @@ for (const screen of SCREENS) {
           navH: nav ? Math.round(nav.getBoundingClientRect().height) : null,
           sheetTop: sheet ? Math.round(sheet.getBoundingClientRect().top + window.scrollY) : null,
           sheetRadius: sheet ? Math.round(parseFloat(getComputedStyle(sheet).borderTopLeftRadius)) : null,
-          controlCount: document.querySelectorAll(cfg.controls).length,
+          missingStructure: cfg.must.filter((sel) => !document.querySelector(sel)),
+          controlCount: cfg.must.filter((sel) => document.querySelector(sel)).length,
           peso: (body.match(/₱[\d,]+(\.\d{2})?/g) || []).slice(0, 6),
           hasFigmaSample: /328\.04|2,?\s?426\.38|\b6 days\b/.test(body),
         };
-      }, { controls: screen.controls.join(",") });
+      }, { must: screen.must });
 
       const bodyText = await page.evaluate(() => document.body.innerText);
       const dataOk = screen.expect.every((re) => re.test(bodyText));
+      const visibleFailure = FAILURE_TEXT.test(bodyText);
       const file = path.join(OUT, `${screen.name}-${width}.png`);
       await page.screenshot({ path: file, fullPage: true });
 
-      row = { ...row, http: resp?.status(), ...m, dataOk,
+      row = { ...row, http: resp?.status(), ...m, dataOk, visibleFailure,
               consoleErrors: [...consoleErrors], httpBad: [...httpBad], file: path.basename(file) };
       const flags = [
         m.imgBroken ? `${m.imgBroken} BROKEN IMG` : "",
@@ -109,7 +135,8 @@ for (const screen of SCREENS) {
         httpBad.length ? `${httpBad.length} HTTP>=400` : "",
         !dataOk ? "EXPECTED CONTENT MISSING" : "",
         m.hasFigmaSample ? "FIGMA SAMPLE VALUE ON PAGE" : "",
-        m.controlCount === 0 ? "NO CONTROLS" : "",
+        visibleFailure ? `VISIBLE FAILURE: "${m.failureText}"` : "",
+        m.missingStructure.length ? `MISSING: ${m.missingStructure.join(" ")}` : "",
       ].filter(Boolean).join("  ");
       console.log(`  ${screen.name.padEnd(10)} @${String(width).padEnd(5)} ${resp?.status()} nav=${String(m.navH).padEnd(4)} sheet=${String(m.sheetTop).padEnd(5)} ctl=${String(m.controlCount).padEnd(3)} ${flags || "clean"}`);
       httpBad.slice(0, 2).forEach((b) => console.log(`        ${b}`));

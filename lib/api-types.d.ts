@@ -1682,11 +1682,6 @@ export interface components {
              * @default []
              */
             unavailable: string[];
-            /**
-             * Diagnostics
-             * @default []
-             */
-            diagnostics: string[];
         };
         /** AdminTokenGrant */
         AdminTokenGrant: {
