@@ -138,6 +138,10 @@ export type AdminOverviewData = {
     target_ref: string | null;
     at: string;
   }[];
+  /** Sections the backend could not compute for this request. */
+  unavailable?: string[];
+  /** Exception class per failed section, e.g. "affiliate: LookupError". */
+  diagnostics?: string[];
 };
 
 export async function getAdminOverview(): Promise<AdminOverviewData | null> {

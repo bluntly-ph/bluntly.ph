@@ -31,27 +31,23 @@ await page.waitForTimeout(1500);
 // Fill the email if the field is there; otherwise leave the page for the human.
 try {
   await page.locator('input[type="email"]').first().fill(EMAIL, { timeout: 8000 });
-  console.log(`  filled ${EMAIL}`);
-  // Actually request the code. Filling the field alone sends nothing, which is
-  // why the first two attempts sat waiting for a code that was never issued.
-  await page.getByRole("button", { name: /send code/i }).click({ timeout: 8000 });
-  console.log("  clicked Send code — check your inbox");
-  await page.waitForTimeout(2000);
-  const onCodeStep = await page.evaluate(() =>
-    /code/i.test(document.body.innerText) &&
-    document.querySelectorAll('input:not([type="hidden"])').length > 0);
-  console.log(`  code entry visible: ${onCodeStep}`);
+  console.log(`  filled ${EMAIL} — click "Send code" when you are ready`);
 } catch (e) {
-  console.log(`  could not drive the email step (${String(e).slice(0, 60)}) — please do it in the window`);
+  console.log(`  could not fill the address (${String(e).slice(0, 60)}) — type it in the window`);
 }
+// Deliberately NOT clicking "Send code" here. Three earlier attempts sent a
+// code immediately and then expired while nobody was at the keyboard, so the
+// code was always stale by the time it was wanted. The person clicks it when
+// they are actually there, and this just waits.
 
 console.log("");
 console.log("  ==> A browser window is open on the bluntly.ph login page.");
-console.log("      Send yourself the code, enter it, and finish signing in.");
-console.log("      I am waiting for the app to leave /login.");
+console.log("      Click \"Send code\", enter the emailed code, and finish signing in.");
+console.log("      No time limit - I wait until you are done, or you close the window.");
 console.log("");
 
-const DEADLINE = Date.now() + 45 * 60 * 1000;
+// No deadline: waits until sign-in completes or the window is closed.
+const DEADLINE = Infinity;
 let ok = false;
 let lastPath = "";
 await page.bringToFront().catch(() => {});
@@ -71,7 +67,7 @@ while (Date.now() < DEADLINE) {
   }
   await page.waitForTimeout(3000);
 }
-if (!ok && Date.now() >= DEADLINE) console.log("  timed out waiting for sign-in (45 min).");
+
 
 if (ok) {
   await page.waitForTimeout(2500);

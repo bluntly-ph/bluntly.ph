@@ -29,19 +29,23 @@ export default async function DashboardReviewsPage() {
   return (
     <DashboardScreen
       heroHeight={118}
-      hero={
-        <div className="px-6 pb-16 pt-10 text-center">
-          <p className="text-[13px] font-medium text-white/80">Your reviews</p>
-          <p className="mt-1 text-[40px] font-bold leading-tight text-white [font-variant-numeric:tabular-nums]">
+      /* The frame's hero IS the nav row: its sheet begins 86px below it, with
+         nothing in between. The count used to sit here in a 150px orange band
+         the design does not have, which pushed the sheet to 235. It now opens
+         the sheet instead, so the chrome matches the frame and the reviewer
+         still sees their real figures. */
+      hero={null}
+    >
+      <div className="pb-12">
+        <div className="px-4 pb-2">
+          <p className="text-[13px] text-[var(--text-secondary)]">Your reviews</p>
+          <p className="mt-0.5 text-[28px] font-bold leading-none text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
             {reviews.length}
           </p>
-          <p className="mt-2 text-[13px] text-white/85">
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">
             ranked by what they have earned
           </p>
         </div>
-      }
-    >
-      <div className="pb-12">
         {reviews.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="text-[14px] text-[var(--text-primary)]">

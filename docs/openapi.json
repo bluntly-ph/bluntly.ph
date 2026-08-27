@@ -3483,6 +3483,33 @@
         }
       }
     },
+    "/api/v1/users/me/streak": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "The signed-in reviewer's contribution streak and calendar",
+        "description": "Days the caller contributed \u2014 never days they visited.\n\nOwner decision, 2026-08-27: this is a contribution streak. It is derived\nentirely from timestamps the application already stores (published reviews,\nquestions, answers, price observations), so nothing here tracks reading or\nbrowsing, and no new telemetry was added to build it.\n\nNo user id in the path, for the same reason as the dashboard and earnings.",
+        "operationId": "my_streak_api_v1_users_me_streak_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContributionStreakOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/questions": {
       "post": {
         "tags": [
@@ -5294,6 +5321,22 @@
           },
           "affiliate": {
             "$ref": "#/components/schemas/AffiliateHealthOut"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unavailable",
+            "default": []
+          },
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Diagnostics",
+            "default": []
           }
         },
         "type": "object",
@@ -6112,6 +6155,56 @@
         ],
         "title": "ContractStatus",
         "description": "Monetized-review revenue-share contract lifecycle (M3 slice 10)."
+      },
+      "ContributionStreakOut": {
+        "properties": {
+          "current_streak": {
+            "type": "integer",
+            "title": "Current Streak"
+          },
+          "last_contribution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Contribution"
+          },
+          "active_today": {
+            "type": "boolean",
+            "title": "Active Today"
+          },
+          "total_days": {
+            "type": "integer",
+            "title": "Total Days"
+          },
+          "calendar_month": {
+            "type": "string",
+            "format": "date",
+            "title": "Calendar Month"
+          },
+          "calendar": {
+            "items": {
+              "$ref": "#/components/schemas/StreakDayOut"
+            },
+            "type": "array",
+            "title": "Calendar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_streak",
+          "last_contribution",
+          "active_today",
+          "total_days",
+          "calendar_month",
+          "calendar"
+        ],
+        "title": "ContributionStreakOut"
       },
       "CritiqueRequest": {
         "properties": {
@@ -9799,6 +9892,25 @@
         },
         "type": "object",
         "title": "RunRequest"
+      },
+      "StreakDayOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "contributed": {
+            "type": "boolean",
+            "title": "Contributed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "contributed"
+        ],
+        "title": "StreakDayOut"
       },
       "TierOut": {
         "properties": {

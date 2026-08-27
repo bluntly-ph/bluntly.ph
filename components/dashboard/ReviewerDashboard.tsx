@@ -220,7 +220,10 @@ function EstCommCard({
       </dl>
 
       <div className="mt-6 h-[111px]">
-        {summary && summary.series.length > 0 ? (
+        {/* A dense series of zeros is not data. Drawing it produced a bare
+            line pinned to the axis under an empty card, which reads as a
+            broken chart rather than as an empty month. */}
+        {summary && summary.series.length > 0 && summary.has_earnings ? (
           <AreaChart
             points={toPoints(summary.series)}
             label={`Daily earnings, ${rangeLabel.toLowerCase()}. ${

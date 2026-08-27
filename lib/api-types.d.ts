@@ -1126,6 +1126,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/streak": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in reviewer's contribution streak and calendar
+         * @description Days the caller contributed — never days they visited.
+         *
+         *     Owner decision, 2026-08-27: this is a contribution streak. It is derived
+         *     entirely from timestamps the application already stores (published reviews,
+         *     questions, answers, price observations), so nothing here tracks reading or
+         *     browsing, and no new telemetry was added to build it.
+         *
+         *     No user id in the path, for the same reason as the dashboard and earnings.
+         */
+        get: operations["my_streak_api_v1_users_me_streak_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/questions": {
         parameters: {
             query?: never;
@@ -1650,6 +1677,16 @@ export interface components {
             /** Activity */
             activity: components["schemas"]["ActivityItemOut"][];
             affiliate: components["schemas"]["AffiliateHealthOut"];
+            /**
+             * Unavailable
+             * @default []
+             */
+            unavailable: string[];
+            /**
+             * Diagnostics
+             * @default []
+             */
+            diagnostics: string[];
         };
         /** AdminTokenGrant */
         AdminTokenGrant: {
@@ -1977,6 +2014,24 @@ export interface components {
          * @enum {string}
          */
         ContractStatus: "active" | "expired" | "bought_out";
+        /** ContributionStreakOut */
+        ContributionStreakOut: {
+            /** Current Streak */
+            current_streak: number;
+            /** Last Contribution */
+            last_contribution: string | null;
+            /** Active Today */
+            active_today: boolean;
+            /** Total Days */
+            total_days: number;
+            /**
+             * Calendar Month
+             * Format: date
+             */
+            calendar_month: string;
+            /** Calendar */
+            calendar: components["schemas"]["StreakDayOut"][];
+        };
         /**
          * CritiqueRequest
          * @description Ad-hoc critique of arbitrary draft text (also reused for stored reviews).
@@ -3364,6 +3419,16 @@ export interface components {
              * @default false
              */
             submit: boolean;
+        };
+        /** StreakDayOut */
+        StreakDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Contributed */
+            contributed: boolean;
         };
         /** TierOut */
         TierOut: {
@@ -5856,6 +5921,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_streak_api_v1_users_me_streak_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContributionStreakOut"];
                 };
             };
         };

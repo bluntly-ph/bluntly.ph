@@ -34,6 +34,10 @@ export type AdminOverviewData = {
     target_ref: string | null;
     at: string;
   }[];
+  /** Sections the backend could not compute for this request. */
+  unavailable?: string[];
+  /** Exception class per failed section, e.g. "affiliate: LookupError". */
+  diagnostics?: string[];
 };
 
 /** Bar colours, in the frame's order. Each bar also states its own number, so
@@ -96,6 +100,11 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
     );
   }
 
+  // A panel failing is not the screen failing. The backend names what it could
+  // not compute, so the moderator is told which part is missing and still gets
+  // everything that worked.
+  const missing = data.unavailable ?? [];
+
   const month = new Date(`${data.honesty_fund_month}T00:00:00`).toLocaleDateString(
     "en-PH",
     { month: "long", year: "numeric" },
@@ -103,6 +112,21 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
 
   return (
     <>
+      {missing.length > 0 ? (
+        <p
+          role="status"
+          className="mb-4 rounded-[var(--radius-sm)] bg-[var(--accent-star)]/10 px-4 py-3 text-[13px] text-[var(--text-primary)]"
+        >
+          {missing.includes("overview")
+            ? "The headline counts, activity feed and queue breakdown could not be loaded, so the figures below read zero. "
+            : ""}
+          {missing.includes("affiliate")
+            ? "The affiliate ledger could not be loaded. "
+            : ""}
+          Everything else on this page is live.
+        </p>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           label="Queue Total"
