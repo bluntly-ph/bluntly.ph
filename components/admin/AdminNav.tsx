@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   CaretLeft,
   Cube,
+  ChartLineUp,
   Fingerprint,
   Gear,
   Handbag,
@@ -37,6 +38,11 @@ import {
  *
  * `Review Queue`, `Q&A` and reports are one screen with tabs, because frame
  * 5017:3758 draws them that way: Reviews / Answers / Report / Support.
+ *
+ * DOCUMENTED DEVIATION — Analytics is an eleventh item the sidebar component
+ * does not draw. The frame keeps traffic geography on the Overview alone, and
+ * the owner asked for the expanded view to be reachable from the rail rather
+ * than only from a link inside a panel.
  */
 
 export type NavItem = {
@@ -109,6 +115,17 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: "System",
     items: [
+      {
+        // Not in the sidebar component (5017:2225): the frame keeps traffic on
+        // the Overview only. Added on the owner's explicit instruction that the
+        // geography view be reachable from the rail — "a moderator should not
+        // need to guess where geography analytics live." The Overview keeps its
+        // compact summary; this is the expanded view.
+        label: "Analytics",
+        Icon: ChartLineUp,
+        href: "/moderate/analytics",
+        match: "/moderate/analytics",
+      },
       {
         label: "Activity Log",
         Icon: Fingerprint,
