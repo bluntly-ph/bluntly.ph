@@ -275,5 +275,25 @@ def test_list_sorting_by_demand(client):
         assert client.post(f"/api/v1/requests/{popular}/upvote",
                            headers=_auth(voter)).status_code == 200
 
-    ids = [r["id"] for r in client.get("/api/v1/requests?sort=demand&limit=100").json()]
-    assert ids.index(popular) < ids.index(quiet)
+    rows = client.get("/api/v1/requests?sort=demand&limit=100").json()
+
+    # The contract is that the page comes back most-wanted first, and THAT is
+    # what gets asserted. Asking whether one specific brand-new request sits
+    # above another only works if both are on the page, and the board is a
+    # shared database that accumulates across runs: once more than `limit`
+    # requests carry an up-vote, a zero-vote request cannot be in the first
+    # hundred at all. That is correct sorting, not a sorting failure, and it
+    # is what made this test start raising "not in list" — 106 of the 270
+    # requests in the test project already had votes.
+    counts = [r["upvote_count"] for r in rows]
+    assert counts == sorted(counts, reverse=True), (
+        "sort=demand must return requests in non-increasing demand order")
+
+    # The up-votes landed where they were aimed...
+    assert client.get(f"/api/v1/requests/{popular}").json()["upvote_count"] == 3
+    assert client.get(f"/api/v1/requests/{quiet}").json()["upvote_count"] == 0
+
+    # ...and wherever both are visible together, the wanted one leads.
+    ids = [r["id"] for r in rows]
+    if popular in ids and quiet in ids:
+        assert ids.index(popular) < ids.index(quiet)
