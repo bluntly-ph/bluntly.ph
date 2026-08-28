@@ -22,6 +22,7 @@ here - it is the first thing that happens, and nothing else runs if it fails.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -37,11 +38,40 @@ from app.core.env_guard import (
 PYTHON = sys.executable
 
 
-def _run(label: str, args: list[str]) -> tuple[bool, str]:
-    print(f"\n=== {label} ===")
+def _run(label: str, args: list[str], *, stream: bool = False) -> tuple[bool, str]:
+    """Run a stage. `stream` echoes each line as it arrives.
+
+    Capturing output and printing it afterwards keeps a passing log tidy, but
+    a stage killed by the workflow wall clock then reports NOTHING: the pipe
+    dies with the process. Two consecutive 150-minute timeouts on the
+    isolated-database job produced zero pytest lines for exactly this reason —
+    no test name, no percentage, no way to tell a uniformly slow suite from a
+    single hung test.
+
+    The long stage therefore streams. It is noisier, and that is the point: a
+    run that gets killed still leaves a trail showing how far it reached.
+    """
+    print(f"\n=== {label} ===", flush=True)
     started = time.time()
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+
+    if stream:
+        collected: list[str] = []
+        streamed = subprocess.Popen(
+            [PYTHON, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1, env=env)
+        assert streamed.stdout is not None
+        for raw in streamed.stdout:
+            line = raw.rstrip()
+            collected.append(line)
+            print(f"  {line}", flush=True)
+        streamed.wait()
+        print(f"  -> exit {streamed.returncode} in {time.time() - started:.1f}s",
+              flush=True)
+        return streamed.returncode == 0, "\n".join(collected)
+
     proc = subprocess.run([PYTHON, *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace")
+                          encoding="utf-8", errors="replace", env=env)
     out = (proc.stdout or "") + (proc.stderr or "")
     lines = [ln for ln in out.splitlines() if ln.strip()]
 
@@ -164,7 +194,15 @@ def main() -> int:
     at_head = "head" in out.lower()
     stages.append(("revision at head", ok and at_head))
 
-    ok, out = _run("pytest", ["-m", "pytest", "-q", "-p", "no:randomly"])
+    # -v with the classic style prints one line per test AS IT COMPLETES, which
+    # is what makes a killed run diagnosable; --durations names the worst
+    # offenders when the run does finish.
+    ok, out = _run(
+        "pytest",
+        ["-m", "pytest", "-v", "-o", "console_output_style=classic",
+         "--durations=40", "-p", "no:randomly"],
+        stream=True,
+    )
     summary = next((ln for ln in out.splitlines()[::-1]
                     if "passed" in ln or "failed" in ln), "no summary")
     stages.append((f"pytest ({summary.strip()})", ok))
