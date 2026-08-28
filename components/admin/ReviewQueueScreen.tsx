@@ -198,7 +198,11 @@ export function ReviewQueueScreen({
           </div>
 
           {/* Table + detail. Each scrolls in its own pane; the shell does not. */}
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
+          {/* The approved frame is 1280 wide, and that is where the split
+                earns its place. Below it the table pane fell under the table's
+                own minimum and clipped the Date column, so the panel stacks
+                underneath instead and the table gets the full width. */}
+          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
             <section
               aria-labelledby="queue-table-heading"
               className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
@@ -214,7 +218,7 @@ export function ReviewQueueScreen({
                       the table was still sizing itself from its content. Below
                       34rem it scrolls horizontally in its own pane, which is the
                       right behaviour on a phone. */}
-                <table className="w-full min-w-[34rem] table-fixed border-collapse text-left">
+                <table className="w-full min-w-[32rem] table-fixed border-collapse text-left">
                   <colgroup>
                     <col style={{ width: "16%" }} />
                     <col style={{ width: "28%" }} />
@@ -460,7 +464,7 @@ function ReportsTab({ reports }: { reports: ReportItem[] }) {
 function ReviewDetail({ item, edited }: { item: QueueItem | null; edited: QueueItem[] }) {
   if (!item) {
     return (
-      <aside className="hidden min-h-0 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] lg:block">
+      <aside className="hidden min-h-0 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] xl:block">
         <p className="text-[13px] text-[var(--text-secondary)]">
           Select a row to inspect the review, its author and its evidence.
         </p>
