@@ -45,8 +45,10 @@ export type NavItem = {
   href?: string;
   /** Matches when the path starts with this, for nested routes. */
   match?: string;
-  /** Set when the item is intentionally inert; shown to the moderator. */
+  /** Short status shown in place of a destination when the item is inert. */
   blocked?: string;
+  /** The full reason, for the tooltip and for screen readers. */
+  why?: string;
 };
 
 export const NAV: { heading: string; items: NavItem[] }[] = [
@@ -75,8 +77,9 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
       {
         label: "Sellers",
         Icon: Storefront,
-        blocked:
-          "Seller accounts were descoped by the owner; the schema was dropped in migration 0024.",
+        blocked: "Not available in current product scope",
+        why:
+          "Seller accounts were descoped by the owner (2026-07-28, reaffirmed 2026-08-07) and the schema was dropped in migration 0024. There is no seller entity to manage.",
       },
       {
         label: "Reviewers",
@@ -115,7 +118,8 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
       {
         label: "Settings",
         Icon: Gear,
-        blocked: "No console settings have been specified yet.",
+        blocked: "Not configured",
+        why: "No console settings have been specified for this build.",
       },
     ],
   },
@@ -197,7 +201,7 @@ export function AdminNav({
             )}
             <ul className="flex flex-col gap-0.5">
               {group.items.map((item) => {
-                const { label, Icon, href, blocked } = item;
+                const { label, Icon, href, blocked, why } = item;
                 const active = isActive(item, pathname, tab);
                 const base = `flex items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-[14px] font-medium ${
                   collapsed ? "justify-center px-0" : ""
@@ -220,20 +224,25 @@ export function AdminNav({
                         {!collapsed ? <span className="truncate">{label}</span> : null}
                       </Link>
                     ) : (
+                      /* Not a link and not a button: nothing to click, nothing
+                         to focus, no destination to 404. The status is on its
+                         face and the full reason is available to a pointer and
+                         to a screen reader. */
                       <span
-                        title={blocked}
+                        title={why}
                         aria-disabled="true"
                         className={`${base} cursor-not-allowed text-[var(--text-muted)]`}
                       >
                         <Icon size={20} weight="regular" className="shrink-0" />
                         {!collapsed ? (
-                          <>
+                          <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate">{label}</span>
-                            <span className="ml-auto shrink-0 rounded-[var(--radius-pill)] bg-[var(--surface-app)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
-                              n/a
+                            <span className="truncate text-[10px] font-normal leading-tight text-[var(--text-muted)]">
+                              {blocked}
                             </span>
-                          </>
+                          </span>
                         ) : null}
+                        <span className="sr-only">{`Unavailable. ${why ?? ""}`}</span>
                       </span>
                     )}
                   </li>

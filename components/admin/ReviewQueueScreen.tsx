@@ -208,7 +208,21 @@ export function ReviewQueueScreen({
               </h2>
 
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[36rem] border-collapse text-left">
+                {/* table-fixed with explicit column shares, so the Date column is
+                      never squeezed off the end by a long review title. Widening
+                      the split alone fixed 1440 and left 1280 and 1024 clipped —
+                      the table was still sizing itself from its content. Below
+                      34rem it scrolls horizontally in its own pane, which is the
+                      right behaviour on a phone. */}
+                <table className="w-full min-w-[34rem] table-fixed border-collapse text-left">
+                  <colgroup>
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "28%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "11%" }} />
+                  </colgroup>
                   <thead className="sticky top-0 z-10 bg-[var(--surface-app)]">
                     <tr className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
                       <th className="px-3 py-3 font-medium">ID</th>
@@ -243,10 +257,10 @@ export function ReviewQueueScreen({
                             <td className="px-4 py-3 font-mono text-[12px] text-[var(--text-secondary)]">
                               {item.review.review_id ?? item.review.id.slice(0, 8)}
                             </td>
-                            <td className="max-w-[13rem] truncate px-3 py-3 text-[var(--text-primary)]">
+                            <td className="truncate px-3 py-3 text-[var(--text-primary)]" title={item.review.title}>
                               {item.review.title}
                             </td>
-                            <td className="px-4 py-3 text-[var(--text-secondary)]">
+                            <td className="truncate px-4 py-3 text-[var(--text-secondary)]">
                               <span className="whitespace-nowrap">
                                 {item.author?.display_name ?? "Unknown"}
                                 <span className="mx-1.5 opacity-40">·</span>
