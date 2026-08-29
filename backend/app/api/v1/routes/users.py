@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.errors import AppError, NotFoundError
+from app.core.errors import AppError, ForbiddenError, NotFoundError
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user, require_role
 from app.db.session import get_db
@@ -180,6 +180,15 @@ def set_role(user_id: uuid.UUID, payload: RoleUpdate, db: Session = Depends(get_
                        code="role_not_grantable", status_code=422,
                        title="Invalid role")
     user = _user_or_404(db, user_id)
+    # This legacy surface manages shopper/seller membership only. Without a
+    # target-side guard it could not grant moderator, but it *could demote one*
+    # by sending {"role":"user"}; that is the same forbidden authority through
+    # a different endpoint. Super-admin accounts are outside this surface too.
+    if user.role == MemberRole.moderator:
+        raise ForbiddenError(
+            "Moderator and super-admin roles are managed by super administrators.",
+            code="role_not_managed_here",
+        )
     old_role = user.role
     user.role = payload.role
     db.add(ModerationLog(

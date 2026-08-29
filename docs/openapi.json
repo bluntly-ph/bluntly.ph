@@ -2877,13 +2877,147 @@
         }
       }
     },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": [
+          "admin: users"
+        ],
+        "summary": "Find an account by staff reference, id, email or name",
+        "description": "Lookup, not enumeration.\n\nAn empty query returns nothing. Browsing the population already exists at\n/admin/reviewers; letting this endpoint dump every account as well would\nmake one mistyped request a full export.",
+        "operationId": "search_api_v1_admin_users_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 320,
+              "description": "Staff ref (USR-000123), UUID, exact email, or name",
+              "default": "",
+              "title": "Q"
+            },
+            "description": "Staff ref (USR-000123), UUID, exact email, or name"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffUserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/role": {
+      "patch": {
+        "tags": [
+          "admin: users"
+        ],
+        "summary": "Assign or revoke moderator (super admin)",
+        "description": "Move an account between `user` and `moderator`.\n\nThe role change and its audit record are written in ONE transaction. A\ngrant that committed without its log would be exactly the situation the log\nexists for \u2014 someone holding moderator powers with no record of who gave\nthem.",
+        "operationId": "set_role_api_v1_admin_users__user_id__role_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleChangeResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/cron/{task}": {
       "post": {
         "tags": [
           "internal: scheduled maintenance"
         ],
         "summary": "Run one scheduled maintenance task",
-        "description": "Claim this task's current period and do as much of it as fits.\n\nThe claim is an INSERT arbitrated by a unique index, not an advisory lock.\nThat is not a stylistic choice: the application connects through the\nSupabase transaction pooler, which hands the backend back at every commit,\nso a session-level advisory lock can be released on a different connection\nthan acquired it \u2014 or never released at all. A row the database refuses to\nduplicate is mutual exclusion that pooling cannot undermine.\n\nThe four refusals stay distinct, because collapsing them would hide a\nscheduler that had stopped behind one that was merely early.",
+        "description": "Take the execution lease on this task's current period and do as much of\nit as the time budget allows.\n\nNote the signature: no cursor, no offset, no batch size. Progression is\nentirely the backend's, so possession of the scheduler credential does not\nconfer the ability to steer or truncate a traversal.",
         "operationId": "run_task_api_v1_internal_cron__task__post",
         "parameters": [
           {
@@ -10427,6 +10561,68 @@
         ],
         "title": "ReviewerRow"
       },
+      "RoleChangeIn": {
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/MemberRole"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "RoleChangeIn",
+        "description": "Assign or revoke moderator. Nothing else is expressible."
+      },
+      "RoleChangeResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "staff_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staff Ref"
+          },
+          "previous_role": {
+            "$ref": "#/components/schemas/MemberRole"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemberRole"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "previous_role",
+          "role",
+          "changed"
+        ],
+        "title": "RoleChangeResult"
+      },
       "RoleUpdate": {
         "properties": {
           "role": {
@@ -10492,6 +10688,124 @@
         ],
         "title": "SchedulerHealth",
         "description": "What a moderator needs to answer \"is the automation healthy?\"."
+      },
+      "StaffUserPage": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StaffUserRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "resolved_staff_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Staff Ref"
+          },
+          "can_manage_roles": {
+            "type": "boolean",
+            "title": "Can Manage Roles",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "StaffUserPage"
+      },
+      "StaffUserRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "staff_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staff Ref"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemberRole"
+          },
+          "is_suspended": {
+            "type": "boolean",
+            "title": "Is Suspended"
+          },
+          "trust_stage": {
+            "type": "integer",
+            "title": "Trust Stage"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_super_admin": {
+            "type": "boolean",
+            "title": "Is Super Admin",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "is_suspended",
+          "trust_stage",
+          "created_at"
+        ],
+        "title": "StaffUserRow",
+        "description": "One account, as staff see it.\n\nCarries identity and standing, and deliberately not: password hash,\nwallet balance, payout account, tokens, session data or anything about\nauthentication. A moderator finding a person does not need their money."
       },
       "StreakDayOut": {
         "properties": {

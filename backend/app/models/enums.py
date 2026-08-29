@@ -127,6 +127,14 @@ class ModerationAction(str, enum.Enum):
     # record carries WHO and WHICH REVIEW and nothing else - never the object
     # key, the signed URL, or anything from the receipt itself.
     receipt_view = "receipt_view"
+    # Staff role administration (owner-approved). A role change moves no money
+    # and touches no content, which is exactly why it needs its own audit
+    # action: it is otherwise invisible, and "who made this person a
+    # moderator" is a question that gets asked after something has gone wrong.
+    # Grant and revoke are separate values so the two can be counted apart
+    # without parsing notes.
+    role_grant = "role_grant"
+    role_revoke = "role_revoke"
 
 
 class ModerationReason(str, enum.Enum):

@@ -126,3 +126,26 @@ def require_role(*allowed_roles: str):
         return user
 
     return _guard
+
+
+def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """The owner elevation, read fresh from the database on every request.
+
+    Deliberately NOT a MemberRole check. `is_super_admin` is a separate column
+    precisely so that being a moderator — which the role endpoint can grant —
+    never implies this, and so that no API path can write it.
+
+    Read from the User row rather than from a token claim, so revoking the flag
+    takes effect on the next request instead of whenever an issued token
+    happens to expire. `get_current_user` has already loaded the row and
+    rejected suspended accounts.
+    """
+    if not bool(getattr(user, "is_super_admin", False)):
+        # No "actual" value in `extra`: telling a caller their exact elevation
+        # state is a hint they have no use for, and this is the one guard where
+        # someone probing is the expected case rather than the unusual one.
+        raise ForbiddenError(
+            "Requires super administrator.",
+            code="super_admin_required",
+        )
+    return user

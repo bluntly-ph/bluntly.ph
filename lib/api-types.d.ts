@@ -935,6 +935,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find an account by staff reference, id, email or name
+         * @description Lookup, not enumeration.
+         *
+         *     An empty query returns nothing. Browsing the population already exists at
+         *     /admin/reviewers; letting this endpoint dump every account as well would
+         *     make one mistyped request a full export.
+         */
+        get: operations["search_api_v1_admin_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Assign or revoke moderator (super admin)
+         * @description Move an account between `user` and `moderator`.
+         *
+         *     The role change and its audit record are written in ONE transaction. A
+         *     grant that committed without its log would be exactly the situation the log
+         *     exists for — someone holding moderator powers with no record of who gave
+         *     them.
+         */
+        patch: operations["set_role_api_v1_admin_users__user_id__role_patch"];
+        trace?: never;
+    };
     "/api/v1/internal/cron/{task}": {
         parameters: {
             query?: never;
@@ -946,17 +995,12 @@ export interface paths {
         put?: never;
         /**
          * Run one scheduled maintenance task
-         * @description Claim this task's current period and do as much of it as fits.
+         * @description Take the execution lease on this task's current period and do as much of
+         *     it as the time budget allows.
          *
-         *     The claim is an INSERT arbitrated by a unique index, not an advisory lock.
-         *     That is not a stylistic choice: the application connects through the
-         *     Supabase transaction pooler, which hands the backend back at every commit,
-         *     so a session-level advisory lock can be released on a different connection
-         *     than acquired it — or never released at all. A row the database refuses to
-         *     duplicate is mutual exclusion that pooling cannot undermine.
-         *
-         *     The four refusals stay distinct, because collapsing them would hide a
-         *     scheduler that had stopped behind one that was merely early.
+         *     Note the signature: no cursor, no offset, no batch size. Progression is
+         *     entirely the backend's, so possession of the scheduler credential does not
+         *     confer the ability to steer or truncate a traversal.
          */
         post: operations["run_task_api_v1_internal_cron__task__post"];
         delete?: never;
@@ -3597,6 +3641,29 @@ export interface components {
             joined: string;
         };
         /**
+         * RoleChangeIn
+         * @description Assign or revoke moderator. Nothing else is expressible.
+         */
+        RoleChangeIn: {
+            role: components["schemas"]["MemberRole"];
+        };
+        /** RoleChangeResult */
+        RoleChangeResult: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Staff Ref */
+            staff_ref?: string | null;
+            previous_role: components["schemas"]["MemberRole"];
+            role: components["schemas"]["MemberRole"];
+            /** Changed */
+            changed: boolean;
+            /** Detail */
+            detail?: string | null;
+        };
+        /**
          * RoleUpdate
          * @description Moderator promote/demote between user and seller (M2 slice 4).
          *
@@ -3627,6 +3694,61 @@ export interface components {
             recent: components["schemas"]["CronRunRow"][];
             /** Never Run */
             never_run: string[];
+        };
+        /** StaffUserPage */
+        StaffUserPage: {
+            /** Rows */
+            rows?: components["schemas"]["StaffUserRow"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /** Resolved Staff Ref */
+            resolved_staff_ref?: string | null;
+            /**
+             * Can Manage Roles
+             * @default false
+             */
+            can_manage_roles: boolean;
+        };
+        /**
+         * StaffUserRow
+         * @description One account, as staff see it.
+         *
+         *     Carries identity and standing, and deliberately not: password hash,
+         *     wallet balance, payout account, tokens, session data or anything about
+         *     authentication. A moderator finding a person does not need their money.
+         */
+        StaffUserRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Staff Ref */
+            staff_ref?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Username */
+            username?: string | null;
+            role: components["schemas"]["MemberRole"];
+            /** Is Suspended */
+            is_suspended: boolean;
+            /** Trust Stage */
+            trust_stage: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /**
+             * Is Super Admin
+             * @default false
+             */
+            is_super_admin: boolean;
         };
         /** StreakDayOut */
         StreakDayOut: {
@@ -5702,6 +5824,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_v1_admin_users_get: {
+        parameters: {
+            query?: {
+                /** @description Staff ref (USR-000123), UUID, exact email, or name */
+                q?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffUserPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_role_api_v1_admin_users__user_id__role_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleChangeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleChangeResult"];
                 };
             };
             /** @description Validation Error */

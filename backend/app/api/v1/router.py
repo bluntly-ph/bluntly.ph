@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     admin_earnings,
     admin_referral,
     admin_reports,
+    admin_users,
     ai,
     auth,
     comments,
@@ -39,6 +40,7 @@ api_v1_router.include_router(admin_referral.router)
 api_v1_router.include_router(admin_earnings.router)
 api_v1_router.include_router(admin_analytics.router)
 api_v1_router.include_router(admin_console.router)
+api_v1_router.include_router(admin_users.router)
 api_v1_router.include_router(internal_cron.router)
 api_v1_router.include_router(traffic_ingest.router)
 api_v1_router.include_router(admin_reports.router)

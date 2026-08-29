@@ -10,6 +10,7 @@ import {
   Fingerprint,
   Gear,
   Handbag,
+  IdentificationCard,
   Link as LinkIcon,
   List,
   ListChecks,
@@ -86,6 +87,12 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
         blocked: "Not available in current product scope",
         why:
           "Seller accounts were descoped by the owner (2026-07-28, reaffirmed 2026-08-07) and the schema was dropped in migration 0024. There is no seller entity to manage.",
+      },
+      {
+        label: "Users",
+        Icon: IdentificationCard,
+        href: "/moderate/users",
+        match: "/moderate/users",
       },
       {
         label: "Reviewers",

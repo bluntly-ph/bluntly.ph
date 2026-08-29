@@ -101,9 +101,14 @@ class TestNoRequestSchemaCarriesTrustState:
 
     # Reviewed and intended. Each needs a reason, not just an entry.
     ALLOWED = {
-        # Moderator-only endpoint; additionally refuses to grant `moderator`
-        # itself, so it cannot be used to mint a peer.
+        # Moderator-only membership endpoint; refuses both granting moderator
+        # and changing a target who is already moderator, so it cannot mint or
+        # revoke a peer through the older seller-role surface.
         ("user.RoleUpdate", "role"),
+        # Super-admin-only endpoint. Runtime validation narrows the enum to the
+        # two reviewed transitions: user <-> moderator. Seller and the
+        # orthogonal super-admin elevation are not assignable here.
+        ("admin_users.RoleChangeIn", "role"),
         # The client picks which of ITS OWN uploaded objects to attach. The
         # service checks ownership before it means anything - see
         # review_service._own_receipt_key / _verification_for.
