@@ -105,15 +105,20 @@ def _finish_vote_write(db: Session, review: Review) -> None:
     db.refresh(review)
 
 
+def voted_review_ids(db: Session) -> list:
+    """Reviews with at least one vote — the population the nightly re-decay
+    walks. Named so the selection can be tested and bounded independently of
+    the recomputation it feeds."""
+    return list(db.scalars(select(ReviewVote.review_id).distinct()).all())
+
+
 def recompute_all_wilson_scores(db: Session) -> int:
     """Nightly sweep: re-decay wilson for published reviews with >=1 vote.
 
     Decay drifts with time even without new votes, so listings would go stale
     without this. Returns the number of reviews updated.
     """
-    review_ids = db.scalars(
-        select(ReviewVote.review_id).distinct()
-    ).all()
+    review_ids = voted_review_ids(db)
     updated = 0
     for review_id in review_ids:
         review = db.get(Review, review_id)

@@ -114,9 +114,13 @@ def recompute_user_trust(db: Session, user_id: uuid.UUID) -> None:
         _award_stage_badges(db, user, old_stage, new_stage)
 
 
-def recompute_recently_active_users(db: Session, active_days: int = 90) -> int:
-    """Nightly sweep: recompute trust for users active in the last `active_days`
-    (profile updated, authored a review, or cast a vote). Commits once."""
+def recently_active_user_ids(db: Session, active_days: int = 90) -> set:
+    """Who the nightly sweep considers active: profile touched, review written,
+    or vote cast within `active_days`.
+
+    Split out from the sweep so the selection can be named and tested on its
+    own. It is the same query the sweep has always run.
+    """
     cutoff = _now() - timedelta(days=active_days)
     user_ids = set(db.scalars(
         select(User.id).where(User.updated_at >= cutoff)))
@@ -125,7 +129,13 @@ def recompute_recently_active_users(db: Session, active_days: int = 90) -> int:
                                        Review.author_id.isnot(None)).distinct()))
     user_ids.update(db.scalars(
         select(ReviewVote.voter_id).where(ReviewVote.created_at >= cutoff).distinct()))
+    return user_ids
 
+
+def recompute_recently_active_users(db: Session, active_days: int = 90) -> int:
+    """Nightly sweep: recompute trust for users active in the last `active_days`
+    (profile updated, authored a review, or cast a vote). Commits once."""
+    user_ids = recently_active_user_ids(db, active_days)
     for user_id in user_ids:
         recompute_user_trust(db, user_id)
     db.commit()

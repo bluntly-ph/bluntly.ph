@@ -33,10 +33,16 @@ def recompute_product_trust(db: Session, product_id: uuid.UUID) -> None:
 
 
 # --- Nightly sweep (extends the 04:00 wilson task) ---
-def recompute_all_trust_ratings(db: Session) -> dict[str, int]:
-    product_ids = db.scalars(
+def reviewed_product_ids(db: Session) -> list:
+    """Products carrying at least one live published review — the population
+    the nightly rating sweep walks. Named for the same reason as the others."""
+    return list(db.scalars(
         select(Review.product_id).where(Review.published_at.isnot(None),
-                                        Review.is_removed.is_(False)).distinct()).all()
+                                        Review.is_removed.is_(False)).distinct()).all())
+
+
+def recompute_all_trust_ratings(db: Session) -> dict[str, int]:
+    product_ids = reviewed_product_ids(db)
     for product_id in product_ids:
         recompute_product_trust(db, product_id)
     db.commit()
