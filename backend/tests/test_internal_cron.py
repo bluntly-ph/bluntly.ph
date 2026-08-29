@@ -102,7 +102,8 @@ def test_every_allow_listed_task_is_callable():
     """A name in the list with no working callable behind it would fail only at
     3am in production."""
     for name, spec in internal_cron.TASKS.items():
-        assert callable(spec.run), f"{name} has no runnable body"
+        body = spec.sweep if spec.resumable else spec.run
+        assert callable(body), f"{name} has no runnable body"
 
 
 def test_the_allow_list_covers_every_beat_task():
@@ -255,39 +256,186 @@ def test_the_skip_reasons_are_distinct():
     assert internal_cron.OK not in reasons and internal_cron.FAILED not in reasons
 
 
-# --- Overlap and repetition ------------------------------------------------
+# --- Claims, overlap and continuation --------------------------------------
+#
+# There is no advisory lock here, deliberately. The application connects through
+# the Supabase TRANSACTION pooler, which hands the backend back at every commit,
+# so a session-level advisory lock can be released on a different connection
+# than took it — and the sweep services commit internally, several times. The
+# claim is a row the database refuses to duplicate instead.
 
 @requires_db
-def test_a_second_invocation_while_one_holds_the_lock_is_reported(client, db, scheduler_credential):
-    """Schedulers retry. Two runners inside one sweep would double the work, so
-    the second must be told it is already running rather than proceeding."""
-    from sqlalchemy import text
+def test_a_claim_survives_the_services_internal_commits(client, db, scheduler_credential):
+    """The failure mode an advisory lock would have had here.
 
-    key = internal_cron._lock_key("expire_requests")
-    # Hold the lock on a separate session, as a concurrent runner would.
-    db.execute(text("SELECT pg_advisory_lock(:ns, :key)"),
-               {"ns": internal_cron._LOCK_NAMESPACE, "key": key})
+    `pii_retention` commits inside its service. If exclusion depended on
+    connection state it would be gone by the time the task returned, and a
+    second caller would happily run it again.
+    """
+    first = client.post(f"{CRON}/pii_retention", headers={"X-Cron-Key": SECRET})
+    assert first.status_code == 200
+    assert first.json()["status"] == internal_cron.OK
+
+    second = client.post(f"{CRON}/pii_retention", headers={"X-Cron-Key": SECRET})
+    assert second.status_code == 200
+    assert second.json()["status"] == internal_cron.ALREADY_DONE, (
+        "the period claim must outlive the service's own commits")
+
+
+@requires_db
+def test_a_held_claim_blocks_a_concurrent_runner(client, db, scheduler_credential):
+    """A claim in flight — as a still-running invocation would leave it — must
+    turn the next caller away rather than letting it run in parallel."""
+    from datetime import datetime
+
+    from app.core.constants import MANILA
+    from app.models.maintenance import CronRun
+
+    spec = internal_cron.TASKS["expire_requests"]
+    now = datetime.now(MANILA)
+    held = CronRun(task="expire_requests", source="scheduler",
+                   status=internal_cron.RUNNING, period=spec.period(now),
+                   scheduled_for=spec.threshold(now), started_at=now,
+                   claimed_at=now, processed_total=0)
+    db.add(held)
     db.commit()
     try:
         resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
         assert resp.status_code == 200
         assert resp.json()["status"] == internal_cron.ALREADY_RUNNING
     finally:
-        db.execute(text("SELECT pg_advisory_unlock(:ns, :key)"),
-                   {"ns": internal_cron._LOCK_NAMESPACE, "key": key})
+        db.delete(held)
         db.commit()
 
 
 @requires_db
-def test_running_the_same_task_twice_is_safe(client, scheduler_credential):
-    """Neither call errors; the second reports the period already done."""
-    seen = []
-    for _ in range(2):
+def test_an_abandoned_claim_is_taken_over(client, db, scheduler_credential):
+    """A process that dies mid-run leaves its claim behind. Without takeover one
+    crash would block the task forever; the claim is stale after 30 minutes,
+    which no serverless request can legitimately reach."""
+    from datetime import datetime
+
+    from app.core.constants import MANILA
+    from app.models.maintenance import CronRun
+
+    spec = internal_cron.TASKS["expire_requests"]
+    now = datetime.now(MANILA)
+    abandoned = CronRun(
+        task="expire_requests", source="scheduler", status=internal_cron.RUNNING,
+        period=spec.period(now), scheduled_for=spec.threshold(now),
+        started_at=now - internal_cron.STALE_CLAIM * 2,
+        claimed_at=now - internal_cron.STALE_CLAIM * 2, processed_total=0)
+    db.add(abandoned)
+    db.commit()
+    try:
         resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
         assert resp.status_code == 200
-        seen.append(resp.json()["status"])
-    assert seen[0] in (internal_cron.OK, internal_cron.ALREADY_DONE)
-    assert seen[1] == internal_cron.ALREADY_DONE
+        assert resp.json()["status"] == internal_cron.OK, (
+            "a stale claim must be taken over, not honoured forever")
+    finally:
+        db.expire_all()
+        row = db.get(CronRun, abandoned.id)
+        if row is not None:
+            db.delete(row)
+            db.commit()
+
+
+@requires_db
+def test_a_failed_run_releases_the_claim(client, db, monkeypatch, scheduler_credential):
+    """A failure must free the period. If the claim survived, one bad night
+    would mean the job never ran that month."""
+    def boom(_db):
+        raise RuntimeError("transient")
+
+    monkeypatch.setitem(internal_cron.TASKS, "expire_requests",
+                        internal_cron.TaskSpec(boom, cadence="daily", hour=0))
+    assert client.post(f"{CRON}/expire_requests",
+                       headers={"X-Cron-Key": SECRET}).status_code == 500
+
+    monkeypatch.undo()
+    retried = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
+    assert retried.status_code == 200
+    assert retried.json()["status"] == internal_cron.OK
+
+
+@requires_db
+def test_a_long_sweep_continues_across_invocations(client, db, monkeypatch,
+                                                   scheduler_credential):
+    """The serverless-duration answer: batches, not truncation.
+
+    A sweep that cannot finish in one request must report `continuing` and
+    resume where it stopped, and the period must NOT be marked done until the
+    whole population has been covered — otherwise "ok" would mean "one batch
+    worked" and most records would silently never be recomputed.
+    """
+    from app.services.sweep_service import BatchResult
+
+    seen: list[str | None] = []
+
+    def fake_sweep(_db, cursor, _batch):
+        seen.append(cursor)
+        if cursor is None:
+            return BatchResult(processed=2, cursor="a", complete=False)
+        if cursor == "a":
+            return BatchResult(processed=2, cursor="b", complete=False)
+        return BatchResult(processed=1, cursor=None, complete=True)
+
+    monkeypatch.setitem(
+        internal_cron.TASKS, "recompute_all_trust",
+        internal_cron.TaskSpec(sweep=fake_sweep, cadence="daily", hour=0, batch=2))
+
+    statuses, totals = [], []
+    for _ in range(3):
+        resp = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
+        assert resp.status_code == 200
+        body = resp.json()
+        statuses.append(body["status"])
+        totals.append(body["processed_total"])
+
+    assert statuses == [internal_cron.CONTINUING, internal_cron.CONTINUING, internal_cron.OK]
+    assert seen == [None, "a", "b"], "each call must resume from the stored cursor"
+    assert totals == [2, 4, 5], "the running total must accumulate across batches"
+
+    # And only now is the period finished.
+    done = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
+    assert done.json()["status"] == internal_cron.ALREADY_DONE
+
+
+@requires_db
+def test_an_unfinished_sweep_does_not_complete_the_period(client, monkeypatch,
+                                                          scheduler_credential):
+    """One successful batch must never consume the period's uniqueness slot."""
+    from app.services.sweep_service import BatchResult
+
+    monkeypatch.setitem(
+        internal_cron.TASKS, "recompute_all_trust",
+        internal_cron.TaskSpec(
+            sweep=lambda _db, c, b: BatchResult(processed=1, cursor="x", complete=False),
+            cadence="daily", hour=0))
+
+    first = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
+    assert first.json()["status"] == internal_cron.CONTINUING
+    assert first.json()["more"] is True
+
+    second = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
+    assert second.json()["status"] == internal_cron.CONTINUING, (
+        "an unfinished sweep must stay resumable, not read as completed")
+
+
+def test_only_the_o_n_sweeps_are_resumable():
+    """Set-based jobs should stay simple; forcing every task into a
+    continuation protocol would be complexity for its own sake."""
+    resumable = {n for n, s in internal_cron.TASKS.items() if s.resumable}
+    assert resumable == {"recompute_all_trust", "recompute_wilson_scores"}
+
+
+def test_the_scheduler_never_takes_a_cursor_from_the_caller():
+    """The backend owns progression. A caller-supplied cursor would let anyone
+    with the credential skip most of a population."""
+    import inspect
+
+    params = set(inspect.signature(internal_cron.run_task).parameters)
+    assert not params & {"cursor", "offset", "after", "batch", "limit"}
 
 
 # --- What is recorded ------------------------------------------------------
@@ -408,10 +556,16 @@ def test_the_scheduler_does_not_expose_arbitrary_execution(client, scheduler_cre
         assert resp.status_code in (404, 405), f"{probe} resolved to something"
 
 
-def test_lock_keys_are_distinct_per_task():
-    """One shared lock id would make unrelated jobs block each other."""
-    keys = {name: internal_cron._lock_key(name) for name in internal_cron.TASKS}
-    assert len(set(keys.values())) == len(keys), f"colliding lock keys: {keys}"
+def test_claims_are_scoped_per_task_and_period():
+    """Exclusion must be per (task, period). One shared key would make
+    unrelated jobs block each other; a task-only key would block tomorrow's run
+    behind today's."""
+    from app.models.maintenance import CronRun
+
+    index = next(ix for ix in CronRun.__table__.indexes
+                 if ix.name == "uq_cron_runs_task_period_claim")
+    assert index.unique
+    assert [c.name for c in index.columns] == ["task", "period"]
 
 
 def test_the_credential_is_never_stored_in_plaintext():

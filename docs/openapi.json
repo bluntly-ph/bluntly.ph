@@ -2883,7 +2883,7 @@
           "internal: scheduled maintenance"
         ],
         "summary": "Run one scheduled maintenance task",
-        "description": "Run one job if its current period is due and has not already succeeded.\n\nThe three refusals are distinct on purpose. \"Not due\" is a scheduler that\nfired early; \"already completed\" is the normal answer for every extra\ninvocation inside a period, and the answer that makes daily triggering of a\nmonthly job safe; \"already running\" is an overlap. Reporting all three as\none \"skipped\" would hide a scheduler that had stopped working.",
+        "description": "Claim this task's current period and do as much of it as fits.\n\nThe claim is an INSERT arbitrated by a unique index, not an advisory lock.\nThat is not a stylistic choice: the application connects through the\nSupabase transaction pooler, which hands the backend back at every commit,\nso a session-level advisory lock can be released on a different connection\nthan acquired it \u2014 or never released at all. A row the database refuses to\nduplicate is mutual exclusion that pooling cannot undermine.\n\nThe four refusals stay distinct, because collapsing them would hide a\nscheduler that had stopped behind one that was merely early.",
         "operationId": "run_task_api_v1_internal_cron__task__post",
         "parameters": [
           {
@@ -6632,6 +6632,22 @@
               }
             ],
             "title": "Processed"
+          },
+          "processed_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed Total"
+          },
+          "more": {
+            "type": "boolean",
+            "title": "More",
+            "default": false
           },
           "detail": {
             "anyOf": [

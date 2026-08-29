@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
@@ -20,6 +20,15 @@ class CronRun(Base, UUIDPrimaryKey, Timestamps):
     """
 
     __tablename__ = "cron_runs"
+    __table_args__ = (
+        # The whole mutual-exclusion mechanism. A period may have at most one
+        # row that is finished or in flight; `failed` and the skips stay
+        # outside it so a failed period can be retried and a skip is only a
+        # note that the scheduler called.
+        Index("uq_cron_runs_task_period_claim", "task", "period", unique=True,
+              postgresql_where=text(
+                  "period IS NOT NULL AND status IN ('running', 'continuing', 'ok')")),
+    )
 
     task: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     #: Logical execution period in Asia/Manila — "2026-08-29" for a daily job,

@@ -25,8 +25,11 @@ not in the database, not in any log, and never in a URL.
 Everything here is deliberately narrow:
 
   * only names in TASKS may be invoked; the path is not a function reference
-  * every task runs under a Postgres advisory lock, so an overlapping or
-    retried invocation cannot double-run one
+  * a period is claimed by INSERTing a row that a unique index arbitrates,
+    so an overlapping or retried invocation cannot double-run one. Advisory
+    locks would NOT work here: the application connects through the Supabase
+    transaction pooler, which hands a backend back at every commit, so a
+    session-level lock can be released on a different connection than took it
   * every invocation is recorded in `cron_runs`, success or failure
   * failures record an exception CLASS, never a message
   * tasks whose real cadence is monthly carry a Manila-date guard, because the
@@ -38,12 +41,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import MANILA
@@ -59,38 +62,41 @@ CREDENTIAL_NAME = "scheduler"
 
 
 class TaskSpec:
-    """One schedulable job, and when its work belongs to.
+    """One schedulable job: what it does, when its work belongs to, and whether
+    it can finish inside a single request.
 
-    `run` returns the number of records it processed, so the run history says
-    how much work happened rather than only that something did.
+    CADENCE. GitHub Actions does not guarantee delivery — a scheduled workflow
+    can be late, dropped, retried or overlapped. Keying eligibility off "is
+    today the 1st in Manila" means one missed invocation postpones a monthly job
+    by a month. So each job has a logical PERIOD ("2026-08-29" daily, "2026-08"
+    monthly, always Asia/Manila) and a THRESHOLD, and eligibility is "the
+    threshold has passed and this period is not already done or in flight" —
+    which catches up instead of skipping.
 
-    The rest describes the CADENCE, because GitHub Actions does not guarantee
-    delivery. A scheduled workflow can be late, dropped, retried or overlapped.
-    Keying eligibility off "is today the 1st in Manila" means one missed
-    invocation postpones a monthly job by a month — the scheduler quietly not
-    doing the thing it exists for.
-
-    So each job has a logical PERIOD ("2026-08-29" daily, "2026-08" monthly,
-    always in Asia/Manila) and a THRESHOLD, the moment that period became due.
-    Eligibility is then:
-
-        the threshold has passed
-        AND this period has no successful run yet
-        AND nothing is running it right now
-
-    which catches up rather than skipping: a run arriving on the 2nd still
-    completes August, and the next one that day finds August already done.
+    SHAPE. Some jobs are one set-based statement and finish in milliseconds.
+    Others recompute a population one record at a time; CI measured the trust
+    sweep at 82 minutes against ~7,000 users, which no serverless request
+    survives. Those declare a `sweep`, and are traversed across as many
+    invocations as it takes, the period completing only when the whole
+    population has been covered.
     """
 
-    def __init__(self, run: Callable[[Session], int], *,
+    def __init__(self, run=None, *, sweep=None, batch: int = 250,
                  cadence: str, hour: int, minute: int = 0,
                  day_of_month: int | None = None, note: str = ""):
+        assert (run is None) != (sweep is None), "a task is either simple or a sweep"
         self.run = run
-        self.cadence = cadence          # "daily" | "monthly"
+        self.sweep = sweep
+        self.batch = batch
+        self.cadence = cadence
         self.hour = hour
         self.minute = minute
         self.day_of_month = day_of_month
         self.note = note
+
+    @property
+    def resumable(self) -> bool:
+        return self.sweep is not None
 
     def period(self, now: datetime) -> str:
         """The logical run this invocation belongs to, in Manila."""
@@ -127,18 +133,16 @@ def _pii_retention(db: Session) -> int:
     return sum(int(v) for v in counts.values())
 
 
-def _recompute_trust(db: Session) -> int:
-    """Full production semantics: every recently active user, no limit, no
-    sampling. Only the CI tests bound the selection."""
-    from app.services.trust_service import recompute_recently_active_users
-    return int(recompute_recently_active_users(db) or 0)
+def _sweep_trust(db: Session, cursor: str | None, batch: int):
+    """Full production population, traversed across invocations. No limit on
+    who is eligible and no sampling — only where this batch stops."""
+    from app.services.sweep_service import sweep_trust
+    return sweep_trust(db, cursor, batch)
 
 
-def _recompute_wilson(db: Session) -> int:
-    from app.services import trust_rating_service, vote_service
-    reviews = int(vote_service.recompute_all_wilson_scores(db) or 0)
-    products = trust_rating_service.recompute_all_trust_ratings(db) or {}
-    return reviews + int(products.get("products_updated", 0))
+def _sweep_wilson(db: Session, cursor: str | None, batch: int):
+    from app.services.sweep_service import sweep_wilson
+    return sweep_wilson(db, cursor, batch)
 
 
 def _refresh_payout_batches(db: Session) -> int:
@@ -191,9 +195,10 @@ TASKS: dict[str, TaskSpec] = {
     "pii_retention": TaskSpec(
         _pii_retention, cadence="daily", hour=3, note="daily 03:00 Manila"),
     "recompute_wilson_scores": TaskSpec(
-        _recompute_wilson, cadence="daily", hour=4, note="daily 04:00 Manila"),
+        sweep=_sweep_wilson, cadence="daily", hour=4, note="daily 04:00 Manila"),
     "recompute_all_trust": TaskSpec(
-        _recompute_trust, cadence="daily", hour=4, minute=30, note="daily 04:30 Manila"),
+        sweep=_sweep_trust, cadence="daily", hour=4, minute=30,
+        note="daily 04:30 Manila"),
     "sweep_contracts": TaskSpec(
         _sweep_contracts, cadence="daily", hour=5, note="daily 05:00 Manila"),
     "expire_requests": TaskSpec(
@@ -208,19 +213,16 @@ TASKS: dict[str, TaskSpec] = {
         note="5th of the month, 02:30 Manila"),
 }
 
-#: Stable per-task advisory lock ids. Postgres advisory locks are session-held
-#: and cost nothing when uncontended, which is the cheapest correct way to stop
-#: a retried or overlapping invocation from running a sweep twice.
-_LOCK_NAMESPACE = 4713
-
-
-def _lock_key(task: str) -> int:
-    return int(hashlib.sha256(task.encode()).hexdigest()[:8], 16) % 2_147_483_647
-
+#: A claim older than this is treated as abandoned — the process that made it
+#: died, and a serverless request cannot legitimately run for anything close to
+#: this long. Without takeover one crash would block a task forever.
+STALE_CLAIM = timedelta(minutes=30)
 
 #: Distinct outcomes, so "nothing happened" is never ambiguous.
 OK = "ok"
 FAILED = "failed"
+RUNNING = "running"
+CONTINUING = "continuing"
 NOT_DUE = "skipped_not_due"
 ALREADY_DONE = "skipped_already_completed"
 ALREADY_RUNNING = "skipped_already_running"
@@ -231,6 +233,10 @@ class CronResult(BaseModel):
     status: str
     period: str | None = None
     processed: int | None = None
+    #: Total across every batch of this period, not just this invocation.
+    processed_total: int | None = None
+    #: True when the scheduler should call again to continue the traversal.
+    more: bool = False
     detail: str | None = None
     run_id: str | None = None
 
@@ -275,13 +281,17 @@ def run_task(
     db: Session = Depends(get_db),
     source: str = "scheduler",
 ) -> CronResult:
-    """Run one job if its current period is due and has not already succeeded.
+    """Claim this task's current period and do as much of it as fits.
 
-    The three refusals are distinct on purpose. "Not due" is a scheduler that
-    fired early; "already completed" is the normal answer for every extra
-    invocation inside a period, and the answer that makes daily triggering of a
-    monthly job safe; "already running" is an overlap. Reporting all three as
-    one "skipped" would hide a scheduler that had stopped working.
+    The claim is an INSERT arbitrated by a unique index, not an advisory lock.
+    That is not a stylistic choice: the application connects through the
+    Supabase transaction pooler, which hands the backend back at every commit,
+    so a session-level advisory lock can be released on a different connection
+    than acquired it — or never released at all. A row the database refuses to
+    duplicate is mutual exclusion that pooling cannot undermine.
+
+    The four refusals stay distinct, because collapsing them would hide a
+    scheduler that had stopped behind one that was merely early.
     """
     spec = TASKS.get(task)
     if spec is None:
@@ -298,77 +308,146 @@ def run_task(
         return CronResult(task=task, status=NOT_DUE, period=period,
                           detail="not due yet")
 
-    # The period may already be done — by an earlier invocation today, or by
-    # the run that was supposed to happen and did. This is what makes the
-    # monthly jobs safe to trigger daily.
-    if _completed(db, task, period):
-        _record(db, task, source, ALREADY_DONE, period, due_at,
-                detail="period already completed")
-        return CronResult(task=task, status=ALREADY_DONE, period=period,
-                          detail="already completed for this period")
-
-    # One runner at a time. try_advisory_lock returns immediately rather than
-    # queueing, so a retry overlapping a slow sweep is told so instead of
-    # doubling the work or holding the request open.
-    #
-    # Session-scoped rather than transaction-scoped: the service functions
-    # commit internally, and an xact lock would be released by the first of
-    # those commits, part-way through the very sweep it is protecting. A
-    # session lock is released in `finally`, and by the connection dropping if
-    # the process dies — so a crash cannot leave it held forever either.
-    got_lock = db.scalar(text("SELECT pg_try_advisory_lock(:ns, :key)"),
-                         {"ns": _LOCK_NAMESPACE, "key": _lock_key(task)})
-    if not got_lock:
-        _record(db, task, source, ALREADY_RUNNING, period, due_at,
-                detail="another runner holds this task")
-        return CronResult(task=task, status=ALREADY_RUNNING, period=period,
-                          detail="already running")
+    claim = _claim(db, task, source, period, due_at)
+    if claim is None:
+        # Someone holds it, or it is already finished. `_claim` distinguishes
+        # the two by reading back the row that blocked the insert.
+        existing = _existing(db, task, period)
+        status = ALREADY_DONE if existing == OK else ALREADY_RUNNING
+        _record(db, task, source, status, period, due_at,
+                detail="period already completed" if status == ALREADY_DONE
+                else "another runner holds this task")
+        return CronResult(task=task, status=status, period=period,
+                          detail="already completed" if status == ALREADY_DONE
+                          else "already running")
 
     started = datetime.now(MANILA)
     try:
+        if spec.resumable:
+            result = spec.sweep(db, claim.cursor, spec.batch)
+            total = (claim.processed_total or 0) + result.processed
+            if result.complete:
+                _finish(db, claim, OK, cursor=None, processed=result.processed,
+                        total=total, started=started)
+                log.info("scheduled sweep complete",
+                         extra={"extra_fields": {"task": task, "period": period,
+                                                 "processed_total": total}})
+                return CronResult(task=task, status=OK, period=period,
+                                  processed=result.processed, processed_total=total,
+                                  run_id=str(claim.id))
+            _finish(db, claim, CONTINUING, cursor=result.cursor,
+                    processed=result.processed, total=total, started=started)
+            return CronResult(task=task, status=CONTINUING, period=period,
+                              processed=result.processed, processed_total=total,
+                              more=True, run_id=str(claim.id),
+                              detail="more records remain")
+
         processed = spec.run(db)
         db.commit()
-        run_id = _record(db, task, source, OK, period, due_at,
-                         processed=processed, started=started)
+        _finish(db, claim, OK, cursor=None, processed=processed,
+                total=processed, started=started)
         log.info("scheduled maintenance ok",
                  extra={"extra_fields": {"task": task, "period": period,
                                          "processed": processed}})
         return CronResult(task=task, status=OK, period=period,
-                          processed=processed, run_id=run_id)
+                          processed=processed, processed_total=processed,
+                          run_id=str(claim.id))
+
     except Exception as exc:  # noqa: BLE001 - recorded and reported, never swallowed
         db.rollback()
         failure = type(exc).__name__
         log.exception("scheduled maintenance failed",
                       extra={"extra_fields": {"task": task, "period": period}})
-        # No success row is written, so the period stays eligible and the next
-        # scheduled invocation retries it.
-        _record(db, task, source, FAILED, period, due_at,
-                failure=failure, started=started)
+        # Marking the claim failed releases the period: it falls out of the
+        # unique index, so the next invocation may retry it.
+        _finish(db, claim, FAILED, cursor=None, processed=0,
+                total=claim.processed_total or 0, started=started, failure=failure)
         # The class, not the message: a message can carry row data.
         raise HTTPException(status_code=500,
                             detail=f"Task failed: {failure}") from exc
-    finally:
-        db.execute(text("SELECT pg_advisory_unlock(:ns, :key)"),
-                   {"ns": _LOCK_NAMESPACE, "key": _lock_key(task)})
-        db.commit()
 
 
-def _completed(db: Session, task: str, period: str) -> bool:
-    """Has this task already succeeded for this period?
+def _claim(db: Session, task: str, source: str, period: str,
+           due_at: datetime) -> CronRun | None:
+    """Take this period, or return None if someone already has it.
 
-    The partial unique index on (task, period) WHERE status='ok' is the real
-    guarantee; this is the cheap check that avoids doing the work first and
-    discovering the conflict afterwards.
+    Resuming counts as holding it: a `continuing` claim belonging to this task
+    and period is handed straight back, which is how a multi-invocation sweep
+    picks up where it stopped.
     """
     try:
-        return db.scalar(
-            select(CronRun.id).where(
-                CronRun.task == task,
-                CronRun.period == period,
-                CronRun.status == OK).limit(1)) is not None
-    except Exception:  # noqa: BLE001 - table absent before the migration lands
+        mine = db.scalar(
+            select(CronRun).where(
+                CronRun.task == task, CronRun.period == period,
+                CronRun.status == CONTINUING).limit(1))
+        if mine is not None:
+            mine.status = RUNNING
+            mine.claimed_at = datetime.now(MANILA)
+            db.commit()
+            return mine
+
+        stale_before = datetime.now(MANILA) - STALE_CLAIM
+        abandoned = db.scalar(
+            select(CronRun).where(
+                CronRun.task == task, CronRun.period == period,
+                CronRun.status == RUNNING,
+                CronRun.claimed_at < stale_before).limit(1))
+        if abandoned is not None:
+            # The process that claimed this died. A serverless request cannot
+            # legitimately run this long, so take it over rather than letting
+            # one crash block the task forever.
+            abandoned.claimed_at = datetime.now(MANILA)
+            db.commit()
+            log.warning("took over an abandoned scheduler claim",
+                        extra={"extra_fields": {"task": task, "period": period}})
+            return abandoned
+
+        run = CronRun(task=task, source=source, status=RUNNING, period=period,
+                      scheduled_for=due_at, started_at=datetime.now(MANILA),
+                      claimed_at=datetime.now(MANILA), processed_total=0)
+        db.add(run)
+        db.commit()
+        return run
+    except IntegrityError:
+        # The unique index refused it: another runner claimed this period
+        # between our read and our write. That is the mechanism working.
         db.rollback()
-        return False
+        return None
+    except Exception:  # noqa: BLE001 - tables absent before the migrations land
+        db.rollback()
+        log.exception("could not claim scheduled period",
+                      extra={"extra_fields": {"task": task, "period": period}})
+        return None
+
+
+def _existing(db: Session, task: str, period: str) -> str | None:
+    """The status of whatever already holds this period."""
+    try:
+        return db.scalar(
+            select(CronRun.status).where(
+                CronRun.task == task, CronRun.period == period,
+                CronRun.status.in_((RUNNING, CONTINUING, OK))).limit(1))
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return None
+
+
+def _finish(db: Session, run: CronRun, status: str, *, cursor: str | None,
+            processed: int, total: int, started: datetime,
+            failure: str | None = None) -> None:
+    """Close out this invocation's slice of the claim. Never raises."""
+    try:
+        run.status = status
+        run.cursor = cursor
+        run.processed = processed
+        run.processed_total = total
+        run.finished_at = datetime.now(MANILA)
+        run.failure = failure
+        db.commit()
+    except Exception:  # noqa: BLE001 - bookkeeping must not break the task
+        db.rollback()
+        log.exception("could not close scheduled run",
+                      extra={"extra_fields": {"task": run.task, "status": status}})
 
 
 def _record(db: Session, task: str, source: str, status: str,
@@ -376,18 +455,18 @@ def _record(db: Session, task: str, source: str, status: str,
             processed: int | None = None, failure: str | None = None,
             detail: str | None = None,
             started: datetime | None = None) -> str:
-    """Write the run history row. Never raises into the caller's path.
+    """Write a non-claiming history row — the skips. Never raises.
 
-    The unique index can reject a success row if two runners raced the same
-    period. That is the index doing its job — the work is done either way —
-    so it is swallowed here rather than turned into a 500.
+    These deliberately do not take part in the unique index: a skip is a note
+    that the scheduler called, not a claim on the period.
     """
     try:
         now = datetime.now(MANILA)
         run = CronRun(task=task, source=source, status=status, period=period,
                       scheduled_for=scheduled_for,
                       started_at=started or now, finished_at=now,
-                      processed=processed, failure=failure, detail=detail)
+                      processed=processed, processed_total=processed or 0,
+                      failure=failure, detail=detail)
         db.add(run)
         db.commit()
         return str(run.id)

@@ -946,13 +946,17 @@ export interface paths {
         put?: never;
         /**
          * Run one scheduled maintenance task
-         * @description Run one job if its current period is due and has not already succeeded.
+         * @description Claim this task's current period and do as much of it as fits.
          *
-         *     The three refusals are distinct on purpose. "Not due" is a scheduler that
-         *     fired early; "already completed" is the normal answer for every extra
-         *     invocation inside a period, and the answer that makes daily triggering of a
-         *     monthly job safe; "already running" is an overlap. Reporting all three as
-         *     one "skipped" would hide a scheduler that had stopped working.
+         *     The claim is an INSERT arbitrated by a unique index, not an advisory lock.
+         *     That is not a stylistic choice: the application connects through the
+         *     Supabase transaction pooler, which hands the backend back at every commit,
+         *     so a session-level advisory lock can be released on a different connection
+         *     than acquired it — or never released at all. A row the database refuses to
+         *     duplicate is mutual exclusion that pooling cannot undermine.
+         *
+         *     The four refusals stay distinct, because collapsing them would hide a
+         *     scheduler that had stopped behind one that was merely early.
          */
         post: operations["run_task_api_v1_internal_cron__task__post"];
         delete?: never;
@@ -2183,6 +2187,13 @@ export interface components {
             period?: string | null;
             /** Processed */
             processed?: number | null;
+            /** Processed Total */
+            processed_total?: number | null;
+            /**
+             * More
+             * @default false
+             */
+            more: boolean;
             /** Detail */
             detail?: string | null;
             /** Run Id */

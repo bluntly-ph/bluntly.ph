@@ -8,8 +8,9 @@ name: Scheduled maintenance
 # job, including PII retention, waited on a moderator pressing a button.
 #
 # This is the scheduler. It calls one authenticated endpoint per job; the
-# endpoint runs the same service functions the manual admin routes run, under a
-# Postgres advisory lock, and records every execution.
+# endpoint runs the same service functions the manual admin routes run, claims
+# the job's logical period with a row a unique index arbitrates, and records
+# every execution.
 #
 # Why here rather than Vercel Cron: this project is on the hobby plan, which
 # allows two cron entries at daily granularity. There are eight jobs across six
@@ -27,9 +28,10 @@ name: Scheduled maintenance
 #
 # The two monthly jobs cannot be expressed directly: "the 1st at 02:00 Manila"
 # is the LAST day of the previous month at 18:00 UTC, and cron has no "last
-# day". They are triggered daily and the endpoint applies a Manila-date guard,
-# recording a `skipped` run on every other day. That keeps the Manila semantics
-# exact instead of approximating them in the cron expression.
+# day". They are triggered daily; the endpoint decides eligibility from the
+# logical PERIOD, so an invocation on the 2nd still completes the month that
+# was missed on the 1st, and every later call that month finds it done. Exact
+# Manila semantics, and it survives a scheduler that skips a day.
 #
 # The Philippines has observed UTC+8 with no daylight saving since 1945, so
 # these offsets do not drift.
@@ -61,8 +63,8 @@ on:
           - schedule_payouts
 
 concurrency:
-  # One maintenance run at a time. The endpoint also takes an advisory lock, so
-  # this is belt and braces rather than the only guard.
+  # One maintenance run at a time. The endpoint's period claim is the real
+  # guard — this only avoids piling workflows up.
   group: scheduled-maintenance
   cancel-in-progress: false
 
@@ -108,30 +110,58 @@ jobs:
             exit 1
           fi
 
-          echo "Running maintenance task: $TASK"
-          code=$(curl -sS -o response.json -w "%{http_code}" \
-                   -X POST "$BASE/api/v1/internal/cron/$TASK" \
-                   -H "X-Cron-Key: $CRON_SECRET" \
-                   -H "Content-Type: application/json" \
-                   --max-time 600 --retry 2 --retry-delay 30 --retry-connrefused)
+          # Two of the jobs recompute a whole population one record at a time
+          # and cannot finish inside a single serverless request, so the API
+          # answers `continuing` and we call again. The backend owns the cursor
+          # entirely — nothing about position is passed from here, so this loop
+          # cannot be used to steer a traversal.
+          #
+          # The bound is a safety net, not the mechanism: at 250 records per
+          # call it covers 30,000, far beyond the current population, and it
+          # stops a bug turning into an endless workflow.
+          MAX_CALLS=120
+          call=0
+          total=0
 
-          # The body carries a task name, a status and a count. No payloads, no
-          # identifiers, nothing sensitive — safe to print, and it is the only
-          # record a reader of this log gets.
-          echo "HTTP $code"
-          cat response.json || true
-          echo
+          while [ "$call" -lt "$MAX_CALLS" ]; do
+            call=$((call + 1))
+            code=$(curl -sS -o response.json -w "%{http_code}" \
+                     -X POST "$BASE/api/v1/internal/cron/$TASK" \
+                     -H "X-Cron-Key: $CRON_SECRET" \
+                     -H "Content-Type: application/json" \
+                     --max-time 300 --retry 2 --retry-delay 30 --retry-connrefused)
 
-          case "$code" in
-            200) ;;
-            401|503) echo "::error::Scheduler credential rejected or unconfigured."; exit 1 ;;
-            404) echo "::error::Task '$TASK' is not in the endpoint allow-list."; exit 1 ;;
-            *)   echo "::error::Maintenance task '$TASK' failed with HTTP $code"; exit 1 ;;
-          esac
+            # The body carries a task name, a status and counts. No payloads, no
+            # identifiers, nothing sensitive — safe to print, and the only
+            # record a reader of this log gets.
+            echo "call $call -> HTTP $code"
+            cat response.json || true
+            echo
 
-          status=$(python3 -c "import json,sys; print(json.load(open('response.json')).get('status',''))" 2>/dev/null || echo "")
-          if [ "$status" = "failed" ]; then
-            echo "::error::Task reported failure"
-            exit 1
-          fi
-          echo "::notice::$TASK -> $status"
+            case "$code" in
+              200) ;;
+              401|503) echo "::error::Scheduler credential rejected or unconfigured."; exit 1 ;;
+              404) echo "::error::Task '$TASK' is not in the endpoint allow-list."; exit 1 ;;
+              *)   echo "::error::Maintenance task '$TASK' failed with HTTP $code"; exit 1 ;;
+            esac
+
+            status=$(python3 -c "import json;print(json.load(open('response.json')).get('status',''))")
+            more=$(python3 -c "import json;print(json.load(open('response.json')).get('more',False))")
+            batch=$(python3 -c "import json;print(json.load(open('response.json')).get('processed') or 0)")
+            total=$((total + batch))
+
+            if [ "$status" = "failed" ]; then
+              echo "::error::$TASK reported failure"
+              exit 1
+            fi
+
+            if [ "$more" != "True" ]; then
+              echo "::notice::$TASK -> $status after $call call(s), $total record(s)"
+              exit 0
+            fi
+          done
+
+          # Running out of calls is not success: the period is still unfinished
+          # and must be visible rather than reported as done.
+          echo "::error::$TASK did not finish within $MAX_CALLS calls; period left incomplete"
+          exit 1
