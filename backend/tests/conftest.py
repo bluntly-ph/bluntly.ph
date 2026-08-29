@@ -244,12 +244,15 @@ def make_user(db, **overrides):
 
     from app.models.user import User
 
-    user = User(
-        email=f"t_{uuid.uuid4().hex}@example.com",
-        password_hash="not-a-real-hash",
-        display_name="Fixture User",
-        **overrides,
-    )
+    # Defaults, not fixed values. Passing them positionally alongside
+    # **overrides meant `make_user(db, display_name="...")` raised
+    # "got multiple values for keyword argument" — a helper that looks like it
+    # takes overrides while rejecting the three fields a caller is most likely
+    # to want to set.
+    overrides.setdefault("email", f"t_{uuid.uuid4().hex}@example.com")
+    overrides.setdefault("password_hash", "not-a-real-hash")
+    overrides.setdefault("display_name", "Fixture User")
+    user = User(**overrides)
     db.add(user)
     db.flush()
     created = db.info.get("created_users")

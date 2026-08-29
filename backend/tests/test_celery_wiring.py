@@ -35,6 +35,7 @@ production would pick" stops being covered.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 
 import pytest
 
@@ -201,7 +202,7 @@ def test_a_recently_active_user_is_selected(db):
     from app.services.trust_service import recently_active_user_ids
 
     user = make_user(db, display_name="Active")
-    db.commit()
+    db.flush()
     assert user.id in recently_active_user_ids(db)
 
 
@@ -213,28 +214,89 @@ def test_a_user_outside_the_window_is_not_selected(db):
     from app.services.trust_service import _now, recently_active_user_ids
 
     user = make_user(db, display_name="Dormant")
-    db.commit()
-    # Age this user's own row only — never a bulk rewrite of shared data.
-    user.updated_at = _now() - timedelta(days=400)
-    db.commit()
+    db.flush()
+
+    # A direct UPDATE, for this user's own row only — never a bulk rewrite of
+    # shared data. Assigning `updated_at` through the ORM would be undone:
+    # the column carries onupdate=func.now(), so the flush that saved it would
+    # immediately stamp it back to now and the row would still look active.
+    from sqlalchemy import update
+
+    from app.models.user import User
+
+    db.execute(update(User).where(User.id == user.id)
+               .values(updated_at=_now() - timedelta(days=400)))
+    db.flush()
 
     assert user.id not in recently_active_user_ids(db, active_days=90)
 
 
+def _product_with_review(db, *, published: bool, removed: bool = False):
+    """A product and one review on it, in the state the caller asks for."""
+    from datetime import datetime
+
+    from app.models.enums import Verdict
+    from app.models.product import Product
+    from app.models.review import Review
+
+    product = Product(canonical_name=f"Selector probe {uuid.uuid4().hex[:8]}",
+                      category="electronics")
+    db.add(product)
+    db.flush()
+    review = Review(product_id=product.id, title="t", discussion="d",
+                    verdict=Verdict.it_depends, star_rating=4,
+                    is_removed=removed,
+                    published_at=datetime.now(UTC) if published else None)
+    db.add(review)
+    db.flush()
+    return product, review
+
+
 @requires_db
-def test_the_wilson_selector_only_offers_reviews_that_have_votes(db):
+def test_the_wilson_selector_offers_a_review_that_has_a_vote(db):
+    """The rule is "reviews with at least one vote" — the population whose decay
+    drifts. A selector that dropped the predicate would sweep everything."""
+    from app.models.enums import VoteDirection
+    from app.models.vote import ReviewVote
     from app.services.vote_service import voted_review_ids
 
-    ids = voted_review_ids(db)
-    assert isinstance(ids, list)
-    # Whatever it returns must be distinct: the sweep does one pass per review.
-    assert len(ids) == len(set(ids))
+    voter = make_user(db, display_name="Selector voter")
+    _, voted = _product_with_review(db, published=True)
+    _, unvoted = _product_with_review(db, published=True)
+    db.add(ReviewVote(review_id=voted.id, voter_id=voter.id,
+                      vote=VoteDirection.up))
+    # Flush, not commit: the selector reads through this same session, and the
+    # fixture's rollback then leaves nothing behind in the shared project.
+    db.flush()
+
+    ids = set(voted_review_ids(db))
+    assert voted.id in ids, "a review with a vote must be swept"
+    assert unvoted.id not in ids, "a review with no vote must not be"
 
 
 @requires_db
-def test_the_rating_selector_only_offers_products_with_live_reviews(db):
+def test_the_rating_selector_excludes_unpublished_and_removed_reviews(db):
+    """The rule is "products carrying a live published review". Both halves of
+    that predicate are pinned, because either could be dropped silently."""
     from app.services.trust_rating_service import reviewed_product_ids
 
-    ids = reviewed_product_ids(db)
-    assert isinstance(ids, list)
-    assert len(ids) == len(set(ids))
+    live, _ = _product_with_review(db, published=True)
+    draft, _ = _product_with_review(db, published=False)
+    removed, _ = _product_with_review(db, published=True, removed=True)
+    db.flush()
+
+    ids = set(reviewed_product_ids(db))
+    assert live.id in ids, "a product with a live published review must be swept"
+    assert draft.id not in ids, "an unpublished review must not qualify a product"
+    assert removed.id not in ids, "a removed review must not qualify a product"
+
+
+@requires_db
+def test_both_selectors_return_distinct_populations(db):
+    """The sweeps do one pass per record; a duplicate would be wasted work."""
+    from app.services.trust_rating_service import reviewed_product_ids
+    from app.services.vote_service import voted_review_ids
+
+    for ids in (voted_review_ids(db), reviewed_product_ids(db)):
+        assert isinstance(ids, list)
+        assert len(ids) == len(set(ids))
