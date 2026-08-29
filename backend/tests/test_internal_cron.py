@@ -119,56 +119,140 @@ def test_the_allow_list_covers_every_beat_task():
     assert beat <= scheduled, f"beat tasks with no scheduler entry: {beat - scheduled}"
 
 
-# --- Cadence --------------------------------------------------------------
+# --- Cadence and catch-up ------------------------------------------------
+#
+# GitHub Actions does not guarantee delivery. These are the tests that stop a
+# missed invocation from silently postponing a monthly job by a month.
 
-def test_monthly_tasks_carry_a_manila_day_guard():
-    """A UTC cron cannot express "the 1st at 02:00 Manila" — that is the last
-    day of the previous month in UTC — so the guard lives here."""
-    assert internal_cron.TASKS["honesty_fund_distribution"].due is not None
-    assert internal_cron.TASKS["schedule_payouts"].due is not None
-
-
-def test_daily_tasks_have_no_day_guard():
-    for name in ("pii_retention", "expire_requests", "sweep_contracts",
-                 "recompute_all_trust", "recompute_wilson_scores",
-                 "refresh_payout_batches"):
-        assert internal_cron.TASKS[name].due is None, f"{name} should run every day"
+def test_every_task_declares_a_real_cadence():
+    for name, spec in internal_cron.TASKS.items():
+        assert spec.cadence in ("daily", "monthly"), name
+        if spec.cadence == "monthly":
+            assert spec.day_of_month, f"{name} is monthly with no day"
 
 
-@pytest.mark.parametrize("day,expected", [(1, True), (2, False), (15, False), (28, False)])
-def test_the_honesty_fund_guard_fires_only_on_the_first(day, expected):
+def test_periods_are_dated_in_manila_not_utc():
+    """18:30 UTC on the 4th is 02:30 Manila on the 5th. Reading the UTC date
+    would file the run under the wrong month at a boundary."""
     from app.core.constants import MANILA
 
-    when = datetime(2026, 9, day, 2, 0, tzinfo=MANILA)
-    assert internal_cron.TASKS["honesty_fund_distribution"].due(when) is expected
-
-
-@pytest.mark.parametrize("day,expected", [(5, True), (4, False), (6, False)])
-def test_the_payout_guard_fires_only_on_the_fifth(day, expected):
-    from app.core.constants import MANILA
-
-    when = datetime(2026, 9, day, 2, 30, tzinfo=MANILA)
-    assert internal_cron.TASKS["schedule_payouts"].due(when) is expected
-
-
-def test_the_guard_reads_manila_not_utc():
-    """18:30 UTC on the 4th is 02:30 Manila on the 5th. Reading the UTC day
-    would run payout scheduling on the wrong date every month."""
+    spec = internal_cron.TASKS["schedule_payouts"]
     utc_moment = datetime(2026, 9, 4, 18, 30, tzinfo=UTC)
-    assert internal_cron.TASKS["schedule_payouts"].due(utc_moment) is True
+    assert utc_moment.astimezone(MANILA).day == 5
+    assert spec.period(utc_moment) == "2026-09"
+    assert spec.is_due(utc_moment) is True
+
+
+def test_a_daily_period_is_a_date_and_a_monthly_period_is_a_month():
+    from app.core.constants import MANILA
+
+    when = datetime(2026, 8, 29, 12, 0, tzinfo=MANILA)
+    assert internal_cron.TASKS["expire_requests"].period(when) == "2026-08-29"
+    assert internal_cron.TASKS["honesty_fund_distribution"].period(when) == "2026-08"
+
+
+def test_a_task_is_not_due_before_its_threshold():
+    from app.core.constants import MANILA
+
+    spec = internal_cron.TASKS["pii_retention"]          # 03:00 Manila
+    assert spec.is_due(datetime(2026, 8, 29, 2, 59, tzinfo=MANILA)) is False
+    assert spec.is_due(datetime(2026, 8, 29, 3, 0, tzinfo=MANILA)) is True
+
+
+def test_a_missed_monthly_run_is_caught_up_later_in_the_same_period():
+    """THE point of this design. If the scheduler never fired on the 1st, an
+    invocation on the 2nd — or the 20th — must still be due, because the period
+    is the month and the month has not been done."""
+    from app.core.constants import MANILA
+
+    spec = internal_cron.TASKS["honesty_fund_distribution"]
+    missed_day = datetime(2026, 8, 2, 2, 0, tzinfo=MANILA)
+    assert spec.is_due(missed_day) is True
+    assert spec.period(missed_day) == "2026-08", "still August's run, not September's"
+
+    much_later = datetime(2026, 8, 20, 9, 0, tzinfo=MANILA)
+    assert spec.is_due(much_later) is True
+    assert spec.period(much_later) == "2026-08"
+
+
+def test_the_next_month_is_a_different_period():
+    """Catch-up must not mean "run August again in September"."""
+    from app.core.constants import MANILA
+
+    spec = internal_cron.TASKS["honesty_fund_distribution"]
+    assert spec.period(datetime(2026, 8, 20, 9, 0, tzinfo=MANILA)) == "2026-08"
+    assert spec.period(datetime(2026, 9, 1, 9, 0, tzinfo=MANILA)) == "2026-09"
 
 
 @requires_db
-def test_a_task_that_is_not_due_is_skipped_not_run(client, scheduler_credential):
-    """On any day but the 1st, the honesty fund call must record a skip rather
-    than distributing a cycle early."""
+def test_a_completed_period_is_not_run_again(client, db, scheduler_credential):
+    """Every extra invocation inside a period must be a no-op. This is what
+    makes triggering a monthly job daily safe."""
+    from app.core.constants import MANILA
+    from app.models.maintenance import CronRun
+
+    spec = internal_cron.TASKS["expire_requests"]
+    period = spec.period(datetime.now(MANILA))
+
+    first = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
+    assert first.status_code == 200
+    assert first.json()["status"] == internal_cron.OK
+
+    second = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
+    assert second.status_code == 200
+    assert second.json()["status"] == internal_cron.ALREADY_DONE
+
+    db.expire_all()
+    successes = db.query(CronRun).filter(
+        CronRun.task == "expire_requests", CronRun.period == period,
+        CronRun.status == internal_cron.OK).count()
+    assert successes == 1, "a period may succeed exactly once"
+
+
+@requires_db
+def test_a_failed_period_may_be_retried(client, db, monkeypatch, scheduler_credential):
+    """A failure must not consume the period. If it did, one bad night would
+    mean the job never ran that month."""
     from app.core.constants import MANILA
 
-    resp = client.post(f"{CRON}/honesty_fund_distribution", headers={"X-Cron-Key": SECRET})
+    spec = internal_cron.TASKS["expire_requests"]
+    period = spec.period(datetime.now(MANILA))
+
+    def boom(_db):
+        raise RuntimeError("transient")
+
+    monkeypatch.setitem(internal_cron.TASKS, "expire_requests",
+                        internal_cron.TaskSpec(boom, cadence="daily", hour=0))
+    failed = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
+    assert failed.status_code == 500
+
+    monkeypatch.undo()
+    retried = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
+    assert retried.status_code == 200
+    assert retried.json()["status"] == internal_cron.OK, "a failed period must retry"
+    assert retried.json()["period"] == period
+
+
+@requires_db
+def test_a_task_before_its_threshold_records_not_due(client, monkeypatch,
+                                                     scheduler_credential):
+    """An early scheduler must be told it is early, distinctly from being told
+    the work is already done."""
+    late = internal_cron.TaskSpec(lambda _db: 0, cadence="daily", hour=23, minute=59)
+    monkeypatch.setitem(internal_cron.TASKS, "expire_requests", late)
+
+    resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
     assert resp.status_code == 200
-    body = resp.json()
-    expected = "ok" if datetime.now(MANILA).day == 1 else "skipped"
-    assert body["status"] == expected
+    assert resp.json()["status"] == internal_cron.NOT_DUE
+
+
+def test_the_skip_reasons_are_distinct():
+    """Collapsing these into one "skipped" would hide a scheduler that had
+    stopped working behind one that was merely early."""
+    reasons = {internal_cron.NOT_DUE, internal_cron.ALREADY_DONE,
+               internal_cron.ALREADY_RUNNING}
+    assert len(reasons) == 3
+    assert internal_cron.OK not in reasons and internal_cron.FAILED not in reasons
 
 
 # --- Overlap and repetition ------------------------------------------------
@@ -187,7 +271,7 @@ def test_a_second_invocation_while_one_holds_the_lock_is_reported(client, db, sc
     try:
         resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "locked"
+        assert resp.json()["status"] == internal_cron.ALREADY_RUNNING
     finally:
         db.execute(text("SELECT pg_advisory_unlock(:ns, :key)"),
                    {"ns": internal_cron._LOCK_NAMESPACE, "key": key})
@@ -196,11 +280,14 @@ def test_a_second_invocation_while_one_holds_the_lock_is_reported(client, db, sc
 
 @requires_db
 def test_running_the_same_task_twice_is_safe(client, scheduler_credential):
-    """Idempotency in the plainest form: run it, run it again, both succeed."""
+    """Neither call errors; the second reports the period already done."""
+    seen = []
     for _ in range(2):
         resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        seen.append(resp.json()["status"])
+    assert seen[0] in (internal_cron.OK, internal_cron.ALREADY_DONE)
+    assert seen[1] == internal_cron.ALREADY_DONE
 
 
 # --- What is recorded ------------------------------------------------------
@@ -235,7 +322,7 @@ def test_a_failing_task_records_a_class_not_a_message(client, db, monkeypatch,
         raise ValueError("secret-row-value-42")
 
     monkeypatch.setitem(internal_cron.TASKS, "expire_requests",
-                        internal_cron.TaskSpec(boom))
+                        internal_cron.TaskSpec(boom, cadence="daily", hour=0))
 
     resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
     assert resp.status_code == 500

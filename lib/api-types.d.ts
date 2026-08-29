@@ -944,7 +944,16 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run one scheduled maintenance task */
+        /**
+         * Run one scheduled maintenance task
+         * @description Run one job if its current period is due and has not already succeeded.
+         *
+         *     The three refusals are distinct on purpose. "Not due" is a scheduler that
+         *     fired early; "already completed" is the normal answer for every extra
+         *     invocation inside a period, and the answer that makes daily triggering of a
+         *     monthly job safe; "already running" is an overlap. Reporting all three as
+         *     one "skipped" would hide a scheduler that had stopped working.
+         */
         post: operations["run_task_api_v1_internal_cron__task__post"];
         delete?: never;
         options?: never;
@@ -2170,6 +2179,8 @@ export interface components {
             task: string;
             /** Status */
             status: string;
+            /** Period */
+            period?: string | null;
             /** Processed */
             processed?: number | null;
             /** Detail */
@@ -3597,6 +3608,8 @@ export interface components {
          * @description What a moderator needs to answer "is the automation healthy?".
          */
         SchedulerHealth: {
+            /** Tasks */
+            tasks: components["schemas"]["TaskHealth"][];
             /** Latest */
             latest: components["schemas"]["CronRunRow"][];
             /** Recent */
@@ -3613,6 +3626,28 @@ export interface components {
             day: string;
             /** Contributed */
             contributed: boolean;
+        };
+        /**
+         * TaskHealth
+         * @description One scheduled task's current standing.
+         */
+        TaskHealth: {
+            /** Task */
+            task: string;
+            /** Cadence */
+            cadence: string;
+            /** State */
+            state: string;
+            /** Period */
+            period: string;
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+            last_run?: components["schemas"]["CronRunRow"] | null;
+            /** Last Success At */
+            last_success_at?: string | null;
         };
         /** TierOut */
         TierOut: {

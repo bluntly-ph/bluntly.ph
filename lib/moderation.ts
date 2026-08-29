@@ -210,7 +210,19 @@ export type CronRunRow = {
   detail: string | null;
 };
 
+export type TaskHealth = {
+  task: string;
+  cadence: string;
+  /** healthy | due | overdue | failed | never_run */
+  state: string;
+  period: string;
+  due_at: string;
+  last_run: CronRunRow | null;
+  last_success_at: string | null;
+};
+
 export type SchedulerHealth = {
+  tasks: TaskHealth[];
   latest: CronRunRow[];
   recent: CronRunRow[];
   never_run: string[];

@@ -2883,6 +2883,7 @@
           "internal: scheduled maintenance"
         ],
         "summary": "Run one scheduled maintenance task",
+        "description": "Run one job if its current period is due and has not already succeeded.\n\nThe three refusals are distinct on purpose. \"Not due\" is a scheduler that\nfired early; \"already completed\" is the normal answer for every extra\ninvocation inside a period, and the answer that makes daily triggering of a\nmonthly job safe; \"already running\" is an overlap. Reporting all three as\none \"skipped\" would hide a scheduler that had stopped working.",
         "operationId": "run_task_api_v1_internal_cron__task__post",
         "parameters": [
           {
@@ -6609,6 +6610,17 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
           },
           "processed": {
             "anyOf": [
@@ -10426,6 +10438,13 @@
       },
       "SchedulerHealth": {
         "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskHealth"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
           "latest": {
             "items": {
               "$ref": "#/components/schemas/CronRunRow"
@@ -10450,6 +10469,7 @@
         },
         "type": "object",
         "required": [
+          "tasks",
           "latest",
           "recent",
           "never_run"
@@ -10475,6 +10495,63 @@
           "contributed"
         ],
         "title": "StreakDayOut"
+      },
+      "TaskHealth": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "cadence": {
+            "type": "string",
+            "title": "Cadence"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Due At"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CronRunRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "cadence",
+          "state",
+          "period",
+          "due_at"
+        ],
+        "title": "TaskHealth",
+        "description": "One scheduled task's current standing."
       },
       "TierOut": {
         "properties": {

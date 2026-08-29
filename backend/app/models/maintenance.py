@@ -22,6 +22,13 @@ class CronRun(Base, UUIDPrimaryKey, Timestamps):
     __tablename__ = "cron_runs"
 
     task: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    #: Logical execution period in Asia/Manila — "2026-08-29" for a daily job,
+    #: "2026-08" for a monthly one. A partial unique index over
+    #: (task, period) WHERE status='ok' is what stops one period being
+    #: completed twice, whatever two racing runners believe.
+    period: Mapped[str | None] = mapped_column(String(16), index=True)
+    #: When this period was due to run, so "late" is measurable.
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: "scheduler" or "manual". Both take the same service path, so this is the
     #: only difference worth recording.
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduler")
