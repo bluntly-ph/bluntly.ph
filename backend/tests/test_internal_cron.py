@@ -41,6 +41,50 @@ def scheduler_credential(db):
     db.commit()
 
 
+@pytest.fixture(autouse=True)
+def _an_unclaimed_period(request):
+    """Give every test in this module a period nobody has claimed yet.
+
+    These tests drive REAL task names, and the entire point of the claim is
+    that a logical period can be completed exactly once. So the first test to
+    call `expire_requests` legitimately consumes today's period, and every
+    later test is correctly told the work is already done — the mechanism
+    working as designed, but it makes the whole file order-dependent.
+
+    That is a second, independent cause of the CI failures here, separate from
+    the model/schema drift: `test_a_failed_period_may_be_retried` could not
+    even reach its 500, because the period was already `ok` before it started.
+
+    Scoped to the current period of the declared tasks, so it clears exactly
+    what this module creates and leaves earlier run history alone.
+
+    Autouse, so it must not drag the `db` fixture onto the tests in this file
+    that need no database — on a machine with no Postgres that does not skip,
+    it hangs on connect.
+    """
+    from app.models.maintenance import CronRun
+    from tests.conftest import DB_AVAILABLE
+
+    if not DB_AVAILABLE:
+        yield
+        return
+
+    db = request.getfixturevalue("db")
+
+    def clear() -> None:
+        now = internal_cron._now()
+        names = tuple(internal_cron.TASKS)
+        periods = tuple({spec.period(now) for spec in internal_cron.TASKS.values()})
+        db.query(CronRun).filter(
+            CronRun.task.in_(names), CronRun.period.in_(periods),
+        ).delete(synchronize_session=False)
+        db.commit()
+
+    clear()
+    yield
+    clear()
+
+
 # --- Who may invoke -------------------------------------------------------
 
 @requires_db
@@ -256,13 +300,17 @@ def test_the_skip_reasons_are_distinct():
     assert internal_cron.OK not in reasons and internal_cron.FAILED not in reasons
 
 
-# --- Claims, overlap and continuation --------------------------------------
+# --- Claims and overlap ----------------------------------------------------
 #
-# There is no advisory lock here, deliberately. The application connects through
-# the Supabase TRANSACTION pooler, which hands the backend back at every commit,
-# so a session-level advisory lock can be released on a different connection
-# than took it — and the sweep services commit internally, several times. The
-# claim is a row the database refuses to duplicate instead.
+# There is no advisory lock here, deliberately. The application connects
+# through the Supabase TRANSACTION pooler, which hands the backend back at
+# every commit, so a session-level advisory lock can be released on a different
+# connection than took it — and the sweep services commit internally, several
+# times. Ownership is a database-arbitrated lease instead.
+#
+# The arbitration, fencing and continuation properties are proved against real
+# concurrent sessions in tests/test_scheduler_state_machine.py. What follows is
+# the route-level behaviour that sits on top of them.
 
 @requires_db
 def test_a_claim_survives_the_services_internal_commits(client, db, scheduler_credential):
@@ -283,67 +331,10 @@ def test_a_claim_survives_the_services_internal_commits(client, db, scheduler_cr
 
 
 @requires_db
-def test_a_held_claim_blocks_a_concurrent_runner(client, db, scheduler_credential):
-    """A claim in flight — as a still-running invocation would leave it — must
-    turn the next caller away rather than letting it run in parallel."""
-    from datetime import datetime
-
-    from app.core.constants import MANILA
-    from app.models.maintenance import CronRun
-
-    spec = internal_cron.TASKS["expire_requests"]
-    now = datetime.now(MANILA)
-    held = CronRun(task="expire_requests", source="scheduler",
-                   status=internal_cron.RUNNING, period=spec.period(now),
-                   scheduled_for=spec.threshold(now), started_at=now,
-                   claimed_at=now, processed_total=0)
-    db.add(held)
-    db.commit()
-    try:
-        resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
-        assert resp.status_code == 200
-        assert resp.json()["status"] == internal_cron.ALREADY_RUNNING
-    finally:
-        db.delete(held)
-        db.commit()
-
-
-@requires_db
-def test_an_abandoned_claim_is_taken_over(client, db, scheduler_credential):
-    """A process that dies mid-run leaves its claim behind. Without takeover one
-    crash would block the task forever; the claim is stale after 30 minutes,
-    which no serverless request can legitimately reach."""
-    from datetime import datetime
-
-    from app.core.constants import MANILA
-    from app.models.maintenance import CronRun
-
-    spec = internal_cron.TASKS["expire_requests"]
-    now = datetime.now(MANILA)
-    abandoned = CronRun(
-        task="expire_requests", source="scheduler", status=internal_cron.RUNNING,
-        period=spec.period(now), scheduled_for=spec.threshold(now),
-        started_at=now - internal_cron.STALE_CLAIM * 2,
-        claimed_at=now - internal_cron.STALE_CLAIM * 2, processed_total=0)
-    db.add(abandoned)
-    db.commit()
-    try:
-        resp = client.post(f"{CRON}/expire_requests", headers={"X-Cron-Key": SECRET})
-        assert resp.status_code == 200
-        assert resp.json()["status"] == internal_cron.OK, (
-            "a stale claim must be taken over, not honoured forever")
-    finally:
-        db.expire_all()
-        row = db.get(CronRun, abandoned.id)
-        if row is not None:
-            db.delete(row)
-            db.commit()
-
-
-@requires_db
-def test_a_failed_run_releases_the_claim(client, db, monkeypatch, scheduler_credential):
-    """A failure must free the period. If the claim survived, one bad night
-    would mean the job never ran that month."""
+def test_a_failing_task_leaves_the_period_retryable(client, db, monkeypatch,
+                                                    scheduler_credential):
+    """A failure must not consume the period. If it did, one bad night would
+    mean the job never ran that day at all."""
     def boom(_db):
         raise RuntimeError("transient")
 
@@ -358,84 +349,18 @@ def test_a_failed_run_releases_the_claim(client, db, monkeypatch, scheduler_cred
     assert retried.json()["status"] == internal_cron.OK
 
 
-@requires_db
-def test_a_long_sweep_continues_across_invocations(client, db, monkeypatch,
-                                                   scheduler_credential):
-    """The serverless-duration answer: batches, not truncation.
-
-    A sweep that cannot finish in one request must report `continuing` and
-    resume where it stopped, and the period must NOT be marked done until the
-    whole population has been covered — otherwise "ok" would mean "one batch
-    worked" and most records would silently never be recomputed.
-    """
-    from app.services.sweep_service import BatchResult
-
-    seen: list[str | None] = []
-
-    def fake_sweep(_db, cursor, _batch):
-        seen.append(cursor)
-        if cursor is None:
-            return BatchResult(processed=2, cursor="a", complete=False)
-        if cursor == "a":
-            return BatchResult(processed=2, cursor="b", complete=False)
-        return BatchResult(processed=1, cursor=None, complete=True)
-
-    monkeypatch.setitem(
-        internal_cron.TASKS, "recompute_all_trust",
-        internal_cron.TaskSpec(sweep=fake_sweep, cadence="daily", hour=0, batch=2))
-
-    statuses, totals = [], []
-    for _ in range(3):
-        resp = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
-        assert resp.status_code == 200
-        body = resp.json()
-        statuses.append(body["status"])
-        totals.append(body["processed_total"])
-
-    assert statuses == [internal_cron.CONTINUING, internal_cron.CONTINUING, internal_cron.OK]
-    assert seen == [None, "a", "b"], "each call must resume from the stored cursor"
-    assert totals == [2, 4, 5], "the running total must accumulate across batches"
-
-    # And only now is the period finished.
-    done = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
-    assert done.json()["status"] == internal_cron.ALREADY_DONE
-
-
-@requires_db
-def test_an_unfinished_sweep_does_not_complete_the_period(client, monkeypatch,
-                                                          scheduler_credential):
-    """One successful batch must never consume the period's uniqueness slot."""
-    from app.services.sweep_service import BatchResult
-
-    monkeypatch.setitem(
-        internal_cron.TASKS, "recompute_all_trust",
-        internal_cron.TaskSpec(
-            sweep=lambda _db, c, b: BatchResult(processed=1, cursor="x", complete=False),
-            cadence="daily", hour=0))
-
-    first = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
-    assert first.json()["status"] == internal_cron.CONTINUING
-    assert first.json()["more"] is True
-
-    second = client.post(f"{CRON}/recompute_all_trust", headers={"X-Cron-Key": SECRET})
-    assert second.json()["status"] == internal_cron.CONTINUING, (
-        "an unfinished sweep must stay resumable, not read as completed")
-
-
 def test_only_the_o_n_sweeps_are_resumable():
-    """Set-based jobs should stay simple; forcing every task into a
-    continuation protocol would be complexity for its own sake."""
+    """Set-based jobs should stay simple.
+
+    The two sweeps recompute a population one record at a time and can outgrow
+    a serverless request. The rest are either single statements or loops over
+    sets bounded by something other than the user table — and two of them
+    (honesty fund, payout scheduling) MUST see their whole population at once,
+    because they divide a fixed pool proportionally. Forcing those into a
+    continuation protocol would make them wrong, not safer.
+    """
     resumable = {n for n, s in internal_cron.TASKS.items() if s.resumable}
     assert resumable == {"recompute_all_trust", "recompute_wilson_scores"}
-
-
-def test_the_scheduler_never_takes_a_cursor_from_the_caller():
-    """The backend owns progression. A caller-supplied cursor would let anyone
-    with the credential skip most of a population."""
-    import inspect
-
-    params = set(inspect.signature(internal_cron.run_task).parameters)
-    assert not params & {"cursor", "offset", "after", "batch", "limit"}
 
 
 # --- What is recorded ------------------------------------------------------

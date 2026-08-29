@@ -98,8 +98,14 @@ def db_available() -> bool:
             probe.dispose()
 
 
+#: Resolved once, at import. Hoisted out of the marker below so that an autouse
+#: fixture can ask "is there a database?" without paying another probe per test
+#: — and, more importantly, without opening a connection on a machine that has
+#: none, which does not fail fast but hangs.
+DB_AVAILABLE = os.getenv("SKIP_DB_TESTS") != "1" and db_available()
+
 requires_db = pytest.mark.skipif(
-    os.getenv("SKIP_DB_TESTS") == "1" or not db_available(),
+    not DB_AVAILABLE,
     reason="Postgres not available",
 )
 

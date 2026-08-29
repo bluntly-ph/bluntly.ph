@@ -17,35 +17,80 @@ service that already has the database connection does.
 Why not Vercel Cron: this project is on the hobby plan, which allows two cron
 entries at daily granularity. There are eight jobs across six cadences.
 
-The scheduler holds a shared secret; this route compares a SHA-256 of what
-arrives against a hash stored in `cron_credentials`, in constant time. The
-plaintext exists only in the scheduler's secret store — not in this repository,
-not in the database, not in any log, and never in a URL.
+
+THE STATE MACHINE
+-----------------
+
+Two independent things, deliberately not conflated (see app/models/maintenance):
+
+  LOGICAL RUN STATE — `status`, one row per (task, period), forever:
+
+      (none) -> running -> ok            finished in one invocation
+             -> running -> continuing    incomplete, idle, resumable
+             -> running -> failed        incomplete, idle, progress preserved
+
+  EXECUTION OWNERSHIP — the lease:
+
+      lease_token set, lease_expires_at future  -> someone is executing it
+      lease_token NULL                          -> idle, claimable NOW
+      lease_expires_at past                     -> abandoned, stealable
+
+`continuing` is "incomplete but idle", so the scheduler's very next call
+resumes it immediately. There is no waiting period on the normal path; lease
+expiry only governs recovery from a request that died.
+
+Transitions, and what each returns to the scheduler:
+
+    no row, due                -> claim (INSERT)          -> ok | continuing
+    continuing, lease NULL     -> reclaim (UPDATE)        -> ok | continuing
+    failed, lease NULL         -> reclaim (UPDATE)        -> ok | continuing
+    running, lease live        -> refused                 -> already_running
+    running, lease expired     -> steal (UPDATE, fenced)  -> ok | continuing
+    ok                         -> refused                 -> already_completed
+    not yet due                -> refused                 -> not_due
+
+WHY NOT ADVISORY LOCKS. The application connects through the Supabase
+TRANSACTION pooler — documented in app/db/session.py, because the session
+pooler accepts only about four concurrent clients. PgBouncer in transaction
+mode hands the backend back at every commit, so a session-level lock taken in
+one transaction can be released on a different backend, or not at all. The
+sweep services commit internally, several times. A dedicated SQLAlchemy
+connection would not help, because the multiplexing is beneath SQLAlchemy.
+
+So ownership is a lease taken by ONE conditional UPDATE. The database picks the
+winner: a second runner blocks on the row lock, re-evaluates the predicate once
+the first commits, sees a live lease, and matches zero rows. Single statement,
+single transaction — exactly the property pooling cannot undermine.
+
+FENCING. Every write an executing request makes is conditioned on
+`lease_token = <mine>`. A request that stalled past its expiry, was taken over,
+and then woke up matches zero rows and cannot overwrite the newer owner's
+cursor. Without this, time-based takeover would be a data-loss mechanism.
 
 Everything here is deliberately narrow:
 
   * only names in TASKS may be invoked; the path is not a function reference
-  * a period is claimed by INSERTing a row that a unique index arbitrates,
-    so an overlapping or retried invocation cannot double-run one. Advisory
-    locks would NOT work here: the application connects through the Supabase
-    transaction pooler, which hands a backend back at every commit, so a
-    session-level lock can be released on a different connection than took it
-  * every invocation is recorded in `cron_runs`, success or failure
+  * the caller supplies no cursor, offset or batch size — the backend owns
+    progression entirely, so the credential cannot be used to skip a population
+  * every invocation is recorded in `cron_runs`, success, refusal or failure
   * failures record an exception CLASS, never a message
-  * tasks whose real cadence is monthly carry a Manila-date guard, because the
-    scheduler platform speaks UTC cron and "the 1st, 02:00 in Manila" is the
-    last day of the previous month in UTC
+  * monthly jobs are evaluated by logical PERIOD, not by "is today the 1st",
+    so a scheduler that misses a day still completes the period
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import os
+import time
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -59,6 +104,72 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/internal/cron", tags=["internal: scheduled maintenance"])
 
 CREDENTIAL_NAME = "scheduler"
+
+
+# --- Time budget -------------------------------------------------------------
+#
+# CONSERVATIVE APPLICATION BUDGET — NOT A CLAIMED PLATFORM MAXIMUM.
+#
+# What is actually known: the Vercel team is on the **hobby** plan (read from
+# the platform, not assumed). What could NOT be read: the per-function duration
+# ceiling for this deployment — the project is not visible to the API token
+# available here, and `vercel.json` sets no `maxDuration`, so the platform
+# default applies and this code cannot see what that default is.
+#
+# So this is not derived from a ceiling. It is set BELOW the lowest duration
+# limit Vercel has documented for Hobby, so that it holds whichever default is
+# in force. Once the effective limit is confirmed in the dashboard, raise it
+# with SCHEDULER_REQUEST_BUDGET_SECONDS rather than editing this line.
+#
+# A too-small budget costs extra invocations. It never costs correctness: the
+# cursor is persisted every batch and the traversal resumes exactly where it
+# stopped.
+_DEFAULT_BUDGET_SECONDS = 8.0
+REQUEST_BUDGET = timedelta(
+    seconds=float(os.getenv("SCHEDULER_REQUEST_BUDGET_SECONDS",
+                            _DEFAULT_BUDGET_SECONDS)))
+
+#: How long a lease is honoured before another runner may steal it.
+#:
+#: This must comfortably EXCEED the request budget, or a healthy invocation
+#: could be preempted while it is still working — which is what the fencing
+#: token would then have to clean up after, every night. At a 8s budget this is
+#: a ~37x margin, which also covers request start-up, the final persist and the
+#: HTTP response. Because one invocation cannot approach the lease lifetime,
+#: no lease heartbeat is needed; shortening the workload is the simpler bound.
+LEASE = timedelta(minutes=5)
+
+
+class Budget:
+    """Wall-clock allowance for one invocation's processing.
+
+    Monotonic, so a clock adjustment cannot extend or collapse it.
+    """
+
+    __slots__ = ("deadline",)
+
+    def __init__(self, allowance: timedelta = REQUEST_BUDGET):
+        self.deadline = time.monotonic() + allowance.total_seconds()
+
+    def spent(self) -> bool:
+        return time.monotonic() >= self.deadline
+
+
+#: TEST SEAM. Overrides every task's batch capacity so a multi-batch traversal
+#: can be exercised against a handful of real records instead of hundreds.
+#: Deliberately module state and NOT a request parameter — see the test that
+#: asserts `run_task` accepts no cursor, offset or batch argument. A caller who
+#: could choose the batch size could also choose to process one record and
+#: report the period continuing forever.
+_BATCH_OVERRIDE: int | None = None
+
+#: Same seam for the time budget, so a test can prove the budget — not the
+#: record count — is what stopped a batch.
+_BUDGET_OVERRIDE: timedelta | None = None
+
+
+def _now() -> datetime:
+    return datetime.now(MANILA)
 
 
 class TaskSpec:
@@ -98,6 +209,9 @@ class TaskSpec:
     def resumable(self) -> bool:
         return self.sweep is not None
 
+    def capacity(self) -> int:
+        return _BATCH_OVERRIDE if _BATCH_OVERRIDE is not None else self.batch
+
     def period(self, now: datetime) -> str:
         """The logical run this invocation belongs to, in Manila."""
         local = now.astimezone(MANILA)
@@ -127,26 +241,37 @@ def _sweep_contracts(db: Session) -> int:
 
 
 def _pii_retention(db: Session) -> int:
-    """Uses the retention policy already configured — no new duration here."""
+    """Uses the retention policy already configured — no new duration here.
+
+    Set-based: three UPDATE/DELETE statements over rows past their retention
+    horizon, with no Python loop and no per-record round trip. It does not need
+    the continuation protocol, and giving it one would be complexity for its
+    own sake.
+    """
     from app.services.retention_service import run_retention_sweep
     counts = run_retention_sweep(db) or {}
     return sum(int(v) for v in counts.values())
 
 
-def _sweep_trust(db: Session, cursor: str | None, batch: int):
+def _sweep_trust(db: Session, cursor, batch, snapshot_at, budget):
     """Full production population, traversed across invocations. No limit on
     who is eligible and no sampling — only where this batch stops."""
     from app.services.sweep_service import sweep_trust
-    return sweep_trust(db, cursor, batch)
+    return sweep_trust(db, cursor, batch, snapshot_at, budget)
 
 
-def _sweep_wilson(db: Session, cursor: str | None, batch: int):
+def _sweep_wilson(db: Session, cursor, batch, snapshot_at, budget):
     from app.services.sweep_service import sweep_wilson
-    return sweep_wilson(db, cursor, batch)
+    return sweep_wilson(db, cursor, batch, snapshot_at, budget)
 
 
 def _refresh_payout_batches(db: Session) -> int:
-    """Poll in-flight batches and settle them, exactly as the beat task did."""
+    """Poll in-flight batches and settle them, exactly as the beat task did.
+
+    Loops, but over DISTINCT batch ids that are currently processing — a
+    handful at most, and bounded by how many batches can be in flight rather
+    than by how many users exist.
+    """
     from sqlalchemy import select as _select
 
     from app.models.enums import PayoutStatus
@@ -164,7 +289,15 @@ def _refresh_payout_batches(db: Session) -> int:
 
 
 def _honesty_fund(db: Session) -> int:
-    """Idempotent by design: an already-distributed cycle aborts."""
+    """Idempotent by design: an already-distributed cycle aborts.
+
+    NOT resumable, deliberately. It divides a fixed pool proportionally across
+    every eligible review — `payout = pool * score / total_score` — so it must
+    see the whole population in one pass. A half-visible population would
+    compute wrong shares for everyone, which is far worse than taking longer.
+    Its size is bounded by honesty-fund-eligible reviews in one month, not by
+    the user table.
+    """
     from app.services.honesty_fund_service import distribute
     result = distribute(db) or {}
     return int(result.get("recipients", 0) or result.get("distributed", 0) or 0)
@@ -183,6 +316,11 @@ def _schedule_payouts(db: Session) -> int:
 
     (Submission is externally blocked regardless — no sandbox credentials — but
     the reason this is preparation-only is the policy, not the blocker.)
+
+    NOT resumable: it orders candidates by tier priority across the whole
+    eligible set, and its population is users already above the payout
+    threshold. Duplicate protection is the `uq_payout_user_batch` constraint,
+    not this route.
     """
     from app.services.payout_service import schedule_payouts
     result = schedule_payouts(db) or {}
@@ -213,19 +351,30 @@ TASKS: dict[str, TaskSpec] = {
         note="5th of the month, 02:30 Manila"),
 }
 
-#: A claim older than this is treated as abandoned — the process that made it
-#: died, and a serverless request cannot legitimately run for anything close to
-#: this long. Without takeover one crash would block a task forever.
-STALE_CLAIM = timedelta(minutes=30)
-
-#: Distinct outcomes, so "nothing happened" is never ambiguous.
+#: LOGICAL RUN STATE.
 OK = "ok"
 FAILED = "failed"
 RUNNING = "running"
 CONTINUING = "continuing"
+#: States a new invocation may take over. `ok` is absent: it is terminal.
+CLAIMABLE = (RUNNING, CONTINUING, FAILED)
+
+#: REFUSALS. Distinct, so "nothing happened" is never ambiguous — a scheduler
+#: that has stopped must not look like one that is merely early.
 NOT_DUE = "skipped_not_due"
 ALREADY_DONE = "skipped_already_completed"
 ALREADY_RUNNING = "skipped_already_running"
+
+
+@dataclass
+class Claim:
+    """Proof that this invocation owns the logical run, plus its progress."""
+
+    id: uuid.UUID
+    token: uuid.UUID
+    cursor: str | None
+    processed_total: int
+    snapshot_at: datetime | None
 
 
 class CronResult(BaseModel):
@@ -281,24 +430,19 @@ def run_task(
     db: Session = Depends(get_db),
     source: str = "scheduler",
 ) -> CronResult:
-    """Claim this task's current period and do as much of it as fits.
+    """Take the execution lease on this task's current period and do as much of
+    it as the time budget allows.
 
-    The claim is an INSERT arbitrated by a unique index, not an advisory lock.
-    That is not a stylistic choice: the application connects through the
-    Supabase transaction pooler, which hands the backend back at every commit,
-    so a session-level advisory lock can be released on a different connection
-    than acquired it — or never released at all. A row the database refuses to
-    duplicate is mutual exclusion that pooling cannot undermine.
-
-    The four refusals stay distinct, because collapsing them would hide a
-    scheduler that had stopped behind one that was merely early.
+    Note the signature: no cursor, no offset, no batch size. Progression is
+    entirely the backend's, so possession of the scheduler credential does not
+    confer the ability to steer or truncate a traversal.
     """
     spec = TASKS.get(task)
     if spec is None:
         # Do not echo the requested name into the response body.
         raise HTTPException(status_code=404, detail="Unknown maintenance task.")
 
-    now = datetime.now(MANILA)
+    now = _now()
     period = spec.period(now)
     due_at = spec.threshold(now)
 
@@ -310,33 +454,38 @@ def run_task(
 
     claim = _claim(db, task, source, period, due_at)
     if claim is None:
-        # Someone holds it, or it is already finished. `_claim` distinguishes
-        # the two by reading back the row that blocked the insert.
         existing = _existing(db, task, period)
         status = ALREADY_DONE if existing == OK else ALREADY_RUNNING
         _record(db, task, source, status, period, due_at,
                 detail="period already completed" if status == ALREADY_DONE
-                else "another runner holds this task")
+                else "another runner holds the lease")
         return CronResult(task=task, status=status, period=period,
                           detail="already completed" if status == ALREADY_DONE
                           else "already running")
 
-    started = datetime.now(MANILA)
+    budget = Budget(REQUEST_BUDGET if _BUDGET_OVERRIDE is None
+                    else _BUDGET_OVERRIDE)
     try:
         if spec.resumable:
-            result = spec.sweep(db, claim.cursor, spec.batch)
-            total = (claim.processed_total or 0) + result.processed
+            result = spec.sweep(db, claim.cursor, spec.capacity(),
+                                claim.snapshot_at, budget)
+            total = claim.processed_total + result.processed
+
             if result.complete:
-                _finish(db, claim, OK, cursor=None, processed=result.processed,
-                        total=total, started=started)
+                _release(db, claim, OK, cursor=None,
+                         processed=result.processed, total=total)
                 log.info("scheduled sweep complete",
                          extra={"extra_fields": {"task": task, "period": period,
                                                  "processed_total": total}})
                 return CronResult(task=task, status=OK, period=period,
                                   processed=result.processed, processed_total=total,
                                   run_id=str(claim.id))
-            _finish(db, claim, CONTINUING, cursor=result.cursor,
-                    processed=result.processed, total=total, started=started)
+
+            # Incomplete. Persist progress and RELEASE the lease: `continuing`
+            # means idle, so the scheduler's next call resumes it at once
+            # rather than waiting out an expiry.
+            _release(db, claim, CONTINUING, cursor=result.cursor,
+                     processed=result.processed, total=total)
             return CronResult(task=task, status=CONTINUING, period=period,
                               processed=result.processed, processed_total=total,
                               more=True, run_id=str(claim.id),
@@ -344,8 +493,7 @@ def run_task(
 
         processed = spec.run(db)
         db.commit()
-        _finish(db, claim, OK, cursor=None, processed=processed,
-                total=processed, started=started)
+        _release(db, claim, OK, cursor=None, processed=processed, total=processed)
         log.info("scheduled maintenance ok",
                  extra={"extra_fields": {"task": task, "period": period,
                                          "processed": processed}})
@@ -358,59 +506,74 @@ def run_task(
         failure = type(exc).__name__
         log.exception("scheduled maintenance failed",
                       extra={"extra_fields": {"task": task, "period": period}})
-        # Marking the claim failed releases the period: it falls out of the
-        # unique index, so the next invocation may retry it.
-        _finish(db, claim, FAILED, cursor=None, processed=0,
-                total=claim.processed_total or 0, started=started, failure=failure)
+        # PRESERVE PROGRESS. The cursor stays where the last completed batch
+        # left it, so a retry resumes rather than restarting the population.
+        # The batch that failed is rolled back and will be replayed; that is
+        # safe because the per-record work is a recomputation from source data,
+        # which lands on the same value however many times it runs.
+        _release(db, claim, FAILED, cursor=claim.cursor, processed=0,
+                 total=claim.processed_total, failure=failure)
         # The class, not the message: a message can carry row data.
         raise HTTPException(status_code=500,
                             detail=f"Task failed: {failure}") from exc
 
 
 def _claim(db: Session, task: str, source: str, period: str,
-           due_at: datetime) -> CronRun | None:
-    """Take this period, or return None if someone already has it.
+           due_at: datetime) -> Claim | None:
+    """Take the execution lease on this period, or None if someone holds it.
 
-    Resuming counts as holding it: a `continuing` claim belonging to this task
-    and period is handed straight back, which is how a multi-invocation sweep
-    picks up where it stopped.
+    Two statements, each atomic on its own; no read-then-write anywhere.
     """
+    token = uuid.uuid4()
+    now = _now()
+    expires = now + LEASE
+
     try:
-        mine = db.scalar(
-            select(CronRun).where(
-                CronRun.task == task, CronRun.period == period,
-                CronRun.status == CONTINUING).limit(1))
-        if mine is not None:
-            mine.status = RUNNING
-            mine.claimed_at = datetime.now(MANILA)
-            db.commit()
-            return mine
+        # 1. RECLAIM an existing incomplete run whose lease is free or expired.
+        #
+        #    This single UPDATE is the arbitration. Two concurrent runners
+        #    cannot both win: the second blocks on the row lock, re-reads the
+        #    row after the first commits, finds `lease_expires_at` in the
+        #    future, and updates nothing. `lease_expires_at IS NULL` is the
+        #    normal continuation path — a released `continuing` row is
+        #    claimable immediately, with no delay of any kind.
+        row = db.execute(
+            update(CronRun)
+            .where(CronRun.task == task,
+                   CronRun.period == period,
+                   CronRun.status.in_(CLAIMABLE),
+                   or_(CronRun.lease_expires_at.is_(None),
+                       CronRun.lease_expires_at <= now))
+            .values(status=RUNNING, lease_token=token, lease_acquired_at=now,
+                    lease_expires_at=expires, claimed_at=now, failure=None)
+            .returning(CronRun.id, CronRun.cursor, CronRun.processed_total,
+                       CronRun.snapshot_at)
+            .execution_options(synchronize_session=False)
+        ).first()
+        db.commit()
+        if row is not None:
+            return Claim(id=row[0], token=token, cursor=row[1],
+                         processed_total=row[2] or 0, snapshot_at=row[3])
 
-        stale_before = datetime.now(MANILA) - STALE_CLAIM
-        abandoned = db.scalar(
-            select(CronRun).where(
-                CronRun.task == task, CronRun.period == period,
-                CronRun.status == RUNNING,
-                CronRun.claimed_at < stale_before).limit(1))
-        if abandoned is not None:
-            # The process that claimed this died. A serverless request cannot
-            # legitimately run this long, so take it over rather than letting
-            # one crash block the task forever.
-            abandoned.claimed_at = datetime.now(MANILA)
-            db.commit()
-            log.warning("took over an abandoned scheduler claim",
-                        extra={"extra_fields": {"task": task, "period": period}})
-            return abandoned
-
+        # 2. No incomplete row to take over, so this period has either never
+        #    run or is finished. Create it; the unique index decides.
+        #
+        #    `snapshot_at` is captured HERE, once per logical run, and is never
+        #    rewritten — it is the traversal's fixed upper boundary.
         run = CronRun(task=task, source=source, status=RUNNING, period=period,
-                      scheduled_for=due_at, started_at=datetime.now(MANILA),
-                      claimed_at=datetime.now(MANILA), processed_total=0)
+                      scheduled_for=due_at, started_at=now, claimed_at=now,
+                      processed_total=0, snapshot_at=now,
+                      lease_token=token, lease_acquired_at=now,
+                      lease_expires_at=expires)
         db.add(run)
         db.commit()
-        return run
+        return Claim(id=run.id, token=token, cursor=None, processed_total=0,
+                     snapshot_at=run.snapshot_at)
+
     except IntegrityError:
-        # The unique index refused it: another runner claimed this period
-        # between our read and our write. That is the mechanism working.
+        # The unique index refused it: the period is complete, or another
+        # runner created it between our UPDATE and our INSERT. Mechanism
+        # working as designed.
         db.rollback()
         return None
     except Exception:  # noqa: BLE001 - tables absent before the migrations land
@@ -426,28 +589,47 @@ def _existing(db: Session, task: str, period: str) -> str | None:
         return db.scalar(
             select(CronRun.status).where(
                 CronRun.task == task, CronRun.period == period,
-                CronRun.status.in_((RUNNING, CONTINUING, OK))).limit(1))
+                CronRun.status.in_((*CLAIMABLE, OK))).limit(1))
     except Exception:  # noqa: BLE001
         db.rollback()
         return None
 
 
-def _finish(db: Session, run: CronRun, status: str, *, cursor: str | None,
-            processed: int, total: int, started: datetime,
-            failure: str | None = None) -> None:
-    """Close out this invocation's slice of the claim. Never raises."""
+def _release(db: Session, claim: Claim, status: str, *, cursor: str | None,
+             processed: int, total: int, failure: str | None = None) -> bool:
+    """Persist this invocation's progress and give up the lease. Never raises.
+
+    THE FENCE. Every field is written by one UPDATE conditioned on our own
+    lease token. If the lease has since been stolen — because this request
+    stalled past its expiry — the WHERE matches nothing, we write nothing, and
+    the newer owner's cursor survives untouched. An expired request cannot
+    resurrect its own view of the world.
+    """
     try:
-        run.status = status
-        run.cursor = cursor
-        run.processed = processed
-        run.processed_total = total
-        run.finished_at = datetime.now(MANILA)
-        run.failure = failure
+        result = db.execute(
+            update(CronRun)
+            .where(CronRun.id == claim.id, CronRun.lease_token == claim.token)
+            .values(status=status, cursor=cursor, processed=processed,
+                    processed_total=total, finished_at=_now(), failure=failure,
+                    lease_token=None, lease_acquired_at=None,
+                    lease_expires_at=None)
+            .execution_options(synchronize_session=False))
         db.commit()
+        if result.rowcount != 1:
+            # Not an error we can fix here, but it must never be silent: it
+            # means this request ran past its lease and something else took the
+            # work over.
+            log.warning("scheduler write fenced out; a newer owner holds this run",
+                        extra={"extra_fields": {"run_id": str(claim.id),
+                                                "attempted_status": status}})
+            return False
+        return True
     except Exception:  # noqa: BLE001 - bookkeeping must not break the task
         db.rollback()
         log.exception("could not close scheduled run",
-                      extra={"extra_fields": {"task": run.task, "status": status}})
+                      extra={"extra_fields": {"run_id": str(claim.id),
+                                              "status": status}})
+        return False
 
 
 def _record(db: Session, task: str, source: str, status: str,
@@ -455,13 +637,15 @@ def _record(db: Session, task: str, source: str, status: str,
             processed: int | None = None, failure: str | None = None,
             detail: str | None = None,
             started: datetime | None = None) -> str:
-    """Write a non-claiming history row — the skips. Never raises.
+    """Write a non-claiming audit row — the refusals. Never raises.
 
-    These deliberately do not take part in the unique index: a skip is a note
-    that the scheduler called, not a claim on the period.
+    These take no lease and stay outside the unique index: a refusal is a note
+    that the scheduler called and was turned away, not a claim on the period.
+    They are what makes "the scheduler is alive but everything is already done"
+    distinguishable from "the scheduler stopped calling".
     """
     try:
-        now = datetime.now(MANILA)
+        now = _now()
         run = CronRun(task=task, source=source, status=status, period=period,
                       scheduled_for=scheduled_for,
                       started_at=started or now, finished_at=now,

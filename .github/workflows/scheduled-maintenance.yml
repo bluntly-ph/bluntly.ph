@@ -105,6 +105,7 @@ jobs:
           BASE: ${{ vars.PRODUCTION_BASE_URL || 'https://www.bluntly.ph' }}
           TASK: ${{ steps.pick.outputs.task }}
         run: |
+          set -uo pipefail
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET is not configured for this repository."
             exit 1
@@ -113,23 +114,27 @@ jobs:
           # Two of the jobs recompute a whole population one record at a time
           # and cannot finish inside a single serverless request, so the API
           # answers `continuing` and we call again. The backend owns the cursor
-          # entirely — nothing about position is passed from here, so this loop
-          # cannot be used to steer a traversal.
+          # entirely — nothing about position is sent from here, so this loop
+          # cannot be used to steer or truncate a traversal.
           #
-          # The bound is a safety net, not the mechanism: at 250 records per
-          # call it covers 30,000, far beyond the current population, and it
-          # stops a bug turning into an endless workflow.
-          MAX_CALLS=120
+          # MAX_CALLS is a safety net, not the mechanism. Running out of calls
+          # is NOT success: the period stays `continuing` with its cursor
+          # intact, this job fails visibly, and the next scheduled run picks the
+          # traversal up where it stopped. Nothing is marked complete.
+          MAX_CALLS=200
+          # `already_running` means another invocation holds the lease. Wait for
+          # it rather than failing: overlapping schedules are normal and the
+          # lease is short.
+          MAX_BUSY_RETRIES=5
+          BACKOFF=30
+
           call=0
+          busy=0
           total=0
 
           while [ "$call" -lt "$MAX_CALLS" ]; do
             call=$((call + 1))
-            code=$(curl -sS -o response.json -w "%{http_code}" \
-                     -X POST "$BASE/api/v1/internal/cron/$TASK" \
-                     -H "X-Cron-Key: $CRON_SECRET" \
-                     -H "Content-Type: application/json" \
-                     --max-time 300 --retry 2 --retry-delay 30 --retry-connrefused)
+            code=$(curl -sS -o response.json -w "%{http_code}"                      -X POST "$BASE/api/v1/internal/cron/$TASK"                      -H "X-Cron-Key: $CRON_SECRET"                      -H "Content-Type: application/json"                      --max-time 300 --retry 2 --retry-delay 30 --retry-connrefused)
 
             # The body carries a task name, a status and counts. No payloads, no
             # identifiers, nothing sensitive — safe to print, and the only
@@ -146,22 +151,48 @@ jobs:
             esac
 
             status=$(python3 -c "import json;print(json.load(open('response.json')).get('status',''))")
-            more=$(python3 -c "import json;print(json.load(open('response.json')).get('more',False))")
             batch=$(python3 -c "import json;print(json.load(open('response.json')).get('processed') or 0)")
             total=$((total + batch))
 
-            if [ "$status" = "failed" ]; then
-              echo "::error::$TASK reported failure"
-              exit 1
-            fi
-
-            if [ "$more" != "True" ]; then
-              echo "::notice::$TASK -> $status after $call call(s), $total record(s)"
-              exit 0
-            fi
+            case "$status" in
+              ok)
+                echo "::notice::$TASK completed after $call call(s), $total record(s)"
+                exit 0 ;;
+              skipped_not_due)
+                echo "::notice::$TASK is not due yet; nothing to do."
+                exit 0 ;;
+              skipped_already_completed)
+                echo "::notice::$TASK already completed this period."
+                exit 0 ;;
+              continuing)
+                busy=0
+                continue ;;
+              skipped_already_running)
+                busy=$((busy + 1))
+                if [ "$busy" -gt "$MAX_BUSY_RETRIES" ]; then
+                  echo "::error::$TASK still held after $busy attempts; giving up."
+                  exit 1
+                fi
+                echo "another runner holds the lease; retrying in ${BACKOFF}s ($busy/$MAX_BUSY_RETRIES)"
+                sleep "$BACKOFF"
+                # Capped, so the doubling cannot outgrow the job's own
+                # timeout-minutes: 30+60+120+120+120 is 7.5 minutes of waiting
+                # at most, against a 20 minute budget. Uncapped it would reach
+                # 15.5 minutes and the job would be killed mid-backoff, which
+                # reads as an infrastructure failure rather than contention.
+                BACKOFF=$((BACKOFF * 2))
+                if [ "$BACKOFF" -gt 120 ]; then BACKOFF=120; fi
+                continue ;;
+              failed)
+                echo "::error::$TASK reported failure"
+                exit 1 ;;
+              *)
+                echo "::error::$TASK returned an unrecognised status '$status'"
+                exit 1 ;;
+            esac
           done
 
-          # Running out of calls is not success: the period is still unfinished
-          # and must be visible rather than reported as done.
-          echo "::error::$TASK did not finish within $MAX_CALLS calls; period left incomplete"
+          # Out of calls. The period is still incomplete and must be visible as
+          # such — the backend has NOT marked it done, and its cursor is intact.
+          echo "::error::$TASK did not finish within $MAX_CALLS calls; period left incomplete and resumable"
           exit 1

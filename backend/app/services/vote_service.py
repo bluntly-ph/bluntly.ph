@@ -105,11 +105,21 @@ def _finish_vote_write(db: Session, review: Review) -> None:
     db.refresh(review)
 
 
-def voted_review_ids(db: Session) -> list:
+def voted_review_ids(db: Session, created_before=None) -> list:
     """Reviews with at least one vote — the population the nightly re-decay
     walks. Named so the selection can be tested and bounded independently of
-    the recomputation it feeds."""
-    return list(db.scalars(select(ReviewVote.review_id).distinct()).all())
+    the recomputation it feeds.
+
+    `created_before` defaults to None (the historical behaviour). The resumable
+    scheduler passes the instant its logical run began, so a traversal spread
+    over several requests has a fixed population; reviews created after it are
+    picked up by the next period.
+    """
+    stmt = select(ReviewVote.review_id)
+    if created_before is not None:
+        stmt = stmt.join(Review, Review.id == ReviewVote.review_id).where(
+            Review.created_at <= created_before)
+    return list(db.scalars(stmt.distinct()).all())
 
 
 def recompute_all_wilson_scores(db: Session) -> int:

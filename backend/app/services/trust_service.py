@@ -114,21 +114,36 @@ def recompute_user_trust(db: Session, user_id: uuid.UUID) -> None:
         _award_stage_badges(db, user, old_stage, new_stage)
 
 
-def recently_active_user_ids(db: Session, active_days: int = 90) -> set:
+def recently_active_user_ids(db: Session, active_days: int = 90,
+                             created_before=None) -> set:
     """Who the nightly sweep considers active: profile touched, review written,
     or vote cast within `active_days`.
 
     Split out from the sweep so the selection can be named and tested on its
     own. It is the same query the sweep has always run.
+
+    `created_before` bounds the population to rows that already existed at a
+    given instant. It defaults to None, which is exactly the historical
+    behaviour — the manual admin route passes nothing. Only the resumable
+    scheduler sets it, because a traversal spread across several requests needs
+    a boundary that cannot move underneath it: this selector keys off
+    `User.updated_at`, and the sweep itself writes User rows, so without a
+    boundary the eligible set could keep growing for as long as the run lasted.
     """
     cutoff = _now() - timedelta(days=active_days)
-    user_ids = set(db.scalars(
-        select(User.id).where(User.updated_at >= cutoff)))
+    profile = [User.updated_at >= cutoff]
+    authored = [Review.created_at >= cutoff, Review.author_id.isnot(None)]
+    voted = [ReviewVote.created_at >= cutoff]
+    if created_before is not None:
+        profile.append(User.created_at <= created_before)
+        authored.append(Review.created_at <= created_before)
+        voted.append(ReviewVote.created_at <= created_before)
+
+    user_ids = set(db.scalars(select(User.id).where(*profile)))
     user_ids.update(db.scalars(
-        select(Review.author_id).where(Review.created_at >= cutoff,
-                                       Review.author_id.isnot(None)).distinct()))
+        select(Review.author_id).where(*authored).distinct()))
     user_ids.update(db.scalars(
-        select(ReviewVote.voter_id).where(ReviewVote.created_at >= cutoff).distinct()))
+        select(ReviewVote.voter_id).where(*voted).distinct()))
     return user_ids
 
 

@@ -33,12 +33,19 @@ def recompute_product_trust(db: Session, product_id: uuid.UUID) -> None:
 
 
 # --- Nightly sweep (extends the 04:00 wilson task) ---
-def reviewed_product_ids(db: Session) -> list:
+def reviewed_product_ids(db: Session, created_before=None) -> list:
     """Products carrying at least one live published review — the population
-    the nightly rating sweep walks. Named for the same reason as the others."""
-    return list(db.scalars(
-        select(Review.product_id).where(Review.published_at.isnot(None),
-                                        Review.is_removed.is_(False)).distinct()).all())
+    the nightly rating sweep walks. Named for the same reason as the others.
+
+    `created_before` defaults to None (the historical behaviour). The resumable
+    scheduler passes it so the population cannot grow mid-traversal: a product
+    enters this set by acquiring a qualifying review, so bounding the review's
+    creation bounds the set.
+    """
+    where = [Review.published_at.isnot(None), Review.is_removed.is_(False)]
+    if created_before is not None:
+        where.append(Review.created_at <= created_before)
+    return list(db.scalars(select(Review.product_id).where(*where).distinct()).all())
 
 
 def recompute_all_trust_ratings(db: Session) -> dict[str, int]:
