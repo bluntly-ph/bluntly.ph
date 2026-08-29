@@ -135,3 +135,70 @@ def reviewers(
             for u, n in rows
         ],
     )
+
+
+class CronRunRow(BaseModel):
+    task: str
+    source: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    processed: int | None
+    failure: str | None
+    detail: str | None
+
+
+class SchedulerHealth(BaseModel):
+    """What a moderator needs to answer "is the automation healthy?"."""
+
+    #: One row per task: its most recent run, whatever the outcome.
+    latest: list[CronRunRow]
+    #: Recent history across all tasks, newest first.
+    recent: list[CronRunRow]
+    #: Tasks that are scheduled but have never run at all.
+    never_run: list[str]
+
+
+@router.get("/cron-runs", response_model=SchedulerHealth,
+            summary="Scheduled maintenance: last run per task, and recent history")
+def cron_runs(
+    limit: int = Query(default=40, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> SchedulerHealth:
+    """Scheduled maintenance runs on an external scheduler, so the only way a
+    moderator can tell it is alive is the record it leaves. This is that record:
+    no payloads, no credentials, and a failure carries an exception class rather
+    than a message."""
+    from app.api.v1.routes.internal_cron import TASKS
+    from app.models.maintenance import CronRun
+
+    def row(r: CronRun) -> CronRunRow:
+        return CronRunRow(
+            task=r.task, source=r.source, status=r.status,
+            started_at=r.started_at, finished_at=r.finished_at,
+            processed=r.processed, failure=r.failure, detail=r.detail)
+
+    try:
+        recent = db.scalars(
+            select(CronRun).order_by(CronRun.started_at.desc()).limit(limit)).all()
+    except Exception:  # noqa: BLE001 - table absent until migration 0034 is applied
+        # Every task unrun is the truthful answer before the migration lands,
+        # and it is the same thing this says on a fresh deployment.
+        db.rollback()
+        return SchedulerHealth(latest=[], recent=[], never_run=sorted(TASKS))
+
+    latest: list[CronRunRow] = []
+    seen: set[str] = set()
+    for task in TASKS:
+        newest = db.scalar(
+            select(CronRun).where(CronRun.task == task)
+            .order_by(CronRun.started_at.desc()).limit(1))
+        if newest is not None:
+            latest.append(row(newest))
+            seen.add(task)
+
+    return SchedulerHealth(
+        latest=latest,
+        recent=[row(r) for r in recent],
+        never_run=sorted(set(TASKS) - seen),
+    )

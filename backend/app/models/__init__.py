@@ -8,6 +8,7 @@ from app.models.comment import ReviewComment, ReviewCommentVote  # noqa: F401
 from app.models.commission import Commission  # noqa: F401
 from app.models.contract import ReviewContract  # noqa: F401
 from app.models.honesty_fund import HonestyFundDistribution  # noqa: F401
+from app.models.maintenance import CronCredential, CronRun  # noqa: F401
 from app.models.membership import MembershipTierConfig  # noqa: F401
 from app.models.moderation import ModerationLog  # noqa: F401
 from app.models.otp import EmailOtp  # noqa: F401

@@ -197,3 +197,28 @@ export async function getReviewers(
     `/api/v1/admin/reviewers?limit=${limit}`, { token },
   ).catch(() => null);
 }
+
+/** One scheduled-maintenance execution (GET /admin/cron-runs). */
+export type CronRunRow = {
+  task: string;
+  source: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  processed: number | null;
+  failure: string | null;
+  detail: string | null;
+};
+
+export type SchedulerHealth = {
+  latest: CronRunRow[];
+  recent: CronRunRow[];
+  never_run: string[];
+};
+
+export async function getSchedulerHealth(): Promise<SchedulerHealth | null> {
+  const token = await getSessionToken();
+  if (!token) return null;
+  return apiFetch<SchedulerHealth>("/api/v1/admin/cron-runs?limit=40", { token })
+    .catch(() => null);
+}

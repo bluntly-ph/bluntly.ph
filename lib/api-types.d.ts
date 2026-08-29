@@ -912,6 +912,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/cron-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduled maintenance: last run per task, and recent history
+         * @description Scheduled maintenance runs on an external scheduler, so the only way a
+         *     moderator can tell it is alive is the record it leaves. This is that record:
+         *     no payloads, no credentials, and a failure carries an exception class rather
+         *     than a message.
+         */
+        get: operations["cron_runs_api_v1_admin_cron_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/cron/{task}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run one scheduled maintenance task */
+        post: operations["run_task_api_v1_internal_cron__task__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/internal/traffic": {
         parameters: {
             query?: never;
@@ -2123,6 +2163,41 @@ export interface components {
             weaknesses?: string[];
             /** Suggestions */
             suggestions?: string[];
+        };
+        /** CronResult */
+        CronResult: {
+            /** Task */
+            task: string;
+            /** Status */
+            status: string;
+            /** Processed */
+            processed?: number | null;
+            /** Detail */
+            detail?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+        };
+        /** CronRunRow */
+        CronRunRow: {
+            /** Task */
+            task: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Processed */
+            processed: number | null;
+            /** Failure */
+            failure: string | null;
+            /** Detail */
+            detail: string | null;
         };
         /** DashboardReviewRow */
         DashboardReviewRow: {
@@ -3516,6 +3591,18 @@ export interface components {
              * @default false
              */
             submit: boolean;
+        };
+        /**
+         * SchedulerHealth
+         * @description What a moderator needs to answer "is the automation healthy?".
+         */
+        SchedulerHealth: {
+            /** Latest */
+            latest: components["schemas"]["CronRunRow"][];
+            /** Recent */
+            recent: components["schemas"]["CronRunRow"][];
+            /** Never Run */
+            never_run: string[];
         };
         /** StreakDayOut */
         StreakDayOut: {
@@ -5538,6 +5625,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cron_runs_api_v1_admin_cron_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_task_api_v1_internal_cron__task__post: {
+        parameters: {
+            query?: {
+                source?: string;
+            };
+            header?: {
+                "X-Cron-Key"?: string | null;
+            };
+            path: {
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CronResult"];
                 };
             };
             /** @description Validation Error */

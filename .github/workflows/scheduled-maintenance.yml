@@ -1,0 +1,137 @@
+name: Scheduled maintenance
+
+# PRODUCTION SCHEDULING AUTHORITY.
+#
+# Celery beat was never deployed — worker and beat exist only in
+# backend/docker-compose.yml, a development file. Production runs the Next.js
+# frontend and the FastAPI service on Vercel and nothing else, so every periodic
+# job, including PII retention, waited on a moderator pressing a button.
+#
+# This is the scheduler. It calls one authenticated endpoint per job; the
+# endpoint runs the same service functions the manual admin routes run, under a
+# Postgres advisory lock, and records every execution.
+#
+# Why here rather than Vercel Cron: this project is on the hobby plan, which
+# allows two cron entries at daily granularity. There are eight jobs across six
+# cadences. Why not a Celery deployment: a persistent worker, a persistent beat
+# and a Redis broker is three always-on services for a few seconds of work a
+# day.
+#
+# TIMES ARE UTC. The product's cadences are Asia/Manila (UTC+8), so each
+# expression is the Manila time minus eight hours, which lands on the PREVIOUS
+# UTC day for every one of these:
+#
+#   Manila 03:00 -> 19:00 UTC     Manila 05:00 -> 21:00 UTC
+#   Manila 04:00 -> 20:00 UTC     Manila 05:30 -> 21:30 UTC
+#   Manila 04:30 -> 20:30 UTC     Manila 06:00 -> 22:00 UTC
+#
+# The two monthly jobs cannot be expressed directly: "the 1st at 02:00 Manila"
+# is the LAST day of the previous month at 18:00 UTC, and cron has no "last
+# day". They are triggered daily and the endpoint applies a Manila-date guard,
+# recording a `skipped` run on every other day. That keeps the Manila semantics
+# exact instead of approximating them in the cron expression.
+#
+# The Philippines has observed UTC+8 with no daylight saving since 1945, so
+# these offsets do not drift.
+
+on:
+  schedule:
+    - cron: "0 19 * * *"    # 03:00 Manila — PII retention
+    - cron: "0 20 * * *"    # 04:00 Manila — Wilson + product ratings
+    - cron: "30 20 * * *"   # 04:30 Manila — trust progression
+    - cron: "0 21 * * *"    # 05:00 Manila — contract sweep
+    - cron: "30 21 * * *"   # 05:30 Manila — request expiry
+    - cron: "0 22 * * *"    # 06:00 Manila — payout batch refresh
+    - cron: "0 18 * * *"    # 02:00 Manila on the 1st — guarded in the endpoint
+    - cron: "30 18 * * *"   # 02:30 Manila on the 5th — guarded in the endpoint
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Run one task now (must be in the endpoint's allow-list)"
+        required: true
+        type: choice
+        options:
+          - pii_retention
+          - recompute_wilson_scores
+          - recompute_all_trust
+          - sweep_contracts
+          - expire_requests
+          - refresh_payout_batches
+          - honesty_fund_distribution
+          - schedule_payouts
+
+concurrency:
+  # One maintenance run at a time. The endpoint also takes an advisory lock, so
+  # this is belt and braces rather than the only guard.
+  group: scheduled-maintenance
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Run due maintenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Select the task for this trigger
+        id: pick
+        env:
+          CRON: ${{ github.event.schedule }}
+          MANUAL: ${{ inputs.task }}
+        run: |
+          if [ -n "$MANUAL" ]; then
+            echo "task=$MANUAL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$CRON" in
+            "0 19 * * *")  task=pii_retention ;;
+            "0 20 * * *")  task=recompute_wilson_scores ;;
+            "30 20 * * *") task=recompute_all_trust ;;
+            "0 21 * * *")  task=sweep_contracts ;;
+            "30 21 * * *") task=expire_requests ;;
+            "0 22 * * *")  task=refresh_payout_batches ;;
+            "0 18 * * *")  task=honesty_fund_distribution ;;
+            "30 18 * * *") task=schedule_payouts ;;
+            *) echo "::error::No task mapped to schedule '$CRON'"; exit 1 ;;
+          esac
+          echo "task=$task" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke
+        env:
+          # The secret travels in a header, never a query string, so it cannot
+          # reach an access log or a redirect target. It is never echoed.
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE: ${{ vars.PRODUCTION_BASE_URL || 'https://www.bluntly.ph' }}
+          TASK: ${{ steps.pick.outputs.task }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not configured for this repository."
+            exit 1
+          fi
+
+          echo "Running maintenance task: $TASK"
+          code=$(curl -sS -o response.json -w "%{http_code}" \
+                   -X POST "$BASE/api/v1/internal/cron/$TASK" \
+                   -H "X-Cron-Key: $CRON_SECRET" \
+                   -H "Content-Type: application/json" \
+                   --max-time 600 --retry 2 --retry-delay 30 --retry-connrefused)
+
+          # The body carries a task name, a status and a count. No payloads, no
+          # identifiers, nothing sensitive — safe to print, and it is the only
+          # record a reader of this log gets.
+          echo "HTTP $code"
+          cat response.json || true
+          echo
+
+          case "$code" in
+            200) ;;
+            401|503) echo "::error::Scheduler credential rejected or unconfigured."; exit 1 ;;
+            404) echo "::error::Task '$TASK' is not in the endpoint allow-list."; exit 1 ;;
+            *)   echo "::error::Maintenance task '$TASK' failed with HTTP $code"; exit 1 ;;
+          esac
+
+          status=$(python3 -c "import json,sys; print(json.load(open('response.json')).get('status',''))" 2>/dev/null || echo "")
+          if [ "$status" = "failed" ]; then
+            echo "::error::Task reported failure"
+            exit 1
+          fi
+          echo "::notice::$TASK -> $status"

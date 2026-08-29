@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { getActivityLog } from "@/lib/moderation";
+import { SchedulerHealth } from "@/components/admin/SchedulerHealth";
+import { getActivityLog, getSchedulerHealth } from "@/lib/moderation";
 
 export const metadata: Metadata = { title: "Activity log — bluntly admin" };
 
@@ -14,10 +15,21 @@ export const metadata: Metadata = { title: "Activity log — bluntly admin" };
  * dashboard; the audit log itself is where the complete record belongs.
  */
 export default async function ActivityLogPage() {
-  const log = await getActivityLog(100);
+  // Independent of each other, so they are not serialised.
+  const [log, scheduler] = await Promise.all([
+    getActivityLog(100),
+    getSchedulerHealth(),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* The automation's record sits above the human one: it is the only way
+          to tell that scheduled maintenance is alive, and a job that has never
+          run looks identical to a healthy one unless it is listed. */}
+      <div className="shrink-0 pb-4">
+        <SchedulerHealth health={scheduler} />
+      </div>
+
       <div className="shrink-0 pb-3">
         <h2 className="text-[18px] font-bold text-[var(--text-primary)]">Activity log</h2>
         <p className="mt-1 text-[13px] text-[var(--text-secondary)]">

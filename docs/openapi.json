@@ -2826,6 +2826,125 @@
         }
       }
     },
+    "/api/v1/admin/cron-runs": {
+      "get": {
+        "tags": [
+          "admin: console"
+        ],
+        "summary": "Scheduled maintenance: last run per task, and recent history",
+        "description": "Scheduled maintenance runs on an external scheduler, so the only way a\nmoderator can tell it is alive is the record it leaves. This is that record:\nno payloads, no credentials, and a failure carries an exception class rather\nthan a message.",
+        "operationId": "cron_runs_api_v1_admin_cron_runs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 40,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerHealth"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/cron/{task}": {
+      "post": {
+        "tags": [
+          "internal: scheduled maintenance"
+        ],
+        "summary": "Run one scheduled maintenance task",
+        "operationId": "run_task_api_v1_internal_cron__task__post",
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "scheduler",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "X-Cron-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cron-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CronResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/traffic": {
       "post": {
         "tags": [
@@ -6480,6 +6599,135 @@
           "summary"
         ],
         "title": "CritiqueResponse"
+      },
+      "CronResult": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "processed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "status"
+        ],
+        "title": "CronResult"
+      },
+      "CronRunRow": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "processed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "source",
+          "status",
+          "started_at",
+          "finished_at",
+          "processed",
+          "failure",
+          "detail"
+        ],
+        "title": "CronRunRow"
       },
       "DashboardReviewRow": {
         "properties": {
@@ -10175,6 +10423,39 @@
         },
         "type": "object",
         "title": "RunRequest"
+      },
+      "SchedulerHealth": {
+        "properties": {
+          "latest": {
+            "items": {
+              "$ref": "#/components/schemas/CronRunRow"
+            },
+            "type": "array",
+            "title": "Latest"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/CronRunRow"
+            },
+            "type": "array",
+            "title": "Recent"
+          },
+          "never_run": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Never Run"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latest",
+          "recent",
+          "never_run"
+        ],
+        "title": "SchedulerHealth",
+        "description": "What a moderator needs to answer \"is the automation healthy?\"."
       },
       "StreakDayOut": {
         "properties": {
