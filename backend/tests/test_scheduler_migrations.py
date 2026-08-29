@@ -53,7 +53,7 @@ def test_the_migration_chain_has_exactly_one_head():
     parents = {d for d in chain.values() if d}
     heads = sorted(set(chain) - parents)
     assert len(heads) == 1, f"expected one head, found {heads}"
-    assert heads[0] == "0037_cron_lease", f"unexpected head: {heads[0]}"
+    assert heads[0] == "0040_role_admin_audit_enum", f"unexpected head: {heads[0]}"
 
 
 def test_the_scheduler_migrations_form_the_expected_sequence():
