@@ -122,17 +122,22 @@ def _problem(*, status_code: int, title: str, code: str, detail: str,
                         media_type=PROBLEM_CONTENT_TYPE)
 
 
+def _instance(request: Request) -> str:
+    """Identify the failed resource without reflecting query-string values."""
+    return str(request.url.replace(query=""))
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         return _problem(status_code=exc.status_code, title=exc.title, code=exc.code,
-                        detail=exc.detail, instance=str(request.url), extra=exc.extra)
+                        detail=exc.detail, instance=_instance(request), extra=exc.extra)
 
     @app.exception_handler(StarletteHTTPException)
     async def _handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return _problem(status_code=exc.status_code, title="HTTP error",
                         code=f"http_{exc.status_code}", detail=str(exc.detail),
-                        instance=str(request.url))
+                        instance=_instance(request))
 
     @app.exception_handler(RequestValidationError)
     async def _handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -143,5 +148,5 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _problem(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         title="Request validation failed", code="validation_error",
                         detail="One or more fields are invalid.",
-                        instance=str(request.url),
+                        instance=_instance(request),
                         extra={"errors": jsonable_encoder(exc.errors())})

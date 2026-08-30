@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.models.traffic import RequestGeoBucket
 from app.services import request_traffic_service as svc
@@ -184,12 +184,19 @@ def test_rps_uses_observed_coverage_not_the_nominal_window(db):
 @requires_db
 def test_a_window_excludes_older_buckets(db):
     old = datetime.now(UTC) - timedelta(days=40)
-    svc.record(db, _geo(city="AncientCity" + _RUN), now=old, count=50)
-    db.commit()
-    recent = svc.summary(db, range_key="24h", limit=svc.MAX_LIMIT)
-    assert "AncientCity" + _RUN not in [loc.city for loc in recent.locations]
-    wide = svc.summary(db, range_key="90d", limit=svc.MAX_LIMIT)
-    assert "AncientCity" + _RUN in [loc.city for loc in wide.locations]
+    city = "AncientCity" + _RUN
+    recent_before = svc.summary(db, range_key="24h").total_requests
+    wide_before = svc.summary(db, range_key="90d").total_requests
+    try:
+        svc.record(db, _geo(city=city), now=old, count=50)
+        db.commit()
+        recent_after = svc.summary(db, range_key="24h").total_requests
+        wide_after = svc.summary(db, range_key="90d").total_requests
+        assert recent_after == recent_before
+        assert wide_after == wide_before + 50
+    finally:
+        db.execute(delete(RequestGeoBucket).where(RequestGeoBucket.city == city))
+        db.commit()
 
 
 @requires_db
