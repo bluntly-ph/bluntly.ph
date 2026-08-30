@@ -42,7 +42,36 @@ def scheduler_credential(db):
 
 
 @pytest.fixture(autouse=True)
-def _an_unclaimed_period(request):
+def _due_clock():
+    """Run route tests after every daily threshold, independent of CI time.
+
+    The scheduler correctly refuses a task before its Manila wall-clock
+    threshold.  A suite that happens to start at 01:00 Manila therefore cannot
+    use the real clock for tests whose subject is claims, retries, or task
+    effects.  Keep the real Manila *date* so period assertions agree, but pin
+    the time to 06:30 — after the final daily task is due.
+
+    This deliberately assigns/restores directly instead of using pytest's
+    ``monkeypatch`` fixture: two retry tests call ``monkeypatch.undo()`` to
+    restore a temporary TaskSpec, and that must not also restore the wall
+    clock halfway through the test.
+    """
+    from app.core.constants import MANILA
+
+    original = internal_cron._now
+    today = datetime.now(MANILA).date()
+    fixed = datetime(
+        today.year, today.month, today.day, 6, 30, tzinfo=MANILA,
+    ).astimezone(UTC)
+    internal_cron._now = lambda: fixed
+    try:
+        yield
+    finally:
+        internal_cron._now = original
+
+
+@pytest.fixture(autouse=True)
+def _an_unclaimed_period(request, _due_clock):
     """Give every test in this module a period nobody has claimed yet.
 
     These tests drive REAL task names, and the entire point of the claim is
@@ -139,7 +168,14 @@ def test_the_unknown_task_name_is_not_echoed_back(client, scheduler_credential):
     the response must not reflect attacker-supplied text."""
     probe = "zzz_probe_marker_zzz"
     resp = client.post(f"{CRON}/{probe}", headers={"X-Cron-Key": SECRET})
-    assert probe not in resp.text
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["detail"] == "Unknown maintenance task."
+    # RFC 9457's `instance` is the request URL by contract, so it necessarily
+    # contains the path.  The attacker-controlled name must not enter any
+    # semantic field that a UI, alert, or log summary would present as prose.
+    for field in ("type", "title", "detail", "code"):
+        assert probe not in str(body.get(field, ""))
 
 
 def test_every_allow_listed_task_is_callable():
@@ -475,10 +511,17 @@ def test_payout_scheduling_prepares_without_submitting(client, scheduler_credent
 
 @requires_db
 def test_the_scheduler_does_not_expose_arbitrary_execution(client, scheduler_credential):
-    """Path traversal and dotted attribute paths must not resolve to anything."""
-    for probe in ("../../admin/payouts/run", "os.system", "app.workers.tasks.schedule_payouts"):
+    """Dotted names are refused; URL normalization cannot borrow cron auth."""
+    for probe in ("os.system", "app.workers.tasks.schedule_payouts"):
         resp = client.post(f"{CRON}/{probe}", headers={"X-Cron-Key": SECRET})
         assert resp.status_code in (404, 405), f"{probe} resolved to something"
+
+    # HTTP clients normalize `../` before routing, so this becomes the real
+    # admin payout URL rather than an internal-cron task name.  That route has
+    # its own Bearer-token guard: a cron credential must still be useless.
+    traversal = client.post(
+        f"{CRON}/../../admin/payouts/run", headers={"X-Cron-Key": SECRET})
+    assert traversal.status_code == 401
 
 
 def test_claims_are_scoped_per_task_and_period():
