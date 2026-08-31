@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
 
-import { WorldMap, type MapMarker } from "./WorldMap";
+import {
+  formatAggregateValue,
+  selectVisibleLocations,
+  toGlobeMarkers,
+  type AnalyticsLocation,
+} from "./globe-model";
+import { TrafficGlobe } from "./TrafficGlobe";
 
 /**
  * Where requests came from, as a map and a ranked list.
@@ -20,25 +26,13 @@ import { WorldMap, type MapMarker } from "./WorldMap";
  * demonstration world.
  */
 
-type Location = {
-  country: string | null;
-  region: string | null;
-  city: string | null;
-  pop: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  request_count: number;
-  requests_per_second: number;
-  share: number;
-};
-
 type Distribution = {
   window_start: string;
   window_end: string;
   covered_seconds: number;
   total_requests: number;
   requests_per_second: number;
-  locations: Location[];
+  locations: AnalyticsLocation[];
   other_request_count: number;
   other_location_count: number;
   has_data: boolean;
@@ -71,7 +65,7 @@ function countryName(code: string | null): string {
   }
 }
 
-function placeLabel(loc: Location): string {
+function placeLabel(loc: AnalyticsLocation): string {
   const country = countryName(loc.country);
   // Country alone when there is no city. The edge's region field is a raw
   // subdivision code — "GT", "00", "NCR" — and "GT, South Africa" reads as
@@ -82,7 +76,7 @@ function placeLabel(loc: Location): string {
 
 const nf = new Intl.NumberFormat("en-US");
 
-function valueFor(loc: Location, metric: Metric): string {
+function valueFor(loc: AnalyticsLocation, metric: Metric): string {
   return metric === "count"
     ? nf.format(loc.request_count)
     : `${loc.requests_per_second.toFixed(loc.requests_per_second < 1 ? 3 : 2)}/s`;
@@ -194,7 +188,9 @@ export function RequestDistribution() {
         </button>
       </header>
 
-      <div className="p-4 sm:p-5">{body}</div>
+      {/* Only one live globe at a time. When the dialog opens, the card copy
+          unmounts before the expanded copy starts its WebGL loop. */}
+      <div className="p-4 sm:p-5">{expanded ? null : body}</div>
 
       <dialog
         ref={dialogRef}
@@ -202,8 +198,8 @@ export function RequestDistribution() {
         aria-label="Request distribution, expanded"
         className="w-[min(96vw,72rem)] rounded-[var(--radius-md)] bg-[var(--surface-card)] p-0 backdrop:bg-black/50"
       >
-        <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-5 py-3">
-          <h2 className="mr-auto text-[15px] font-semibold text-[var(--text-primary)]">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-3 sm:gap-3 sm:px-5">
+          <h2 className="w-full text-[15px] font-semibold text-[var(--text-primary)] sm:mr-auto sm:w-auto">
             Request distribution
           </h2>
           <MetricToggle metric={metric} onChange={setMetric} />
@@ -340,17 +336,9 @@ function Panel({
     );
   }
 
-  const top = data.locations[0]?.request_count ?? 1;
-  const markers: MapMarker[] = data.locations
-    .filter((l) => l.latitude !== null && l.longitude !== null)
-    .map((l) => ({
-      key: `${l.country}-${l.region}-${l.city}-${l.pop}`,
-      label: placeLabel(l),
-      latitude: l.latitude as number,
-      longitude: l.longitude as number,
-      weight: l.request_count / top,
-      valueLabel: valueFor(l, metric),
-    }));
+  const top = Math.max(1, ...data.locations.map((location) => location.request_count));
+  const markers = toGlobeMarkers(data.locations);
+  const compact = selectVisibleLocations(data.locations);
 
   const headline =
     metric === "count"
@@ -371,23 +359,30 @@ function Panel({
         </p>
       </div>
 
-      {/* Desktop puts the list beside the map; narrow screens stack them, with
-          the map first because it is the smaller of the two. */}
+      {/* Desktop puts the fixed top list beside the globe; narrow screens stack
+          them. Neither side creates an inner scroll region. */}
       <div
         className={`mt-4 grid gap-5 ${
-          expanded ? "lg:grid-cols-[1.4fr_1fr]" : "lg:grid-cols-[1fr_18rem]"
+          expanded
+            ? "lg:grid-cols-[minmax(24rem,1.35fr)_minmax(17rem,0.65fr)]"
+            : "lg:grid-cols-[minmax(20rem,1.15fr)_minmax(16rem,0.85fr)]"
         }`}
       >
-        {/* `self-start` so the map keeps its own aspect instead of stretching
-            to whatever height the ranked list happens to need — without it the
-            card grows a large empty band under the map. */}
-        <div className="min-w-0 self-start overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-2">
-          <div className={expanded ? "aspect-[360/145]" : "aspect-[360/145] max-h-[18rem]"}>
-            <WorldMap markers={markers} />
+        <div className="relative min-w-0 self-start overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)]">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-gradient-to-b from-[var(--surface-app)] to-transparent" />
+          <div className="mx-auto w-full max-w-[30rem] p-2 sm:p-4">
+            <TrafficGlobe markers={markers} locationCount={markers.length} />
           </div>
         </div>
 
-        <RankedList data={data} metric={metric} top={top} />
+        <RankedList
+          locations={compact.visible}
+          hiddenLocationCount={compact.hiddenLocationCount + data.other_location_count}
+          hiddenRequestCount={compact.hiddenRequestCount + data.other_request_count}
+          coveredSeconds={data.covered_seconds}
+          metric={metric}
+          top={top}
+        />
       </div>
 
       <p className="mt-4 text-[12px] text-[var(--text-muted)]">
@@ -399,17 +394,27 @@ function Panel({
 }
 
 function RankedList({
-  data,
+  locations,
+  hiddenLocationCount,
+  hiddenRequestCount,
+  coveredSeconds,
   metric,
   top,
 }: {
-  data: Distribution;
+  locations: AnalyticsLocation[];
+  hiddenLocationCount: number;
+  hiddenRequestCount: number;
+  coveredSeconds: number;
   metric: Metric;
   top: number;
 }) {
   return (
-    <ol className="flex min-w-0 flex-col gap-2.5">
-      {data.locations.map((loc) => (
+    <div className="min-w-0">
+      <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        Top locations
+      </p>
+      <ol className="flex min-w-0 flex-col gap-2.5">
+      {locations.map((loc) => (
         <li key={`${loc.country}-${loc.region}-${loc.city}-${loc.pop}`}>
           <div className="flex items-baseline gap-2">
             <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-primary)]">
@@ -440,20 +445,21 @@ function RankedList({
         </li>
       ))}
 
-      {data.other_location_count > 0 ? (
+      {hiddenLocationCount > 0 ? (
         <li className="border-t border-[var(--border-subtle)] pt-2.5">
           <div className="flex items-baseline gap-2">
             <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-secondary)]">
-              Other ({data.other_location_count} location
-              {data.other_location_count === 1 ? "" : "s"})
+              Other ({hiddenLocationCount} location
+              {hiddenLocationCount === 1 ? "" : "s"})
             </span>
             <span className="shrink-0 text-[13px] text-[var(--text-secondary)] [font-variant-numeric:tabular-nums]">
-              {nf.format(data.other_request_count)}
+              {formatAggregateValue(hiddenRequestCount, coveredSeconds, metric)}
             </span>
           </div>
         </li>
       ) : null}
-    </ol>
+      </ol>
+    </div>
   );
 }
 
@@ -462,8 +468,8 @@ function PanelSkeleton() {
     <div role="status" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading request distribution</span>
       <Skeleton className="h-7 w-32" />
-      <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_18rem]">
-        <Skeleton className="aspect-[360/145] max-h-[18rem] w-full" />
+      <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(20rem,1.15fr)_minmax(16rem,0.85fr)]">
+        <Skeleton className="mx-auto aspect-square w-full max-w-[30rem]" />
         <div className="flex flex-col gap-3">
           {Array.from({ length: 6 }, (_, i) => (
             <div key={i} className="flex flex-col gap-1.5">
