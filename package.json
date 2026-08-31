@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:frontend": "node --experimental-strip-types --test \"tests/frontend/*.test.mjs\"",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "gen:api": "openapi-typescript docs/openapi.json -o lib/api-types.d.ts"

@@ -209,6 +209,10 @@ jobs:
         run: npx tsc --noEmit
       - name: Lint
         run: npm run lint
+      - name: Unit tests
+        # Guards the pure analytics transforms. Without this step the files
+        # under tests/frontend are committed but never executed.
+        run: npm run test:frontend
       - name: Production build
         # The build must not need runtime secrets; pages fetch at request time.
         run: npm run build
