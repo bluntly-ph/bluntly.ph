@@ -357,3 +357,144 @@ def test_reported_ids_are_strings_so_the_flag_comparison_can_match():
     found = svc._reported_review_ids(_DB())
     assert found == {str(ref)}
     assert {str(ref)} & found, "a reported review no longer matches the queue"
+
+
+# The recorded coverage follow-up ---------------------------------------------
+#
+# `docs/RELEASE_HANDOFF.md` left this open: the three tests above prove the type
+# boundary with hand-built fakes, and a fake is precisely what let the original
+# defect through. Every one of them hands the dataclass a `str` because the
+# annotation says `str | None`, so none of them ever exercises the UUID the
+# database actually stores. These do it against real rows, through real SQL.
+#
+# They assert deltas rather than absolutes. `overview()` counts the whole
+# database and CI runs against a shared one, so `high_priority == 1` would pass
+# alone and fail in company. Nothing here commits; the `db` fixture's rollback
+# takes every row created below with it.
+
+from app.models.enums import (  # noqa: E402
+    EarnEligibleStatus,
+    ModerationAction,
+    ModerationReason,
+    ModerationTargetType,
+    Verdict,
+)
+from tests.conftest import make_user  # noqa: E402
+
+
+def _product(db, **overrides):
+    from app.models.product import Product
+
+    overrides.setdefault("canonical_name", f"Fixture {_uuid.uuid4().hex[:8]}")
+    product = Product(**overrides)
+    db.add(product)
+    db.flush()
+    return product
+
+
+def _queued_review(db, *, author, product, **overrides):
+    """A review `_queue_predicate` genuinely picks up: pending and unpublished."""
+    from app.models.review import Review
+
+    overrides.setdefault("title", "Fixture review")
+    overrides.setdefault("discussion", "Body text for a fixture review.")
+    overrides.setdefault("verdict", Verdict.it_depends)
+    overrides.setdefault("star_rating", 4)
+    overrides.setdefault("is_removed", False)
+    overrides.setdefault("published_at", None)
+    overrides.setdefault("earn_eligible_status", EarnEligibleStatus.pending)
+    review = Review(product_id=product.id, author_id=author.id, **overrides)
+    db.add(review)
+    db.flush()
+    return review
+
+
+def _report(db, target_ref, *, reporter):
+    """A report row carrying a real UUID, exactly as the column stores it."""
+    from app.models.moderation import ModerationLog
+
+    log = ModerationLog(
+        action=ModerationAction.report,
+        target_type=ModerationTargetType.review,
+        target_ref=target_ref,
+        reporter_id=reporter.id,
+        reason=ModerationReason.spam,
+    )
+    db.add(log)
+    db.flush()
+    return log
+
+
+def _flagged(ov) -> int:
+    return next(b.count for b in ov.breakdown if b.label == "Flagged")
+
+
+@requires_db
+def test_a_reported_queued_review_is_flagged_and_high_priority(db):
+    """The half that failed silently: with UUIDs on both sides of the
+    intersection the count stayed zero however much was reported."""
+    before = svc.overview(db)
+
+    product = _product(db)
+    review = _queued_review(db, author=make_user(db), product=product)
+    _report(db, review.id, reporter=make_user(db))
+
+    after = svc.overview(db)
+
+    assert after.queue_total == before.queue_total + 1
+    assert after.high_priority == before.high_priority + 1
+    assert after.urgent == before.urgent + 1, "the design's urgent pill"
+    assert _flagged(after) == _flagged(before) + 1
+
+
+@requires_db
+def test_a_report_against_an_unrelated_uuid_flags_nothing(db):
+    """A report whose target matches no review must not raise the count, or the
+    pill would measure report volume rather than the queue."""
+    before = svc.overview(db)
+
+    _queued_review(db, author=make_user(db), product=_product(db))
+    _report(db, _uuid.uuid4(), reporter=make_user(db))
+
+    after = svc.overview(db)
+
+    assert after.queue_total == before.queue_total + 1, "the review still queues"
+    assert after.high_priority == before.high_priority
+    assert _flagged(after) == _flagged(before)
+
+
+@requires_db
+def test_duplicate_reports_do_not_multiply_a_flagged_review(db):
+    """Three reporters, one review. The bar counts reviews, not reports."""
+    before = svc.overview(db)
+
+    review = _queued_review(db, author=make_user(db), product=_product(db))
+    for _ in range(3):
+        _report(db, review.id, reporter=make_user(db))
+
+    after = svc.overview(db)
+
+    assert after.high_priority == before.high_priority + 1
+    assert _flagged(after) == _flagged(before) + 1
+
+
+@requires_db
+def test_a_reported_review_outside_the_queue_is_not_urgent(db):
+    """Urgency is a property of what is waiting. A published review someone
+    reported is moderation work, but it is not queue work."""
+    before = svc.overview(db)
+
+    published = _queued_review(
+        db,
+        author=make_user(db),
+        product=_product(db),
+        published_at=datetime.now(UTC),
+        earn_eligible_status=EarnEligibleStatus.approved,
+    )
+    _report(db, published.id, reporter=make_user(db))
+
+    after = svc.overview(db)
+
+    assert after.queue_total == before.queue_total, "it is not awaiting moderation"
+    assert after.high_priority == before.high_priority
+    assert _flagged(after) == _flagged(before)
