@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import Integer, and_, cast, extract, func, literal, or_
+from sqlalchemy import BigInteger, Integer, and_, cast, extract, func, literal, or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -227,11 +227,14 @@ def record_checkpoint(
             )
             * 1_000
         ),
-        Integer,
+        BigInteger,
     )
-    allowed_active = func.least(
-        MAX_SESSION_MS,
-        func.greatest(0, elapsed_ms) + SKEW_TOLERANCE_MS,
+    allowed_active = cast(
+        func.least(
+            MAX_SESSION_MS,
+            func.greatest(0, elapsed_ms) + SKEW_TOLERANCE_MS,
+        ),
+        Integer,
     )
     elapsed_bounded_active = func.least(claimed_active, allowed_active)
     merged_active = func.greatest(

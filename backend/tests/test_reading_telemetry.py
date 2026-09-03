@@ -19,6 +19,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from pydantic import ValidationError
 from sqlalchemy import delete, event, select, update
+from sqlalchemy.dialects import postgresql
 
 from app.core.config import settings
 from app.core.errors import RateLimitError
@@ -697,6 +698,82 @@ def test_delete_between_elapsed_read_and_upsert_gets_fresh_insert_clamp(
     assert row.active_ms <= svc.SKEW_TOLERANCE_MS
     assert row.body_active_ms <= row.active_ms
     assert row.clamped is True
+
+
+@requires_db
+def test_89_day_elapsed_checkpoint_avoids_overflow_and_stays_monotonic(
+    db, telemetry_context
+):
+    assert svc.record_checkpoint(
+        db,
+        _service_checkpoint(active_ms=100, body_active_ms=80, wall_ms=200),
+        _user_identity(),
+        country=None,
+        user_agent=None,
+    )
+    db.execute(
+        update(ReviewReadingSession)
+        .where(ReviewReadingSession.impression_id == IMPRESSION_ID)
+        .values(started_at=datetime.now(UTC) - timedelta(days=89))
+    )
+    db.commit()
+
+    assert svc.record_checkpoint(
+        db,
+        _service_checkpoint(
+            seq=1,
+            active_ms=svc.MAX_SESSION_MS,
+            body_active_ms=svc.MAX_SESSION_MS,
+            wall_ms=svc.MAX_SESSION_MS,
+            scroll_pct=100,
+        ),
+        _user_identity(telemetry_context.user.id),
+        country=None,
+        user_agent=None,
+    )
+
+    row = _stored_row(db)
+    assert row.active_ms == svc.MAX_SESSION_MS
+    assert row.body_active_ms == svc.MAX_SESSION_MS
+    assert row.wall_ms == svc.MAX_SESSION_MS
+    assert row.scroll_milestone == 100
+    assert row.checkpoints == 2
+    assert row.max_seq == 1
+    assert row.clamped is False
+
+
+def test_elapsed_clamp_uses_non_overflowing_postgresql_arithmetic():
+    compiled_sql = ""
+
+    class CompilingSession:
+        def get(self, _model, _key):
+            return SimpleNamespace(discussion="Four literal words here.", star_rating=4)
+
+        def execute(self, statement):
+            nonlocal compiled_sql
+            compiled_sql = str(statement.compile(dialect=postgresql.dialect()))
+            return SimpleNamespace(rowcount=0)
+
+        def commit(self):
+            raise AssertionError("a zero-row UPSERT must not commit")
+
+    assert not svc.record_checkpoint(
+        CompilingSession(),
+        _service_checkpoint(
+            seq=1,
+            active_ms=svc.MAX_SESSION_MS,
+            body_active_ms=svc.MAX_SESSION_MS,
+            wall_ms=svc.MAX_SESSION_MS,
+        ),
+        _user_identity(),
+        country=None,
+        user_agent=None,
+    )
+
+    elapsed_cast = compiled_sql.index("CAST(floor(EXTRACT(epoch")
+    elapsed_suffix = compiled_sql[elapsed_cast : elapsed_cast + 250]
+    assert "AS BIGINT" in elapsed_suffix
+    assert elapsed_suffix.index("AS BIGINT") < elapsed_suffix.index("AS INTEGER")
 
 
 @requires_db
