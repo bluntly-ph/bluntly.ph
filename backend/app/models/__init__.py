@@ -19,9 +19,11 @@ from app.models.qa import Answer, Question  # noqa: F401
 from app.models.request_board import RequestUpvote, ReviewRequest  # noqa: F401
 from app.models.review import ReferralLink, Review, ReviewVersion  # noqa: F401
 from app.models.session import Session  # noqa: F401
+from app.models.telemetry import ReviewReadingSession  # noqa: F401
 from app.models.token import TokenTransaction  # noqa: F401
 from app.models.traffic import (  # noqa: F401
     RequestGeoBucket,
+    ReviewFirstVoteGeoBucket,
     ReviewViewBucket,
 )
 from app.models.user import Badge, User, UserBadge  # noqa: F401
@@ -35,4 +37,5 @@ __all__ = [
     "ModerationLog", "EarnEligibleVote", "ReviewVote", "TokenTransaction",
     "ReviewRequest", "RequestUpvote", "ReviewContract", "Payout", "EmailOtp",
     "AffiliatePostback", "ReviewComment", "ReviewCommentVote",
+    "ReviewReadingSession", "ReviewFirstVoteGeoBucket",
 ]

@@ -152,6 +152,17 @@ class VoteDirection(str, enum.Enum):
     down = "down"
 
 
+class ReaderKind(str, enum.Enum):
+    """Which identity column on a reading session is populated.
+
+    Exactly one of `reader_ref` / `anon_ref` is non-null, enforced by CHECK
+    constraints in migration 0041. This enum names which.
+    """
+
+    anon = "anon"
+    user = "user"
+
+
 class TokenKind(str, enum.Enum):
     """Token ledger entry kinds (M2 slice 7; request-board kinds added M3 slice 9)."""
 
