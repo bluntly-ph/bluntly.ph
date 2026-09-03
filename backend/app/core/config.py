@@ -120,6 +120,9 @@ class Settings(BaseSettings):
     # --- Security / rate limiting ---
     auth_rate_limit_max: int = 10
     auth_rate_limit_window_seconds: int = 60
+    telemetry_ingest_key: str = ""
+    telemetry_rate_limit_max: int = 60
+    telemetry_retention_days: int = 90
 
     # --- Auth (FastAPI-native JWT/OAuth2 — ADR-010) ---
     jwt_secret: str = "dev-insecure-change-me"  # MUST be overridden in prod

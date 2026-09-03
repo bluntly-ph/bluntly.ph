@@ -21,6 +21,7 @@ from app.api.v1.routes import (
     postback,
     products,
     qa,
+    reading_telemetry,
     requests,
     reviews,
     tokens,
@@ -43,6 +44,7 @@ api_v1_router.include_router(admin_console.router)
 api_v1_router.include_router(admin_users.router)
 api_v1_router.include_router(internal_cron.router)
 api_v1_router.include_router(traffic_ingest.router)
+api_v1_router.include_router(reading_telemetry.router)
 api_v1_router.include_router(admin_reports.router)
 api_v1_router.include_router(membership.router)
 api_v1_router.include_router(ai.router)
