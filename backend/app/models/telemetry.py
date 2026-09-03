@@ -23,6 +23,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -77,6 +78,15 @@ class ReviewReadingSession(Base):
             "(active_ms_at_first_vote IS NULL OR active_ms_at_first_vote BETWEEN 0 AND 1800000)",
             name="ck_reading_interaction_cap",
         ),
+        Index("uq_reading_impression", "impression_id", unique=True),
+        Index("ix_reading_started_at", "started_at"),
+        Index("ix_reading_review_started", "review_id", "started_at"),
+        Index(
+            "ix_reading_reader_review",
+            "reader_ref",
+            "review_id",
+            postgresql_where=text("reader_ref IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -109,7 +119,7 @@ class ReviewReadingSession(Base):
     wall_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     scroll_milestone: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
-    checkpoints: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
+    checkpoints: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1")
     max_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     clamped: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 

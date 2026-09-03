@@ -28,6 +28,7 @@ Revises: 0040_role_admin_audit_enum
 from __future__ import annotations
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -38,7 +39,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    reader_kind = sa.Enum("anon", "user", name="reader_kind")
+    # This migration creates the type explicitly; the table column must not
+    # emit a second CREATE TYPE through SQLAlchemy's native-enum DDL hook.
+    reader_kind = postgresql.ENUM("anon", "user", name="reader_kind", create_type=False)
     reader_kind.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
@@ -65,7 +68,7 @@ def upgrade() -> None:
         sa.Column("body_active_ms", sa.Integer, nullable=False, server_default="0"),
         sa.Column("wall_ms", sa.Integer, nullable=False, server_default="0"),
         sa.Column("scroll_milestone", sa.SmallInteger, nullable=False, server_default="0"),
-        sa.Column("checkpoints", sa.SmallInteger, nullable=False, server_default="0"),
+        sa.Column("checkpoints", sa.SmallInteger, nullable=False, server_default="1"),
         sa.Column("max_seq", sa.Integer, nullable=False, server_default="0"),
         sa.Column("clamped", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("vote_client_after_ms", sa.Integer, nullable=True),

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Numeric, String, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -76,14 +76,25 @@ class ReviewFirstVoteGeoBucket(Base):
     """
 
     __tablename__ = "review_first_vote_geo_buckets"
+    __table_args__ = (
+        Index(
+            "uq_review_first_vote_geo",
+            "review_id",
+            "bucket_start",
+            "country",
+            "region",
+            "city",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index("ix_review_first_vote_geo_start", "bucket_start"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     review_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reviews.id", ondelete="CASCADE"), nullable=False
     )
-    bucket_start: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
-    )
+    bucket_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     country: Mapped[str | None] = mapped_column(String(2))
     region: Mapped[str | None] = mapped_column(String(64))
     city: Mapped[str | None] = mapped_column(String(128))
