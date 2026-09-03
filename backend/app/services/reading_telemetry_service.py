@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Integer, and_, cast, extract, func, literal, or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -155,19 +154,6 @@ def _clamp_interaction(value: int | None) -> tuple[int | None, bool]:
     return bounded, bounded != value
 
 
-def _elapsed_since_start_ms(db: Session, impression_id: uuid.UUID) -> int:
-    started_at = db.scalar(
-        select(ReviewReadingSession.started_at).where(
-            ReviewReadingSession.impression_id == impression_id
-        )
-    )
-    if started_at is None:
-        return 0
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=UTC)
-    return max(0, int((datetime.now(UTC) - started_at).total_seconds() * 1000))
-
-
 def record_checkpoint(
     db: Session,
     checkpoint: CheckpointData,
@@ -194,8 +180,8 @@ def record_checkpoint(
     if review is None:
         raise NotFoundError("Review not found.")
 
-    elapsed_ms = _elapsed_since_start_ms(db, checkpoint.impression_id)
-    bounded = clamp(checkpoint, elapsed_ms=elapsed_ms)
+    claimed = clamp(checkpoint)
+    insert_bounded = clamp(checkpoint, elapsed_ms=0)
     interactions: dict[str, int | None] = {}
     interaction_clamped = False
     for source, target in (
@@ -216,13 +202,14 @@ def record_checkpoint(
         reader_kind=identity.kind,
         reader_ref=identity.reader_ref,
         anon_ref=identity.anon_ref,
-        active_ms=bounded.active_ms,
-        body_active_ms=bounded.body_active_ms,
-        wall_ms=bounded.wall_ms,
-        scroll_milestone=bounded.scroll_milestone,
+        last_seen_at=func.clock_timestamp(),
+        active_ms=insert_bounded.active_ms,
+        body_active_ms=insert_bounded.body_active_ms,
+        wall_ms=insert_bounded.wall_ms,
+        scroll_milestone=insert_bounded.scroll_milestone,
         checkpoints=1,
         max_seq=checkpoint.seq,
-        clamped=bounded.clamped or interaction_clamped,
+        clamped=insert_bounded.clamped or interaction_clamped,
         country=_normalize_country(country),
         word_count_at_view=len((review.discussion or "").split()),
         star_rating_at_view=review.star_rating,
@@ -230,16 +217,43 @@ def record_checkpoint(
         **interactions,
     )
     excluded = stmt.excluded
+    claimed_active = literal(claimed.active_ms, type_=Integer())
+    claimed_body = literal(claimed.body_active_ms, type_=Integer())
+    elapsed_ms = cast(
+        func.floor(
+            extract(
+                "epoch",
+                excluded.last_seen_at - ReviewReadingSession.started_at,
+            )
+            * 1_000
+        ),
+        Integer,
+    )
+    allowed_active = func.least(
+        MAX_SESSION_MS,
+        func.greatest(0, elapsed_ms) + SKEW_TOLERANCE_MS,
+    )
+    elapsed_bounded_active = func.least(claimed_active, allowed_active)
+    merged_active = func.greatest(
+        ReviewReadingSession.active_ms,
+        elapsed_bounded_active,
+    )
+    merged_body = func.greatest(
+        ReviewReadingSession.body_active_ms,
+        func.least(claimed_body, merged_active),
+    )
+    update_clamped = or_(
+        ReviewReadingSession.clamped,
+        literal(claimed.clamped or interaction_clamped),
+        claimed_active > allowed_active,
+        claimed_body > merged_active,
+    )
     result = db.execute(
         stmt.on_conflict_do_update(
             index_elements=[ReviewReadingSession.impression_id],
             set_={
-                "active_ms": func.greatest(
-                    ReviewReadingSession.active_ms, excluded.active_ms
-                ),
-                "body_active_ms": func.greatest(
-                    ReviewReadingSession.body_active_ms, excluded.body_active_ms
-                ),
+                "active_ms": merged_active,
+                "body_active_ms": merged_body,
                 "wall_ms": func.greatest(ReviewReadingSession.wall_ms, excluded.wall_ms),
                 "scroll_milestone": func.greatest(
                     ReviewReadingSession.scroll_milestone, excluded.scroll_milestone
@@ -270,8 +284,8 @@ def record_checkpoint(
                 ),
                 "checkpoints": ReviewReadingSession.checkpoints + 1,
                 "max_seq": excluded.max_seq,
-                "clamped": or_(ReviewReadingSession.clamped, excluded.clamped),
-                "last_seen_at": func.now(),
+                "clamped": update_clamped,
+                "last_seen_at": excluded.last_seen_at,
             },
             where=and_(
                 ReviewReadingSession.review_id == excluded.review_id,

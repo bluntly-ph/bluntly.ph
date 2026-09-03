@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,9 +18,10 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from pydantic import ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select, update
 
 from app.core.config import settings
+from app.core.errors import RateLimitError
 from app.core.security import create_access_token
 from app.main import app
 from app.models.enums import ReaderKind, Verdict
@@ -634,6 +636,93 @@ def test_server_clamps_active_time_to_elapsed_time(db, telemetry_context):
     assert row.clamped is True
 
 
+@requires_db
+def test_delete_between_elapsed_read_and_upsert_gets_fresh_insert_clamp(
+    db, telemetry_context
+):
+    assert svc.record_checkpoint(
+        db,
+        _service_checkpoint(active_ms=0, body_active_ms=0, wall_ms=0),
+        _user_identity(),
+        country=None,
+        user_agent=None,
+    )
+    db.execute(
+        update(ReviewReadingSession)
+        .where(ReviewReadingSession.impression_id == IMPRESSION_ID)
+        .values(started_at=datetime.now(UTC) - timedelta(hours=1))
+    )
+    db.commit()
+
+    engine = db.get_bind()
+    deleted = False
+
+    def delete_conflict_before_insert(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ):
+        nonlocal deleted
+        if deleted or not statement.lstrip().startswith(
+            "INSERT INTO review_reading_sessions"
+        ):
+            return
+        deleted = True
+        with engine.begin() as connection:
+            connection.execute(
+                delete(ReviewReadingSession).where(
+                    ReviewReadingSession.impression_id == IMPRESSION_ID
+                )
+            )
+
+    event.listen(engine, "before_cursor_execute", delete_conflict_before_insert)
+    try:
+        assert svc.record_checkpoint(
+            db,
+            _service_checkpoint(
+                seq=1,
+                active_ms=svc.MAX_SESSION_MS,
+                body_active_ms=svc.MAX_SESSION_MS,
+                wall_ms=svc.MAX_SESSION_MS,
+            ),
+            _user_identity(telemetry_context.user.id),
+            country=None,
+            user_agent=None,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", delete_conflict_before_insert)
+
+    row = _stored_row(db)
+    assert deleted is True
+    assert row.checkpoints == 1
+    assert row.max_seq == 1
+    assert row.active_ms <= svc.SKEW_TOLERANCE_MS
+    assert row.body_active_ms <= row.active_ms
+    assert row.clamped is True
+
+
+@requires_db
+def test_replay_noop_does_not_commit(db, telemetry_context, monkeypatch):
+    checkpoint = _service_checkpoint(seq=4)
+    assert svc.record_checkpoint(
+        db, checkpoint, _user_identity(), country=None, user_agent=None
+    )
+
+    commits = 0
+    real_commit = db.commit
+
+    def track_commit():
+        nonlocal commits
+        commits += 1
+        real_commit()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(db, "commit", track_commit)
+        assert not svc.record_checkpoint(
+            db, checkpoint, _user_identity(), country=None, user_agent=None
+        )
+
+    assert commits == 0
+
+
 @pytest.mark.parametrize(
     ("configured_key", "presented_key"),
     [
@@ -771,6 +860,33 @@ def test_non_ascii_server_key_is_rejected_as_unauthorized(monkeypatch):
 
     with pytest.raises(AuthError):
         reading_telemetry._require_ingest_key("ÿ")
+
+
+def test_private_route_propagates_reading_telemetry_rate_limit(client, monkeypatch):
+    from app.api.v1.routes import reading_telemetry
+
+    calls = []
+
+    def reject(_request, bucket, *, max_requests, window_seconds):
+        calls.append((bucket, max_requests, window_seconds))
+        raise RateLimitError("Telemetry limit reached.")
+
+    monkeypatch.setattr(settings, "telemetry_ingest_key", "test-telemetry-ingest-key")
+    monkeypatch.setattr(settings, "telemetry_rate_limit_max", 7)
+    monkeypatch.setattr(reading_telemetry, "enforce_rate_limit", reject)
+
+    response = client.post(
+        "/api/v1/internal/reading-telemetry",
+        headers={
+            "X-Reader-Anon": str(ANON_ID),
+            "X-Telemetry-Key": "test-telemetry-ingest-key",
+        },
+        json=_http_payload(),
+    )
+
+    assert response.status_code == 429
+    assert response.json()["code"] == "rate_limited"
+    assert calls == [("reading_telemetry", 7, 60)]
 
 
 @pytest.mark.parametrize("country", ["éé", "１２", "XX", "ZZ", "USA"])
