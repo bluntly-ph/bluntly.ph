@@ -29,6 +29,7 @@ const BLOCKS: Block[] = [
       "Content you create — reviews, ratings, questions, answers, votes, and the purchase links you submit.",
       "Payout details — the PayPal address you use to withdraw earnings.",
       "Usage data — basic device, log, and analytics information needed to run and secure the service.",
+      "Reading activity — how long a review page is actively open, how far you scroll it, and whether you voted, commented, shared, or reported while reading. For signed-out readers this uses a random identifier stored in a first-party cookie that changes at least every 24 hours and is not linked to any account.",
     ],
   },
   { type: "h2", text: "How we use it" },
@@ -65,7 +66,7 @@ const BLOCKS: Block[] = [
   { type: "h2", text: "Data retention and security" },
   {
     type: "p",
-    text: "We keep your information for as long as your account is active or as needed to provide the service, meet legal obligations, and resolve disputes. We use reasonable safeguards to protect it, though no online service can promise perfect security.",
+    text: "We keep your information for as long as your account is active or as needed to provide the service, meet legal obligations, and resolve disputes. Reading-activity records are deleted after 90 days. We use reasonable safeguards to protect it, though no online service can promise perfect security.",
   },
   { type: "h2", text: "Children" },
   {
