@@ -67,7 +67,7 @@ test("does not backfill an idle gap after noteActivity resumes reading", () => {
   const accumulator = new ReadingAccumulator(0);
 
   accumulator.advance(30_001, { ...allGates, recentlyActive: false });
-  accumulator.noteActivity(45_000);
+  accumulator.noteActivity(45_000, allGates);
   accumulator.advance(46_000, allGates);
 
   const payload = accumulator.payload("impression-a", "review-a", 1);
@@ -80,7 +80,7 @@ test("keeps valid active time when fresh activity occurs between eligible ticks"
   const accumulator = new ReadingAccumulator(0);
 
   accumulator.advance(1_000, allGates);
-  accumulator.noteActivity(1_500);
+  accumulator.noteActivity(1_500, allGates);
   accumulator.advance(2_000, allGates);
 
   const payload = accumulator.payload("impression-a", "review-a", 1);
@@ -103,7 +103,7 @@ test("keeps the prior freshness prefix when delayed activity resumes reading", (
   const accumulator = new ReadingAccumulator(0);
 
   accumulator.advance(29_000, allGates);
-  accumulator.noteActivity(45_000);
+  accumulator.noteActivity(45_000, allGates);
   accumulator.advance(46_000, allGates);
 
   const payload = accumulator.payload("impression-a", "review-a", 1);
@@ -114,19 +114,85 @@ test("keeps the prior freshness prefix when delayed activity resumes reading", (
 
 test("does not invent or regress time for initial and backwards activity timestamps", () => {
   const initial = new ReadingAccumulator(0);
-  initial.noteActivity(5_000);
+  initial.noteActivity(5_000, allGates);
   assert.equal(initial.payload("impression-a", "review-a", 0).active_ms, 0);
   assert.equal(initial.payload("impression-a", "review-a", 0).wall_ms, 0);
 
   const accumulator = new ReadingAccumulator(0);
   accumulator.advance(1_000, allGates);
-  accumulator.noteActivity(500);
+  accumulator.noteActivity(500, allGates);
   accumulator.advance(2_000, allGates);
 
   const payload = accumulator.payload("impression-a", "review-a", 1);
   assert.equal(payload.active_ms, 2_000);
   assert.equal(payload.body_active_ms, 2_000);
   assert.equal(payload.wall_ms, 2_000);
+});
+
+test("uses current gates when activity follows a focus false-to-true transition", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, { ...allGates, focused: false });
+  accumulator.noteActivity(1_500, allGates);
+  accumulator.advance(2_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 2_000);
+  assert.equal(payload.active_ms, 1_000);
+  assert.equal(payload.body_active_ms, 1_000);
+});
+
+test("uses current gates when activity follows a focus true-to-false transition", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, allGates);
+  accumulator.noteActivity(1_500, { ...allGates, focused: false });
+  accumulator.advance(2_000, { ...allGates, focused: false });
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 2_000);
+  assert.equal(payload.active_ms, 1_000);
+  assert.equal(payload.body_active_ms, 1_000);
+});
+
+test("uses current gates when activity follows a body hidden-to-visible transition", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, { ...allGates, bodyVisible: false });
+  accumulator.noteActivity(1_500, allGates);
+  accumulator.advance(2_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 2_000);
+  assert.equal(payload.active_ms, 2_000);
+  assert.equal(payload.body_active_ms, 1_000);
+});
+
+test("uses current gates when activity follows a visible-to-hidden transition", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, allGates);
+  accumulator.noteActivity(1_500, { ...allGates, visible: false });
+  accumulator.advance(2_000, { ...allGates, visible: false });
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 2_000);
+  assert.equal(payload.active_ms, 1_000);
+  assert.equal(payload.body_active_ms, 1_000);
+});
+
+test("ignores omitted or malformed activity gates without inventing time", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(29_000, allGates);
+  assert.doesNotThrow(() => accumulator.noteActivity(45_000));
+  assert.doesNotThrow(() => accumulator.noteActivity(45_000, { ...allGates, focused: "yes" }));
+  accumulator.advance(46_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 46_000);
+  assert.equal(payload.active_ms, 30_000);
+  assert.equal(payload.body_active_ms, 30_000);
 });
 
 test("requires callers to advance with prior gates before a gate transition", () => {
@@ -147,7 +213,7 @@ test("ignores backwards clocks and caps every cumulative duration at thirty minu
 
   accumulator.advance(9_000, allGates);
   for (let elapsed = 30_000; elapsed <= 1_800_000; elapsed += 30_000) {
-    accumulator.noteActivity(10_000 + elapsed - 30_000);
+    accumulator.noteActivity(10_000 + elapsed - 30_000, allGates);
     accumulator.advance(10_000 + elapsed, allGates);
   }
   accumulator.advance(1_810_000, allGates);

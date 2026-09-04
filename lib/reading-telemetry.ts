@@ -37,6 +37,20 @@ function finiteNow(nowMs: number): number | null {
   return Number.isFinite(nowMs) ? nowMs : null;
 }
 
+function isActivityGates(value: unknown): value is ActivityGates {
+  if (typeof value !== "object" || value === null) return false;
+
+  try {
+    const gates = value as Partial<ActivityGates>;
+    return typeof gates.visible === "boolean"
+      && typeof gates.focused === "boolean"
+      && typeof gates.recentlyActive === "boolean"
+      && typeof gates.bodyVisible === "boolean";
+  } catch {
+    return false;
+  }
+}
+
 function cappedAdd(total: number, delta: number): number {
   return Math.min(MAX_SESSION_MS, total + Math.max(0, delta));
 }
@@ -92,7 +106,7 @@ export class ReadingAccumulator {
   private lastNowMs: number;
   private lastActivityMs: number;
   private activeIntegrationBoundaryMs: number;
-  private lastGates: ActivityGates | null = null;
+  private hasAdvanced = false;
   private readonly startedAtMs: number;
   private readonly interactions: InteractionTimings = {
     vote: null,
@@ -121,7 +135,7 @@ export class ReadingAccumulator {
     if (now === null || now <= this.lastNowMs) return;
 
     this.integrate(now, gates);
-    this.lastGates = { ...gates };
+    this.hasAdvanced = true;
   }
 
   private integrate(now: number, gates: ActivityGates): void {
@@ -145,13 +159,23 @@ export class ReadingAccumulator {
     }
   }
 
-  noteActivity(nowMs: number): void {
+  /**
+   * Records activity under the gates that apply at `nowMs`. This integrates
+   * any elapsed time using the current gate snapshot before refreshing it.
+   */
+  noteActivity(nowMs: number, gates: ActivityGates): void {
     const now = finiteNow(nowMs);
-    if (now === null || now <= this.lastActivityMs || now < this.lastNowMs) return;
-
-    if (this.lastGates !== null) {
-      this.integrate(now, this.lastGates);
+    if (!isActivityGates(gates) || now === null || now <= this.lastActivityMs || now < this.lastNowMs) {
+      return;
     }
+
+    if (!this.hasAdvanced) {
+      this.activeIntegrationBoundaryMs = Math.max(this.activeIntegrationBoundaryMs, now);
+      this.lastActivityMs = now;
+      return;
+    }
+
+    this.integrate(now, gates);
     if (now - this.lastActivityMs > IDLE_MS) {
       this.activeIntegrationBoundaryMs = Math.max(this.activeIntegrationBoundaryMs, now);
     }
