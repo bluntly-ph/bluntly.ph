@@ -49,7 +49,18 @@ export function snapScroll(percent: number): ScrollMilestone {
   return 100;
 }
 
-export function nextCheckpoint(activeMs: number, sentThresholds: ReadonlySet<number>): number | null {
+/**
+ * Returns the next due periodic threshold without mutating `sentThresholds`.
+ *
+ * `checkpointsSent` counts every emitted checkpoint, including the sequence-zero
+ * start and lifecycle or interaction flushes that do not have a periodic
+ * threshold. Omit it only when the set represents every sent checkpoint.
+ */
+export function nextCheckpoint(
+  activeMs: number,
+  sentThresholds: ReadonlySet<number>,
+  checkpointsSent?: number,
+): number | null {
   if (!Number.isFinite(activeMs) || activeMs < CHECKPOINTS[0] || activeMs > MAX_SESSION_MS) {
     return null;
   }
@@ -57,7 +68,10 @@ export function nextCheckpoint(activeMs: number, sentThresholds: ReadonlySet<num
   // A caller normally seeds the set with the sequence-zero start checkpoint.
   // Treat it as sent even if an external caller does not, so it cannot create a
   // sixteenth follow-up checkpoint by accident.
-  const totalSent = sentThresholds.size + (sentThresholds.has(0) ? 0 : 1);
+  const thresholdCount = sentThresholds.size + (sentThresholds.has(0) ? 0 : 1);
+  const totalSent = checkpointsSent === undefined
+    ? thresholdCount
+    : Math.max(0, Math.floor(checkpointsSent));
   if (totalSent >= MAX_CHECKPOINTS) return null;
 
   for (const threshold of CHECKPOINTS) {
@@ -80,6 +94,7 @@ export class ReadingAccumulator {
   private scroll: ScrollMilestone = 0;
   private lastNowMs: number;
   private lastActivityMs: number;
+  private activeIntegrationBoundaryMs: number;
   private readonly startedAtMs: number;
   private readonly interactions: InteractionTimings = {
     vote: null,
@@ -95,8 +110,14 @@ export class ReadingAccumulator {
     this.startedAtMs = start;
     this.lastNowMs = start;
     this.lastActivityMs = start;
+    this.activeIntegrationBoundaryMs = start;
   }
 
+  /**
+   * Advance using the gates that applied during `(previousNow, now]`. Call this
+   * before mutating a visibility, focus, or body-intersection gate so a new
+   * state can never backfill time from the preceding interval.
+   */
   advance(nowMs: number, gates: ActivityGates): void {
     const now = finiteNow(nowMs);
     if (now === null || now <= this.lastNowMs) return;
@@ -105,10 +126,14 @@ export class ReadingAccumulator {
     this.lastNowMs = now;
     this.wallMs = cappedAdd(this.wallMs, now - previousNow);
 
-    const recentlyActive = now - this.lastActivityMs <= IDLE_MS;
-    if (!gates.visible || !gates.focused || !gates.recentlyActive || !recentlyActive) return;
+    if (!gates.visible || !gates.focused || !gates.recentlyActive) {
+      this.activeIntegrationBoundaryMs = now;
+      return;
+    }
 
-    const activeDelta = now - Math.max(previousNow, this.lastActivityMs);
+    const activeStart = Math.max(previousNow, this.activeIntegrationBoundaryMs);
+    const activeEnd = Math.min(now, this.lastActivityMs + IDLE_MS);
+    const activeDelta = Math.max(0, activeEnd - activeStart);
     this.activeMs = cappedAdd(this.activeMs, activeDelta);
     if (gates.bodyVisible) {
       this.bodyActiveMs = cappedAdd(this.bodyActiveMs, activeDelta);
@@ -118,6 +143,9 @@ export class ReadingAccumulator {
   noteActivity(nowMs: number): void {
     const now = finiteNow(nowMs);
     if (now === null) return;
+    if (now - this.lastActivityMs > IDLE_MS) {
+      this.activeIntegrationBoundaryMs = Math.max(this.activeIntegrationBoundaryMs, now);
+    }
     this.lastActivityMs = Math.max(this.lastActivityMs, now);
   }
 

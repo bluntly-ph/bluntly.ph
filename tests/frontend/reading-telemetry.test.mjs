@@ -76,6 +76,42 @@ test("does not backfill an idle gap after noteActivity resumes reading", () => {
   assert.equal(payload.body_active_ms, 1_000);
 });
 
+test("keeps valid active time when fresh activity occurs between eligible ticks", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, allGates);
+  accumulator.noteActivity(1_500);
+  accumulator.advance(2_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.active_ms, 2_000);
+  assert.equal(payload.body_active_ms, 2_000);
+});
+
+test("keeps the eligible prefix when an advance crosses the thirty-second freshness boundary", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(29_000, allGates);
+  accumulator.advance(31_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.active_ms, 30_000);
+  assert.equal(payload.body_active_ms, 30_000);
+});
+
+test("requires callers to advance with prior gates before a gate transition", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(1_000, allGates);
+  accumulator.advance(2_000, { ...allGates, visible: false, bodyVisible: false });
+  accumulator.advance(3_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.wall_ms, 3_000);
+  assert.equal(payload.active_ms, 2_000);
+  assert.equal(payload.body_active_ms, 2_000);
+});
+
 test("ignores backwards clocks and caps every cumulative duration at thirty minutes", () => {
   const accumulator = new ReadingAccumulator(10_000);
 
@@ -138,6 +174,13 @@ test("returns each checkpoint threshold once and stops after start plus fifteen 
   assert.equal(sent.size, 16);
   assert.equal(nextCheckpoint(1_800_000, sent), null);
   assert.equal(nextCheckpoint(9_999, new Set([0])), null);
+});
+
+test("honors the total checkpoint budget when interaction and terminal writes use its remaining slots", () => {
+  const periodicThresholds = new Set([0, 10_000, 30_000, 60_000]);
+
+  assert.equal(nextCheckpoint(1_800_000, periodicThresholds, 15), 120_000);
+  assert.equal(nextCheckpoint(1_800_000, periodicThresholds, 16), null);
 });
 
 test("payload contains exactly the thirteen client fields with cumulative values", () => {
