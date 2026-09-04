@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { clearReaderId } from "./reader-id";
 
 /**
  * Session cookie handling.
@@ -20,6 +21,7 @@ export async function createSession(
   expiresInSeconds: number,
 ): Promise<void> {
   const cookieStore = await cookies();
+  clearReaderId(cookieStore);
   cookieStore.set(COOKIE_NAME, accessToken, {
     httpOnly: true,
     // Secure breaks plain-http localhost, where the dev server runs.
@@ -35,7 +37,9 @@ export async function getSessionToken(): Promise<string | null> {
 }
 
 export async function destroySession(): Promise<void> {
-  (await cookies()).delete(COOKIE_NAME);
+  const cookieStore = await cookies();
+  clearReaderId(cookieStore);
+  cookieStore.delete(COOKIE_NAME);
 }
 
 export async function setThemePreference(theme: "light" | "dark"): Promise<void> {
