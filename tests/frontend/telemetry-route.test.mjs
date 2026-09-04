@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { handleTelemetryRequest } from "../../app/api/telemetry/route.ts";
+import { handleTelemetryRequest } from "../../lib/telemetry-route-handler.ts";
 import { READER_COOKIE_NAME } from "../../lib/reader-id-policy.ts";
 
 const readerId = "9403e48c-7a4a-4c5c-8c84-4d5a64fc8bc7";
@@ -67,6 +68,7 @@ test("forwards only the client telemetry allowlist with server-derived authority
   assert.equal(response.status, 204);
   assert.equal(await response.text(), "");
   assert.equal(captured.url, "https://api.example.test/api/v1/internal/reading-telemetry");
+  assert.equal(Object.keys(payload).length, 13);
   assert.deepEqual(Object.keys(JSON.parse(captured.init.body)).sort(), Object.keys(payload).sort());
   assert.deepEqual(JSON.parse(captured.init.body), payload);
 
@@ -134,6 +136,77 @@ test("does not forward invalid or byte-oversized streamed request bodies", async
   assert.equal(cancelled, true);
 });
 
+test("rejects UUID and int32-invalid known client fields before the private endpoint", async () => {
+  let fetchCalls = 0;
+  const invalidPayloads = [
+    { ...payload, impression_id: "a04264e5-05b7-3a86-8ccd-0b3e3b25a18e" },
+    { ...payload, review_id: "not-a-uuid" },
+    { ...payload, seq: 2_147_483_648 },
+    { ...payload, active_ms: 1.5 },
+    { ...payload, body_active_ms: -1 },
+    { ...payload, wall_ms: 2_147_483_648 },
+    { ...payload, vote_after_ms: -1 },
+    { ...payload, outlink_after_ms: 2_147_483_648 },
+    { ...payload, scroll_pct: 42 },
+  ];
+
+  for (const invalid of invalidPayloads) {
+    const response = await handleTelemetryRequest(
+      request(invalid),
+      options({
+        fetch: async () => {
+          fetchCalls += 1;
+          return new Response(null, { status: 204 });
+        },
+      }),
+    );
+    assert.equal(response.status, 204);
+  }
+  assert.equal(fetchCalls, 0);
+});
+
+test("cancellation and lock-release failures remain fail-open", async () => {
+  let fetchCalls = 0;
+  const rejectedCancellation = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("x".repeat(4_097)));
+    },
+    cancel() {
+      return Promise.reject(new Error("stream teardown failed"));
+    },
+  });
+  const requestWithRejectedCancellation = new Request("https://bluntly.ph/api/telemetry", {
+    method: "POST",
+    headers: { "content-length": "4097" },
+    body: rejectedCancellation,
+    duplex: "half",
+  });
+  const noContentLengthOversized = new Request("https://bluntly.ph/api/telemetry", {
+    method: "POST",
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(4_097)));
+      },
+    }),
+    duplex: "half",
+  });
+
+  for (const input of [requestWithRejectedCancellation, noContentLengthOversized]) {
+    const response = await handleTelemetryRequest(
+      input,
+      options({
+        fetch: async () => {
+          fetchCalls += 1;
+          return new Response(null, { status: 204 });
+        },
+      }),
+    );
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), "");
+  }
+  assert.equal(fetchCalls, 0);
+});
+
 test("mints a private 24-hour cookie for signed-out readers", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
@@ -157,12 +230,13 @@ test("mints a private 24-hour cookie for signed-out readers", async () => {
   );
 });
 
-test("uses only the server session for signed-in readers and omits anonymous identity", async () => {
+test("uses only the server session for signed-in readers and never mints or forwards anonymous identity", async () => {
   let captured;
   const response = await handleTelemetryRequest(
     request(),
     options({
       sessionToken: "server-session-token",
+      readerId: undefined,
       fetch: async (_url, init) => {
         captured = init;
         return new Response(null, { status: 204 });
@@ -174,6 +248,15 @@ test("uses only the server session for signed-in readers and omits anonymous ide
   assert.equal(response.status, 204);
   assert.equal(headers.get("authorization"), "Bearer server-session-token");
   assert.equal(headers.get("x-reader-anon"), null);
+  assert.equal(response.headers.get("set-cookie"), null);
+});
+
+test("a valid existing anonymous cookie is used but never refreshed", async () => {
+  const response = await handleTelemetryRequest(
+    request(),
+    options({ fetch: async () => new Response(null, { status: 204 }) }),
+  );
+  assert.equal(response.status, 204);
   assert.equal(response.headers.get("set-cookie"), null);
 });
 
@@ -193,4 +276,25 @@ test("missing server configuration fails silently without an upstream request", 
     assert.equal(response.status, 204);
   }
   assert.equal(fetchCalls, 0);
+});
+
+test("the route entry exposes only POST and binds the non-route handler", () => {
+  const source = readFileSync(new URL("../../app/api/telemetry/route.ts", import.meta.url), "utf8");
+  const exportLines = source.split("\n").filter((line) => line.startsWith("export "));
+
+  assert.deepEqual(exportLines, ["export async function POST(request: Request): Promise<Response> {"]);
+  assert.match(source, /handleTelemetryRequest/);
+});
+
+test("session boundaries delete the reader identity before session mutation", () => {
+  const source = readFileSync(new URL("../../lib/session.ts", import.meta.url), "utf8");
+  const create = source.slice(source.indexOf("export async function createSession"), source.indexOf("export async function getSessionToken"));
+  const destroy = source.slice(source.indexOf("export async function destroySession"), source.indexOf("export async function setThemePreference"));
+  const createClear = create.indexOf("clearReaderId(cookieStore)");
+  const createSet = create.indexOf("cookieStore.set(COOKIE_NAME");
+  const destroyClear = destroy.indexOf("clearReaderId(cookieStore)");
+  const destroyDelete = destroy.indexOf("cookieStore.delete(COOKIE_NAME");
+
+  assert.ok(createClear >= 0 && createSet >= 0 && createClear < createSet);
+  assert.ok(destroyClear >= 0 && destroyDelete >= 0 && destroyClear < destroyDelete);
 });
