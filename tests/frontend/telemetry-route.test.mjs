@@ -278,6 +278,24 @@ test("missing server configuration fails silently without an upstream request", 
   assert.equal(fetchCalls, 0);
 });
 
+test("invalid server forwarding headers remain behind the empty 204 shield", async () => {
+  let fetchCalls = 0;
+  const response = await handleTelemetryRequest(
+    request(),
+    options({
+      ingestKey: "server-key\ninvalid-header-value",
+      fetch: async () => {
+        fetchCalls += 1;
+        return new Response(null, { status: 204 });
+      },
+    }),
+  );
+
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(fetchCalls, 0);
+});
+
 test("the route entry exposes only POST and binds the non-route handler", () => {
   const source = readFileSync(new URL("../../app/api/telemetry/route.ts", import.meta.url), "utf8");
   const exportLines = source.split("\n").filter((line) => line.startsWith("export "));

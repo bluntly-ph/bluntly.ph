@@ -209,30 +209,41 @@ export async function handleTelemetryRequest(
   const body = clientPayload(rawPayload);
   if (!body) return response;
 
-  const headers = new Headers({
-    "content-type": "application/json",
-    "x-telemetry-key": ingestKey,
-  });
-  const country = countryFrom(request);
-  const userAgent = request.headers.get("user-agent")?.trim();
-  if (country) headers.set("x-reader-country", country);
-  if (userAgent) headers.set("user-agent", userAgent);
-  if (sessionToken) {
-    headers.set("authorization", `Bearer ${sessionToken}`);
-  } else {
-    headers.set("x-reader-anon", existingReaderId ?? mintedReaderId!);
-  }
-
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
+    const headers = new Headers({
+      "content-type": "application/json",
+      "x-telemetry-key": ingestKey,
+    });
+    const country = countryFrom(request);
+    const userAgent = request.headers.get("user-agent")?.trim();
+    if (country) headers.set("x-reader-country", country);
+    if (userAgent) headers.set("user-agent", userAgent);
+    if (sessionToken) {
+      headers.set("authorization", `Bearer ${sessionToken}`);
+    } else {
+      headers.set("x-reader-anon", existingReaderId ?? mintedReaderId!);
+    }
+
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
     await (options.fetch ?? fetch)(`${origin}/api/v1/internal/reading-telemetry`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: controller.signal,
     });
   } catch {
     // Telemetry is collection-only and must never affect a reader's page.
+  } finally {
+    if (timeout !== undefined) {
+      try {
+        clearTimeout(timeout);
+      } catch {
+        // Timer cleanup cannot change the browser-facing response.
+      }
+    }
   }
   return response;
 }
