@@ -99,6 +99,36 @@ test("keeps the eligible prefix when an advance crosses the thirty-second freshn
   assert.equal(payload.body_active_ms, 30_000);
 });
 
+test("keeps the prior freshness prefix when delayed activity resumes reading", () => {
+  const accumulator = new ReadingAccumulator(0);
+
+  accumulator.advance(29_000, allGates);
+  accumulator.noteActivity(45_000);
+  accumulator.advance(46_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.active_ms, 31_000);
+  assert.equal(payload.body_active_ms, 31_000);
+  assert.equal(payload.wall_ms, 46_000);
+});
+
+test("does not invent or regress time for initial and backwards activity timestamps", () => {
+  const initial = new ReadingAccumulator(0);
+  initial.noteActivity(5_000);
+  assert.equal(initial.payload("impression-a", "review-a", 0).active_ms, 0);
+  assert.equal(initial.payload("impression-a", "review-a", 0).wall_ms, 0);
+
+  const accumulator = new ReadingAccumulator(0);
+  accumulator.advance(1_000, allGates);
+  accumulator.noteActivity(500);
+  accumulator.advance(2_000, allGates);
+
+  const payload = accumulator.payload("impression-a", "review-a", 1);
+  assert.equal(payload.active_ms, 2_000);
+  assert.equal(payload.body_active_ms, 2_000);
+  assert.equal(payload.wall_ms, 2_000);
+});
+
 test("requires callers to advance with prior gates before a gate transition", () => {
   const accumulator = new ReadingAccumulator(0);
 
@@ -146,12 +176,14 @@ test("snaps scroll downward and preserves the greatest coarse milestone", () => 
 test("returns each checkpoint threshold once and stops after start plus fifteen follow-ups", () => {
   const sent = new Set([0]);
   const thresholds = [];
+  let checkpointsSent = 1;
 
   for (;;) {
-    const threshold = nextCheckpoint(1_800_000, sent);
+    const threshold = nextCheckpoint(1_800_000, sent, checkpointsSent);
     if (threshold === null) break;
     thresholds.push(threshold);
     sent.add(threshold);
+    checkpointsSent += 1;
   }
 
   assert.deepEqual(thresholds, [
@@ -172,8 +204,8 @@ test("returns each checkpoint threshold once and stops after start plus fifteen 
     1_440_000,
   ]);
   assert.equal(sent.size, 16);
-  assert.equal(nextCheckpoint(1_800_000, sent), null);
-  assert.equal(nextCheckpoint(9_999, new Set([0])), null);
+  assert.equal(nextCheckpoint(1_800_000, sent, checkpointsSent), null);
+  assert.equal(nextCheckpoint(9_999, new Set([0]), 1), null);
 });
 
 test("honors the total checkpoint budget when interaction and terminal writes use its remaining slots", () => {
@@ -181,6 +213,14 @@ test("honors the total checkpoint budget when interaction and terminal writes us
 
   assert.equal(nextCheckpoint(1_800_000, periodicThresholds, 15), 120_000);
   assert.equal(nextCheckpoint(1_800_000, periodicThresholds, 16), null);
+});
+
+test("fails closed unless the total checkpoint count is a nonnegative integer below sixteen", () => {
+  const sent = new Set([0]);
+
+  for (const count of [undefined, Number.NaN, Infinity, 15.5, -1, 16]) {
+    assert.equal(nextCheckpoint(10_000, sent, count), null);
+  }
 });
 
 test("payload contains exactly the thirteen client fields with cumulative values", () => {

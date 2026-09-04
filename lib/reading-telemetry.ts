@@ -54,25 +54,22 @@ export function snapScroll(percent: number): ScrollMilestone {
  *
  * `checkpointsSent` counts every emitted checkpoint, including the sequence-zero
  * start and lifecycle or interaction flushes that do not have a periodic
- * threshold. Omit it only when the set represents every sent checkpoint.
+ * threshold. It is required so the scheduler cannot exceed the total budget.
  */
 export function nextCheckpoint(
   activeMs: number,
   sentThresholds: ReadonlySet<number>,
-  checkpointsSent?: number,
+  checkpointsSent: number,
 ): number | null {
+  if (!Number.isFinite(checkpointsSent)
+    || !Number.isInteger(checkpointsSent)
+    || checkpointsSent < 0
+    || checkpointsSent >= MAX_CHECKPOINTS) {
+    return null;
+  }
   if (!Number.isFinite(activeMs) || activeMs < CHECKPOINTS[0] || activeMs > MAX_SESSION_MS) {
     return null;
   }
-
-  // A caller normally seeds the set with the sequence-zero start checkpoint.
-  // Treat it as sent even if an external caller does not, so it cannot create a
-  // sixteenth follow-up checkpoint by accident.
-  const thresholdCount = sentThresholds.size + (sentThresholds.has(0) ? 0 : 1);
-  const totalSent = checkpointsSent === undefined
-    ? thresholdCount
-    : Math.max(0, Math.floor(checkpointsSent));
-  if (totalSent >= MAX_CHECKPOINTS) return null;
 
   for (const threshold of CHECKPOINTS) {
     if (activeMs < threshold) return null;
@@ -95,6 +92,7 @@ export class ReadingAccumulator {
   private lastNowMs: number;
   private lastActivityMs: number;
   private activeIntegrationBoundaryMs: number;
+  private lastGates: ActivityGates | null = null;
   private readonly startedAtMs: number;
   private readonly interactions: InteractionTimings = {
     vote: null,
@@ -122,6 +120,13 @@ export class ReadingAccumulator {
     const now = finiteNow(nowMs);
     if (now === null || now <= this.lastNowMs) return;
 
+    this.integrate(now, gates);
+    this.lastGates = { ...gates };
+  }
+
+  private integrate(now: number, gates: ActivityGates): void {
+    if (now <= this.lastNowMs) return;
+
     const previousNow = this.lastNowMs;
     this.lastNowMs = now;
     this.wallMs = cappedAdd(this.wallMs, now - previousNow);
@@ -142,7 +147,11 @@ export class ReadingAccumulator {
 
   noteActivity(nowMs: number): void {
     const now = finiteNow(nowMs);
-    if (now === null) return;
+    if (now === null || now <= this.lastActivityMs || now < this.lastNowMs) return;
+
+    if (this.lastGates !== null) {
+      this.integrate(now, this.lastGates);
+    }
     if (now - this.lastActivityMs > IDLE_MS) {
       this.activeIntegrationBoundaryMs = Math.max(this.activeIntegrationBoundaryMs, now);
     }
