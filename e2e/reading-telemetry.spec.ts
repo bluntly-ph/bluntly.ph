@@ -126,6 +126,14 @@ function forImpression(bodies: Body[], impressionId: string): Body[] {
   return bodies.filter((b) => b.impression_id === impressionId);
 }
 
+async function expectReviewControlsHealthy(page: Page, pageErrors: Error[]): Promise<void> {
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const helpful = page.getByRole("button", { name: /helpful/i }).first();
+  await expect(helpful).toBeVisible();
+  await expect(helpful).toBeEnabled();
+  expect(pageErrors, `unexpected page errors: ${pageErrors.map(String).join("; ")}`).toHaveLength(0);
+}
+
 /**
  * Freezes the fake clock at (approximately) the current instant, after
  * letting page load/hydration run with the clock ticking normally — per
@@ -183,7 +191,9 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     expect(pageErrors, `unexpected page errors: ${pageErrors.map(String).join("; ")}`).toHaveLength(0);
   });
 
-  test("the first body is sequence zero; later bodies are sparse and cumulative", async ({ page }) => {
+  test("a stalled clock tick consumes every crossed threshold in one cumulative write", async ({
+    page,
+  }) => {
     const { bodies, ready } = captureTelemetry(page, 204);
     await ready;
     // Per Playwright's own guidance: install and navigate with the clock
@@ -201,30 +211,25 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     const mine = () => forImpression(bodies, impressionId);
     expect(mine()[0]).toMatchObject({ seq: 0, active_ms: 0, body_active_ms: 0, wall_ms: 0 });
 
-    // One real interaction so the accumulator has something to accrue
-    // against real elapsed time. Two SEPARATE jumps, not one 31-second one:
-    // a frozen fake clock fires a repeating interval only once per
-    // `fastForward` call, however many virtual periods it spans — which is
-    // this component's own "no catch-up bursts" rule (a single tick jumped
-    // forward a long way emits exactly one checkpoint, never one per
-    // threshold it happened to cross), so crossing two thresholds honestly
-    // needs two ticks, exactly as it would in a real unsuspended tab.
+    // A frozen fake clock fires a repeating interval once for this 31-second
+    // jump. The one cumulative payload must consume both the 10s and 30s
+    // thresholds that it represents; otherwise the next ordinary tick emits
+    // a delayed catch-up payload for the already-crossed 30s threshold.
     await page.mouse.move(200, 200);
-    await page.clock.fastForward(10_000);
+    await page.clock.fastForward(31_000);
     await expect.poll(() => mine().length).toBe(2);
-    await page.clock.fastForward(21_000);
+    await page.clock.fastForward(1_000);
+    await page.waitForTimeout(100);
 
-    // Sparse: two more thresholds crossed (10s, 30s) — not thirty-one
-    // one-per-second writes, and not one per elapsed second of any kind.
-    await expect.poll(() => mine().length).toBe(3);
+    // Sparse: one post-start write represents both thresholds, with no burst
+    // during the jump and no delayed catch-up on the next tick.
+    expect(mine()).toHaveLength(2);
     expect(mine()[1].seq).toBe(1);
-    expect(mine()[2].seq).toBe(2);
 
-    // Cumulative, not delta: each later body's active/wall time is at least
-    // the previous body's, never a reset-to-zero per-interval count.
-    expect(mine()[1].active_ms).toBeGreaterThanOrEqual(10_000);
-    expect(mine()[2].active_ms).toBeGreaterThanOrEqual(mine()[1].active_ms);
-    expect(mine()[2].wall_ms).toBeGreaterThanOrEqual(mine()[1].wall_ms);
+    // Cumulative, not delta, and still under the one shared hard budget.
+    expect(mine()[1].active_ms).toBeGreaterThanOrEqual(30_000);
+    expect(mine()[1].wall_ms).toBeGreaterThanOrEqual(31_000);
+    expect(mine().length).toBeLessThanOrEqual(16);
   });
 
   test("hidden, unfocused, and idle intervals do not advance active time", async ({ page }) => {
@@ -359,6 +364,30 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     expect(mine().length).toBeLessThanOrEqual(16);
   });
 
+  test("the thirty-minute stop flushes once and later cleanup stays silent", async ({ page }) => {
+    const { bodies, ready } = captureTelemetry(page, 204);
+    await ready;
+    await page.clock.install({ time: 0 });
+    await page.goto(REVIEW_PATH);
+    await freezeClockNow(page);
+    const impressionId = await survivingImpression(page, bodies, REVIEW_A);
+    const mine = () => forImpression(bodies, impressionId);
+
+    await page.mouse.move(100, 100);
+    await page.clock.fastForward(1_800_000);
+    await expect.poll(() => mine().length).toBe(2);
+    expect(mine().at(-1)?.wall_ms).toBe(1_800_000);
+    expect(mine().length).toBeLessThanOrEqual(16);
+
+    // The hard-stop teardown removed the pagehide listener, and React's
+    // eventual route cleanup must share the same idempotence guard.
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await page.clock.resume();
+    await page.goto("/about");
+    await page.waitForTimeout(100);
+    expect(mine()).toHaveLength(2);
+  });
+
   test("navigating away and back creates one fresh listener set, not duplicate requests", async ({
     page,
   }) => {
@@ -377,6 +406,16 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     await freezeClockNow(page);
     const firstImpression = await survivingImpression(page, bodies, REVIEW_A);
 
+    // Cross the first threshold, then leave a changed two-second tail that
+    // has not reached another periodic checkpoint. Route cleanup must advance
+    // and emit exactly that one terminal tail before removing its resources.
+    await page.mouse.move(80, 80);
+    await page.clock.fastForward(11_000);
+    await expect.poll(() => forImpression(bodies, firstImpression).length).toBe(2);
+    await page.mouse.move(90, 90);
+    await page.clock.fastForward(2_000);
+    const beforeNavigation = forImpression(bodies, firstImpression).length;
+
     // A real in-app navigation, not a synthetic one: the sidebar's own
     // "Related reviews" link, which the fixture backend populates with the
     // other fixture review specifically so this is possible.
@@ -394,6 +433,11 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     await expect(page).toHaveURL(new RegExp(REVIEW_B));
     const onB = await survivingImpression(page, bodies, REVIEW_B);
     expect(onB).not.toBe(firstImpression);
+    await expect.poll(() => forImpression(bodies, firstImpression).length).toBe(beforeNavigation + 1);
+    const terminal = forImpression(bodies, firstImpression).at(-1);
+    expect(terminal?.seq).toBe(2);
+    expect(terminal?.active_ms).toBeGreaterThanOrEqual(13_000);
+    expect(terminal?.active_ms).toBeLessThan(14_000);
     await freezeClockNow(page);
 
     // Nothing from the FIRST impression fires again while away — the effect
@@ -422,5 +466,107 @@ test.describe("reading telemetry — lifecycle and fail-open", () => {
     await page.mouse.move(50, 50);
     await page.clock.fastForward(11_000);
     await expect.poll(() => mine().length).toBe(beforeTick + 1);
+  });
+
+  test("missing crypto.randomUUID disables telemetry without harming the review", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Crypto.prototype, "randomUUID", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+    const { bodies, ready } = captureTelemetry(page, 204);
+    await ready;
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    await page.goto(REVIEW_PATH);
+
+    await expectReviewControlsHealthy(page, pageErrors);
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("a throwing crypto.randomUUID disables telemetry without harming the review", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Crypto.prototype, "randomUUID", {
+        configurable: true,
+        value: () => {
+          throw new Error("synthetic randomUUID failure");
+        },
+      });
+    });
+    const { bodies, ready } = captureTelemetry(page, 204);
+    await ready;
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    await page.goto(REVIEW_PATH);
+
+    await expectReviewControlsHealthy(page, pageErrors);
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("a throwing IntersectionObserver disables telemetry and cleans up without a page error", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const NativeIntersectionObserver = window.IntersectionObserver;
+      window.IntersectionObserver = class ThrowingIntersectionObserver {
+        private readonly native: IntersectionObserver;
+
+        constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+          this.native = new NativeIntersectionObserver(callback, options);
+        }
+
+        observe(target: Element) {
+          if (target.id === "review-body") throw new Error("synthetic observer failure");
+          this.native.observe(target);
+        }
+
+        unobserve(target: Element) {
+          this.native.unobserve(target);
+        }
+
+        disconnect() {
+          this.native.disconnect();
+        }
+
+        takeRecords() {
+          return this.native.takeRecords();
+        }
+      } as unknown as typeof IntersectionObserver;
+    });
+    const { bodies, ready } = captureTelemetry(page, 204);
+    await ready;
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    await page.goto(REVIEW_PATH);
+
+    await expectReviewControlsHealthy(page, pageErrors);
+    expect(bodies).toHaveLength(0);
+  });
+
+  test("a throwing sendBeacon falls back to fetch without a page error", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, "sendBeacon", {
+        configurable: true,
+        value: () => {
+          throw new Error("synthetic beacon failure");
+        },
+      });
+    });
+    const { bodies, ready } = captureTelemetry(page, 204);
+    await ready;
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    await page.goto(REVIEW_PATH);
+
+    await expect.poll(() => bodies.length).toBeGreaterThan(0);
+    expect(bodies[0].seq).toBe(0);
+    await expectReviewControlsHealthy(page, pageErrors);
   });
 });
