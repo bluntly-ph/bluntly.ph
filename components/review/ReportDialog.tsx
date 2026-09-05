@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Flag, X } from "@phosphor-icons/react/dist/ssr";
 
+import { markInteraction } from "@/lib/reading-telemetry-events";
+
 /**
  * Report a review to the moderators. Client-side because it opens a modal and
  * mutates on submit, going through the BFF (`/api/bff/...`) so the session token
@@ -107,6 +109,7 @@ export function ReportDialog({
         return;
       }
       setState("done");
+      markInteraction(reviewId, "report");
     } catch {
       setError("Couldn't reach the server.");
       setState("idle");

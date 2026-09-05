@@ -6,6 +6,11 @@ import {
   nextCheckpoint,
   snapScroll,
 } from "../../lib/reading-telemetry.ts";
+import {
+  meetsPostStartFloor,
+  payloadsUnchanged,
+  shouldFlush,
+} from "../../components/review/reading-telemetry-lifecycle.ts";
 
 const allGates = {
   visible: true,
@@ -340,4 +345,88 @@ test("keeps only each interaction kind's first relative occurrence within the se
   assert.equal(payload.share_after_ms, 30_000);
   assert.equal(payload.photo_after_ms, 40_000);
   assert.equal(payload.outlink_after_ms, 50_000);
+});
+
+// --- Task 7: the lifecycle component's own pure decisions -------------------
+//
+// ReadingTelemetry.tsx renders `null` and contains no JSX, so it is plain
+// TypeScript end to end and importable here exactly like lib/reading-telemetry
+// — these two functions are the only logic in that file worth testing outside
+// a browser; everything else is `document`/`window`/`IntersectionObserver`
+// wiring, which is what e2e/reading-telemetry.spec.ts exists to prove.
+
+function payload(overrides = {}) {
+  return {
+    impression_id: "impression-a",
+    review_id: "review-a",
+    seq: 0,
+    active_ms: 0,
+    body_active_ms: 0,
+    wall_ms: 0,
+    scroll_pct: 0,
+    vote_after_ms: null,
+    report_after_ms: null,
+    comment_after_ms: null,
+    share_after_ms: null,
+    photo_after_ms: null,
+    outlink_after_ms: null,
+    ...overrides,
+  };
+}
+
+test("payloadsUnchanged treats a first send as always changed", () => {
+  assert.equal(payloadsUnchanged(null, payload()), false);
+});
+
+test("payloadsUnchanged ignores seq and compares every other field", () => {
+  const previous = payload({ seq: 3, active_ms: 5_000 });
+  const next = payload({ seq: 4, active_ms: 5_000 });
+  assert.equal(payloadsUnchanged(previous, next), true);
+});
+
+test("payloadsUnchanged detects a change in any single mutable field", () => {
+  const previous = payload({ active_ms: 5_000 });
+  for (const [field, value] of [
+    ["active_ms", 5_001],
+    ["body_active_ms", 1],
+    ["wall_ms", 1],
+    ["scroll_pct", 25],
+    ["vote_after_ms", 100],
+    ["report_after_ms", 100],
+    ["comment_after_ms", 100],
+    ["share_after_ms", 100],
+    ["photo_after_ms", 100],
+    ["outlink_after_ms", 100],
+  ]) {
+    const next = payload({ active_ms: 5_000, [field]: value });
+    assert.equal(
+      payloadsUnchanged(previous, next),
+      false,
+      `expected a change in ${field} to be detected`,
+    );
+  }
+});
+
+test("meetsPostStartFloor enforces the pinned MIN_ACTIVE_MS = 1000 threshold", () => {
+  assert.equal(meetsPostStartFloor(0), false);
+  assert.equal(meetsPostStartFloor(999), false);
+  assert.equal(meetsPostStartFloor(1_000), true);
+  assert.equal(meetsPostStartFloor(1_800_000), true);
+});
+
+test("shouldFlush refuses once the total checkpoint budget is spent", () => {
+  const candidate = payload({ active_ms: 5_000 });
+  assert.equal(shouldFlush(16, 5_000, candidate, null), false);
+  assert.equal(shouldFlush(15, 5_000, candidate, null), true);
+});
+
+test("shouldFlush refuses below the MIN_ACTIVE_MS floor even with budget and a change", () => {
+  const candidate = payload({ active_ms: 999, scroll_pct: 25 });
+  assert.equal(shouldFlush(1, 999, candidate, payload()), false);
+});
+
+test("shouldFlush refuses an unchanged candidate and allows a changed one", () => {
+  const previous = payload({ active_ms: 5_000 });
+  assert.equal(shouldFlush(1, 5_000, payload({ active_ms: 5_000 }), previous), false);
+  assert.equal(shouldFlush(1, 5_000, payload({ active_ms: 5_001 }), previous), true);
 });

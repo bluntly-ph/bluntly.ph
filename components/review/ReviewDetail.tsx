@@ -15,6 +15,7 @@ import {
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { ReadingTelemetry } from "@/components/review/ReadingTelemetry";
 import { ReportDialog } from "@/components/review/ReportDialog";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
@@ -65,6 +66,11 @@ export function ReviewDetail({
 
   return (
     <>
+      {/* Renders nothing. One per review detail, keyed implicitly by the prop
+          it takes — a new review.id on this same route re-runs its whole
+          lifecycle as a fresh impression. */}
+      <ReadingTelemetry reviewId={review.id} />
+
       {/* MOBILE chrome only. The frame gives the review its own brand-orange
           bar, and on a phone it is right: it replaces the site header rather
           than stacking under it, and the back control is the way out. Sticky so
@@ -97,6 +103,8 @@ export function ReviewDetail({
               target="_blank"
               rel="nofollow sponsored noopener noreferrer"
               aria-label="Buy this product"
+              data-telemetry-outlink
+              data-telemetry-review-id={review.id}
               className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15"
             >
               <ShoppingBag size={22} />
@@ -232,9 +240,11 @@ export function ReviewDetail({
         </div>
       )}
 
-      {/* Body */}
+      {/* Body. `id="review-body"` is the element ReadingTelemetry observes for
+          both "is the discussion in view" (IntersectionObserver) and the
+          scroll read-through fraction — design §4.3/§4.4. */}
       <Section title="The review">
-        <p className="whitespace-pre-line">{review.discussion}</p>
+        <p id="review-body" className="whitespace-pre-line">{review.discussion}</p>
       </Section>
 
       {review.verdict_explanation ? (
@@ -290,6 +300,8 @@ export function ReviewDetail({
             href={review.referral_redirect_url}
             target="_blank"
             rel="noopener noreferrer nofollow sponsored"
+            data-telemetry-outlink
+            data-telemetry-review-id={review.id}
             className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)] lg:hidden"
           >
             <ShoppingBag size={16} weight="fill" />
@@ -306,7 +318,7 @@ export function ReviewDetail({
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          <ShareButton title={review.title} />
+          <ShareButton title={review.title} reviewId={review.id} />
 
           {!isOwnReview ? (
             <ReportDialog reviewId={review.id} canReport={canVote} />

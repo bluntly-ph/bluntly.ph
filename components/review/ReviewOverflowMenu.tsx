@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { DotsThree, Flag, LinkSimple } from "@phosphor-icons/react";
 
+import { markInteraction } from "@/lib/reading-telemetry-events";
+
 /**
  * The three-dot menu in the review top bar (BUG-012).
  *
@@ -49,6 +51,10 @@ export function ReviewOverflowMenu({
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
+      // A second surface for the same outcome as ShareButton's clipboard
+      // fallback — same "share" marker; the accumulator keeps only whichever
+      // fires first.
+      markInteraction(reviewId, "share");
       setTimeout(() => setCopied(false), 2000);
     } catch {
       /* Clipboard denied — the visible label simply doesn't change. */

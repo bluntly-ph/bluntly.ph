@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ShareNetwork } from "@phosphor-icons/react";
 
+import { markInteraction } from "@/lib/reading-telemetry-events";
+
 type Status = "idle" | "copied" | "failed";
 
 /**
@@ -21,7 +23,7 @@ type Status = "idle" | "copied" | "failed";
  * A cancelled share sheet throws `AbortError`; that is the user declining, not a
  * failure, so it must not surface as one.
  */
-export function ShareButton({ title }: { title: string }) {
+export function ShareButton({ title, reviewId }: { title: string; reviewId: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,6 +45,7 @@ export function ShareButton({ title }: { title: string }) {
     if (navigator.share) {
       try {
         await navigator.share({ title, url });
+        markInteraction(reviewId, "share");
         return;
       } catch (error) {
         // Dismissing the sheet is a normal outcome — say nothing and stop.
@@ -55,6 +58,7 @@ export function ShareButton({ title }: { title: string }) {
     try {
       await navigator.clipboard.writeText(url);
       flash("copied");
+      markInteraction(reviewId, "share");
     } catch {
       flash("failed");
     }

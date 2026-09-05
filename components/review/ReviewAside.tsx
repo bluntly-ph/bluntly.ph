@@ -104,6 +104,8 @@ export function ReviewAside({
                   href={review.referral_redirect_url}
                   target="_blank"
                   rel="noopener noreferrer nofollow sponsored"
+                  data-telemetry-outlink
+                  data-telemetry-review-id={review.id}
                   className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)]"
                 >
                   <ShoppingBag size={16} weight="fill" />

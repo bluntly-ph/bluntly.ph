@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import type { Comment } from "@/lib/comments";
+import { markInteraction } from "@/lib/reading-telemetry-events";
 
 /** Local copies — lib/reviews is server-only, so it can't be imported here. */
 function ageLabel(iso: string): string {
@@ -176,6 +177,9 @@ function CommentComposer({
       const posted = (await res.json()) as Comment;
       // The API omits `replies` on a freshly created comment; the tree needs it.
       onPosted({ ...posted, replies: posted.replies ?? [] });
+      // A reply is a comment too — same endpoint, same marker. There is no
+      // separate "reply" interaction kind.
+      markInteraction(reviewId, "comment");
       setBody("");
       onCancel?.();
       // Keep the server's copy of the page in step for the next navigation.

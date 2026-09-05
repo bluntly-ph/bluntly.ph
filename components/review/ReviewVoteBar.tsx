@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowFatDown, ArrowFatUp } from "@phosphor-icons/react/dist/ssr";
 
+import { markInteraction } from "@/lib/reading-telemetry-events";
+
 /** Local compact formatter — lib/reviews is server-only, can't import here. */
 function compact(n: number): string {
   if (n < 1000) return String(n);
@@ -73,6 +75,9 @@ export function ReviewVoteBar({
       };
       setCounts({ helpful: review.helpful_votes, unhelpful: review.unhelpful_votes });
       setMine(review.my_vote ?? (remove ? null : dir));
+      // Only a cast or changed vote counts as the interaction — removing one
+      // is not the fraud-relevant event the marker exists to time.
+      if (!remove) markInteraction(reviewId, "vote");
     } catch {
       setError("Couldn't reach the server.");
     } finally {
