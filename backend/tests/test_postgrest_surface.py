@@ -33,6 +33,12 @@ SENSITIVE = {
     "reviews": ("receipt_key", "affiliate_link"),
 }
 
+# Reading telemetry (migration 0041) has no HTTP read path at all — not
+# moderator-gated, not super-admin-gated (spec §8). Over PostgREST it must be
+# fully closed: not just unreadable but unwritable, to `anon` and to
+# `authenticated`, so a publishable-key holder cannot probe or poison it.
+TELEMETRY_TABLES = ("review_reading_sessions", "review_first_vote_geo_buckets")
+
 
 def test_nothing_uses_the_publishable_client():
     """The REST surface stays unused, so keeping it closed stays free.
@@ -60,6 +66,27 @@ def test_anon_cannot_read_sensitive_tables(db, table, columns):
             {"t": table, "c": column}).scalar()
         assert granted is False, (
             f"anon can SELECT {table}.{column} over PostgREST, around the API")
+
+
+@requires_db
+@pytest.mark.parametrize("table", TELEMETRY_TABLES)
+@pytest.mark.parametrize("role", ("anon", "authenticated"))
+@pytest.mark.parametrize("privilege", ("SELECT", "INSERT", "UPDATE", "DELETE"))
+def test_reading_telemetry_tables_are_closed_over_postgrest(db, table, role, privilege):
+    """Both new tables are unreadable AND unwritable by the two Supabase roles.
+
+    `has_table_privilege` reports the effective grant, so this catches a
+    re-opened hole from Supabase's default privileges the same way
+    `test_a_table_created_by_a_migration_does_not_reopen_the_hole` does for the
+    schema at large — but named, and for writes as well as reads.
+    """
+    granted = db.execute(
+        text("SELECT has_table_privilege(:role, :table, :privilege)"),
+        {"role": role, "table": table, "privilege": privilege},
+    ).scalar()
+    assert granted is False, (
+        f"{role} can {privilege} {table} over PostgREST, around the API — "
+        "reading telemetry has no HTTP surface and must have no REST one either")
 
 
 @requires_db
