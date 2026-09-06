@@ -1034,6 +1034,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/reading-telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge one private reading checkpoint
+         * @description Validate authority and merge collection-only telemetry.
+         */
+        post: operations["ingest_reading_checkpoint_api_v1_internal_reading_telemetry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reports": {
         parameters: {
             query?: never;
@@ -3152,6 +3172,47 @@ export interface components {
              * @default 0
              */
             author_review_count: number;
+        };
+        /**
+         * ReadingCheckpointIn
+         * @description The complete and exclusive client-controlled telemetry payload.
+         */
+        ReadingCheckpointIn: {
+            /**
+             * Impression Id
+             * Format: uuid4
+             */
+            impression_id: string;
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /** Seq */
+            seq: number;
+            /** Active Ms */
+            active_ms: number;
+            /** Body Active Ms */
+            body_active_ms: number;
+            /** Wall Ms */
+            wall_ms: number;
+            /**
+             * Scroll Pct
+             * @enum {integer}
+             */
+            scroll_pct: 0 | 25 | 50 | 75 | 100;
+            /** Vote After Ms */
+            vote_after_ms?: number | null;
+            /** Report After Ms */
+            report_after_ms?: number | null;
+            /** Comment After Ms */
+            comment_after_ms?: number | null;
+            /** Share After Ms */
+            share_after_ms?: number | null;
+            /** Photo After Ms */
+            photo_after_ms?: number | null;
+            /** Outlink After Ms */
+            outlink_after_ms?: number | null;
         };
         /** ReasonRequest */
         ReasonRequest: {
@@ -5951,6 +6012,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TrafficBeacon"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_reading_checkpoint_api_v1_internal_reading_telemetry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Telemetry-Key"?: string | null;
+                "X-Reader-Anon"?: string | null;
+                "X-Reader-Country"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingCheckpointIn"];
             };
         };
         responses: {

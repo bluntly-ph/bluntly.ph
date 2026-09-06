@@ -3115,6 +3115,91 @@
         }
       }
     },
+    "/api/v1/internal/reading-telemetry": {
+      "post": {
+        "tags": [
+          "internal: reading telemetry"
+        ],
+        "summary": "Merge one private reading checkpoint",
+        "description": "Validate authority and merge collection-only telemetry.",
+        "operationId": "ingest_reading_checkpoint_api_v1_internal_reading_telemetry_post",
+        "parameters": [
+          {
+            "name": "X-Telemetry-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Telemetry-Key"
+            }
+          },
+          {
+            "name": "X-Reader-Anon",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Reader-Anon"
+            }
+          },
+          {
+            "name": "X-Reader-Country",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Reader-Country"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingCheckpointIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/reports": {
       "get": {
         "tags": [
@@ -9126,6 +9211,146 @@
         "type": "object",
         "title": "QueueSignals",
         "description": "Advisory fraud signals (M2 slice 5) \u2014 moderator queue only, never public,\nnever auto-blocking."
+      },
+      "ReadingCheckpointIn": {
+        "properties": {
+          "impression_id": {
+            "type": "string",
+            "format": "uuid4",
+            "title": "Impression Id"
+          },
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "seq": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seq"
+          },
+          "active_ms": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Active Ms"
+          },
+          "body_active_ms": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Body Active Ms"
+          },
+          "wall_ms": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Wall Ms"
+          },
+          "scroll_pct": {
+            "type": "integer",
+            "enum": [
+              0,
+              25,
+              50,
+              75,
+              100
+            ],
+            "title": "Scroll Pct"
+          },
+          "vote_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vote After Ms"
+          },
+          "report_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report After Ms"
+          },
+          "comment_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment After Ms"
+          },
+          "share_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share After Ms"
+          },
+          "photo_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo After Ms"
+          },
+          "outlink_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outlink After Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "impression_id",
+          "review_id",
+          "seq",
+          "active_ms",
+          "body_active_ms",
+          "wall_ms",
+          "scroll_pct"
+        ],
+        "title": "ReadingCheckpointIn",
+        "description": "The complete and exclusive client-controlled telemetry payload."
       },
       "ReasonRequest": {
         "properties": {
