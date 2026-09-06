@@ -47,22 +47,54 @@ def test_it_requires_a_moderator():
 
 
 def test_the_response_model_matches_what_the_sweep_returns():
-    """The shape was wrong once — the model claimed three fields for two.
+    """The handler is `RetentionSweepResult(**run_retention_sweep(db))`.
 
-    A response model that does not match its service is a 500 the first time
-    somebody calls it, and nothing about writing it would have said so.
+    The shape was wrong once — the model claimed three fields for two — and a
+    response model that does not match its service is a 500 the first time
+    somebody calls it. Task 9 then widened the sweep to also report four
+    telemetry purge counts, which the model does not surface but must still
+    tolerate as extras.
+
+    Driven through a fake session so the real return contract — the sweep's
+    dict, and the handler building its response from it — is exercised with no
+    database and no external effect. It parses no source and rebuilds none of
+    the sweep's arithmetic: a renamed key, a dropped key, or a new required
+    model field all make it fail.
     """
-    from app.api.v1.routes.admin_earnings import RetentionSweepResult
+    from app.api.v1.routes.admin_earnings import RetentionSweepResult, run_pii_retention
 
-    returned = inspect.getsource(run_retention_sweep)
-    keys = set()
-    for line in returned.splitlines():
-        if line.strip().startswith("return {"):
-            keys = {part.split('"')[1] for part in line.split(":") if '"' in part}
-    assert keys, "could not read the sweep's return keys"
-    assert set(RetentionSweepResult.model_fields) == keys, (
-        f"the endpoint declares {sorted(RetentionSweepResult.model_fields)} but "
-        f"the sweep returns {sorted(keys)}")
+    class _Result:
+        rowcount = 0
+
+    class _FakeSession:
+        """What `run_retention_sweep` needs: `execute(...).rowcount` and
+        `commit()`. Every UPDATE/DELETE reports zero rows, so `bounded_purge`
+        stops after one empty batch and nothing leaves the process."""
+
+        def execute(self, *_args, **_kwargs):
+            return _Result()
+
+        def commit(self):
+            pass
+
+    counts = run_retention_sweep(_FakeSession())
+
+    # Every field the response model requires must be produced by the sweep, or
+    # `RetentionSweepResult(**counts)` is the promised 500.
+    missing = set(RetentionSweepResult.model_fields) - counts.keys()
+    assert not missing, f"the sweep never returns {sorted(missing)}, which the model requires"
+
+    # The two session-PII keys and Task 9's four telemetry purge counts are the
+    # documented return contract; renaming or dropping any of them breaks here.
+    assert {"hashed", "purged", "reading_sessions", "review_view_buckets",
+            "request_geo_buckets", "first_vote_geo_buckets"} <= counts.keys(), (
+        f"the sweep's return contract changed: {sorted(counts)}")
+
+    # The handler builds its response from that dict without a 500, and the
+    # extra telemetry keys are dropped rather than leaked or rejected.
+    result = run_pii_retention(db=_FakeSession(), mod=None)
+    assert isinstance(result, RetentionSweepResult)
+    assert result.model_dump().keys() == RetentionSweepResult.model_fields.keys()
 
 
 def test_the_sweep_is_idempotent_by_construction():
