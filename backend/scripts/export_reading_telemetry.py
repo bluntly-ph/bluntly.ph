@@ -30,10 +30,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import PureWindowsPath
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -65,38 +65,50 @@ _FORBIDDEN_NAMES = {
 }
 _FORBIDDEN_PREFIXES = ("/dev/", "\\\\.\\", "\\\\?\\")
 
-#: Windows reserved device basenames. Windows resolves these to the device
-#: regardless of any extension or trailing text after the first '.'  (e.g.
-#: "NUL.csv" still opens the NUL device), so membership is checked against the
-#: basename with everything from the first '.' stripped off, never the raw
+#: Windows reserved device names. Windows resolves these to the device
+#: regardless of any extension, trailing text after the first '.', or trailing
+#: dots/spaces (e.g. "NUL.csv", "nul." and "NUL " all open the NUL device), and
+#: `CONIN$`/`CONOUT$` are matched by their literal names. Membership is checked
+#: against the device token from `_device_name_token` below, never the raw
 #: string. https://learn.microsoft.com/windows/win32/fileio/naming-a-file
-_RESERVED_DEVICE_BASENAMES = {
-    "con", "prn", "aux", "nul",
+_RESERVED_DEVICE_NAMES = {
+    "con", "prn", "aux", "nul", "conin$", "conout$",
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
 }
-#: Console device names accessed by exact name only -- they are not affected
-#: by the "strip after first dot" rule above because the literal name (with
-#: its trailing '$') is what the OS matches.
-_RESERVED_DEVICE_EXACT_NAMES = {"conin$", "conout$"}
 
 
 class OutputPathError(ValueError):
     """--output does not name a safe, writable, not-already-existing file."""
 
 
+def _device_name_token(raw: str) -> str:
+    """The name Windows would use to match a reserved device, computed
+    identically on every host.
+
+    `os.path.basename` is platform-dependent — on Linux (GitHub CI) it does not
+    treat ``\\`` as a separator, so ``reports\\COM1.csv`` would slip through a
+    Linux run. `PureWindowsPath` splits on *both* ``/`` and ``\\`` regardless of
+    the OS executing this code, so the device check is deterministic in CI and
+    on a developer's Windows box alike. Pure string inspection: no filesystem
+    access, so a device name is never opened just by validating it.
+    """
+    name = PureWindowsPath(raw.strip()).name.lower()
+    # Windows ignores any extension and trailing dots/spaces when matching a
+    # device name; `CONIN$`/`CONOUT$` keep their '$' but take no extension.
+    return name.split(".", 1)[0].strip(" .")
+
+
 def _validate_output_path(raw: str) -> str:
     stripped = raw.strip()
     lowered = stripped.lower()
-    basename = os.path.basename(stripped.rstrip("/\\")).lower()
-    basename_no_suffix = basename.split(".", 1)[0]
+    name = PureWindowsPath(stripped).name.lower() if stripped else ""
     if (
         not stripped
         or lowered in _FORBIDDEN_NAMES
-        or basename in _FORBIDDEN_NAMES
+        or name in _FORBIDDEN_NAMES
         or lowered.startswith(_FORBIDDEN_PREFIXES)
-        or basename_no_suffix in _RESERVED_DEVICE_BASENAMES
-        or basename in _RESERVED_DEVICE_EXACT_NAMES
+        or _device_name_token(stripped) in _RESERVED_DEVICE_NAMES
     ):
         raise OutputPathError(
             f"--output must name a regular file path, not {raw!r}."

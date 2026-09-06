@@ -64,10 +64,20 @@ def test_output_path_rejects_stdout_and_device_names(bad):
 @pytest.mark.parametrize(
     "bad",
     [
+        # bare names, extensions, case
         "NUL.csv", "nul.csv", "CON.csv", "con.txt", "PRN.csv", "AUX.csv",
         "COM1", "com1.csv", "COM9.csv", "LPT1", "lpt1.csv", "LPT9.csv",
-        "CONOUT$", "conout$", "CONIN$", "conin$",
-        "reports/NUL.csv", "reports\\COM1.csv",
+        # console devices matched by literal name (with and without extension)
+        "CONOUT$", "conout$", "CONIN$", "conin$", "conin$.csv", "CONOUT$.log",
+        # trailing dots/spaces are ignored by Windows when matching a device
+        "NUL.", "nul .csv", "  CON  ", "prn...",
+        # nested POSIX spellings
+        "reports/NUL.csv", "reports/lpt3.log", "a/b/c/AUX",
+        # nested Windows spellings -- os.path.basename does NOT split "\\" on
+        # Linux CI, so these must be recognised by PureWindowsPath, not os.path
+        "reports\\COM1.csv", "a\\b\\CONIN$", "C:\\tmp\\nul.csv",
+        # mixed separators
+        "reports\\sub/COM2.csv", "reports/sub\\lpt2",
     ],
 )
 def test_output_path_rejects_reserved_device_names_with_suffixes(bad, tmp_path):
@@ -78,6 +88,23 @@ def test_output_path_rejects_reserved_device_names_with_suffixes(bad, tmp_path):
         _validate_output_path(bad)
     after = set(tmp_path.iterdir()) if tmp_path.exists() else set()
     assert before == after
+
+
+@pytest.mark.parametrize(
+    "good",
+    [
+        "out.csv",
+        "reports/computer.csv",        # substring of a device name, not one
+        "reports\\common.csv",
+        "com10.csv",                   # only com1-9 are reserved
+        "lpt0.csv",
+        "console.log",
+        "nulls.csv",
+        "a/b/readings-con.csv",        # device name only as a suffix fragment
+    ],
+)
+def test_output_path_accepts_legitimate_filenames_near_device_names(good):
+    assert _validate_output_path(good) == good
 
 
 def test_output_path_accepts_a_plain_file_path(tmp_path):
