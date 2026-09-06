@@ -158,6 +158,38 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
      "AND has_table_privilege('authenticated', c.oid, 'SELECT')",
      "Same cause as above. The application authenticates as postgres and never "
      "as this role, so anything reachable here is reachable around the API."),
+
+    ("reading sessions with dual or missing reader identity",
+     "SELECT count(*) FROM review_reading_sessions WHERE "
+     "(reader_kind = 'user') <> (reader_ref IS NOT NULL) OR "
+     "(reader_kind = 'anon') <> (anon_ref IS NOT NULL)",
+     "ck_reading_reader_user/ck_reading_reader_anon should make this "
+     "impossible; a row here carries two reader identities or none, which "
+     "defeats the separation the reading-telemetry design relies on."),
+
+    ("reading sessions past the retention cutoff",
+     "SELECT count(*) FROM review_reading_sessions "
+     "WHERE started_at < now() - interval '90 days'",
+     "retention_service.run_retention_sweep purges these at 90 days. A row "
+     "here means the sweep is not running or has fallen behind its "
+     "per-run batch ceiling."),
+
+    ("review view buckets past the retention cutoff",
+     "SELECT count(*) FROM review_view_buckets "
+     "WHERE bucket_start < now() - interval '90 days'",
+     "Same 90-day retention as the reading sessions above; migration 0033 "
+     "promised it and the sweep is what actually enforces it."),
+
+    ("request geo buckets past the retention cutoff",
+     "SELECT count(*) FROM request_geo_buckets "
+     "WHERE bucket_start < now() - interval '90 days'",
+     "Same 90-day retention, scheduled through the same sweep rather than the "
+     "incidental per-request path it used to run on."),
+
+    ("first-vote geo buckets past the retention cutoff",
+     "SELECT count(*) FROM review_first_vote_geo_buckets "
+     "WHERE bucket_start < now() - interval '90 days'",
+     "Same 90-day retention as the other telemetry aggregates."),
 )
 
 
