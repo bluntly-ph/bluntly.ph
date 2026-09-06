@@ -7,6 +7,7 @@ needed to answer "how much traffic, from roughly where".
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -14,8 +15,11 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.models.traffic import RequestGeoBucket
+from app.core.logging import get_logger
+from app.models.traffic import RequestGeoBucket, ReviewFirstVoteGeoBucket
 from app.services.request_geo import RequestGeo
+
+log = get_logger(__name__)
 
 #: Selectable windows, in hours. Capped by RETENTION_DAYS: offering a range
 #: longer than we keep data for would draw a 1-year chart that is silently
@@ -235,3 +239,47 @@ def purge_expired_views(db: Session, *, now: datetime | None = None) -> int:
     result = db.execute(
         delete(ReviewViewBucket).where(ReviewViewBucket.bucket_start < cutoff))
     return int(result.rowcount or 0)
+
+
+def record_first_vote_geo(db: Session, review_id: uuid.UUID, geo: RequestGeo, *,
+                          now: datetime | None = None) -> bool:
+    """Increment the (review x hour x place) FIRST-vote bucket. Never raises.
+
+    Call this only when `vote_service.CastVoteResult.created` is true — see
+    `ReviewFirstVoteGeoBucket`'s docstring for why a same-direction retry or a
+    direction change must not reach here. No voter identifier is accepted or
+    stored, exactly like `record` above.
+
+    Best-effort and isolated: this is a write-only telemetry tail called after
+    the real vote is already committed (app/api/v1/routes/reviews.py), so a
+    failure here must never turn a successful vote into an error response.
+    """
+    if not geo.has_location:
+        return False
+
+    bucket = _hour(now or datetime.now(UTC))
+    stmt = insert(ReviewFirstVoteGeoBucket).values(
+        review_id=review_id, bucket_start=bucket,
+        country=geo.country, region=geo.region, city=geo.city,
+        first_vote_count=1,
+    )
+    try:
+        db.execute(
+            # Same reasoning as `record` above: this is an index, not a named
+            # constraint (migration 0041), so `ON CONFLICT ON CONSTRAINT`
+            # would fail at runtime.
+            stmt.on_conflict_do_update(
+                index_elements=["review_id", "bucket_start", "country", "region", "city"],
+                set_={
+                    "first_vote_count": ReviewFirstVoteGeoBucket.first_vote_count + 1,
+                    "updated_at": func.now(),
+                },
+            )
+        )
+        db.commit()
+        return True
+    except Exception:  # noqa: BLE001 - a telemetry tail must never fail the vote
+        db.rollback()
+        log.warning("record_first_vote_geo failed", extra={"extra_fields": {
+            "review_id": str(review_id), "action": "record_first_vote_geo"}})
+        return False

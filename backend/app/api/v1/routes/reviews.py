@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import ForbiddenError, NotFoundError
+from app.core.logging import get_logger
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import get_current_user, get_optional_user
 from app.db.session import get_db
@@ -44,8 +45,15 @@ from app.schemas.review import (
     ReviewVersionOut,
     VoteIn,
 )
-from app.services import report_service, review_service, vote_service
+from app.services import (
+    reading_telemetry_service,
+    report_service,
+    request_traffic_service,
+    review_service,
+    vote_service,
+)
 from app.services.ai_critique import get_provider
+from app.services.request_geo import from_headers
 from app.services.storage import (
     receipt_key_belongs_to,
     review_photo_belongs_to,
@@ -55,6 +63,7 @@ from app.services.storage import (
 )
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
+logger = get_logger(__name__)
 
 
 def _is_moderator(user: User | None) -> bool:
@@ -407,10 +416,34 @@ def vote_review(review_id: uuid.UUID, payload: VoteIn, request: Request,
                 user: User = Depends(get_current_user)) -> ReviewOut:
     enforce_rate_limit(request, "vote", max_requests=settings.vote_rate_limit_max)
     review = review_service.get_review_or_404(db, review_id)
-    review = vote_service.cast_vote(db, review, user, payload.vote)
+    result = vote_service.cast_vote(db, review, user, payload.vote)
     # Echo the vote just cast rather than re-reading it: the client uses this
-    # response to set its pressed state, so it must not come back empty.
-    return _out(review, payload.vote)
+    # response to set its pressed state, so it must not come back empty. Built
+    # before the telemetry tail below: a failed telemetry rollback can expire
+    # this ORM object, and the already-committed vote response must survive it.
+    out = _out(result.review, payload.vote)
+
+    # Write-only, best-effort telemetry tail. Each helper below owns its own
+    # transaction and already isolates its own failures; this call site
+    # isolates a second time so an unexpected raise straight out of a helper
+    # (not just a caught one) can never turn a successful vote into an error.
+    try:
+        reading_telemetry_service.note_vote(db, result.review.id, user.id)
+    except Exception:  # noqa: BLE001 - the vote response must survive this
+        db.rollback()
+        logger.warning("vote telemetry tail failed", extra={"extra_fields": {
+            "review_id": str(result.review.id), "action": "note_vote"}})
+
+    if result.created:
+        try:
+            request_traffic_service.record_first_vote_geo(
+                db, result.review.id, from_headers(request.headers))
+        except Exception:  # noqa: BLE001 - same reasoning
+            db.rollback()
+            logger.warning("vote telemetry tail failed", extra={"extra_fields": {
+                "review_id": str(result.review.id), "action": "record_first_vote_geo"}})
+
+    return out
 
 
 @router.delete("/{review_id}/vote", response_model=ReviewOut,

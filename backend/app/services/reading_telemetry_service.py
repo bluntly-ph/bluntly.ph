@@ -9,14 +9,29 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import BigInteger, Integer, and_, cast, extract, func, literal, or_
+from sqlalchemy import (
+    BigInteger,
+    Integer,
+    and_,
+    cast,
+    extract,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError
+from app.core.logging import get_logger
 from app.models.enums import ReaderKind
 from app.models.review import Review
 from app.models.telemetry import ReviewReadingSession
+
+log = get_logger(__name__)
 
 MAX_SESSION_MS = 1_800_000
 MAX_CHECKPOINTS = 16
@@ -25,6 +40,11 @@ SCROLL_MILESTONES = (0, 25, 50, 75, 100)
 RETENTION_DAYS = 90
 RETENTION_BATCH = 5_000
 MAX_BATCHES_PER_RUN = 40
+
+#: How long after an impression starts a vote can still be attributed to it.
+#: Anything older is not "still open" — the reader could have left and come
+#: back for an unrelated reason.
+NOTE_VOTE_WINDOW = text("now() - interval '30 minutes'")
 
 
 @dataclass(frozen=True)
@@ -303,4 +323,59 @@ def record_checkpoint(
     changed = result.rowcount == 1
     if changed:
         db.commit()
+    return changed
+
+
+def note_vote(db: Session, review_id: uuid.UUID, reader_id: uuid.UUID) -> bool:
+    """Stamp the voter's most recent still-open impression with its first vote.
+
+    Best-effort and isolated: this is a write-only telemetry tail called after
+    the real vote is already committed (app/api/v1/routes/reviews.py), and it
+    must never be able to turn a successful vote into an error response. It
+    owns its own transaction boundary and never raises.
+
+    "Latest matching impression" is exactly-one row for (reader_id, review_id)
+    whose `started_at` falls in the last 30 minutes and is not in the future
+    (clock skew or a backdated row), picked by `ORDER BY started_at DESC
+    LIMIT 1`. The UPDATE and the SELECT that finds it are one statement, so
+    there is no window between "find the latest" and "write to it" for a
+    concurrent checkpoint to slip through.
+
+    `COALESCE` on both columns makes the stamp first-occurrence-wins: calling
+    this again for a later vote on the same review (a direction change) must
+    not overwrite the reader's original timestamp or activity snapshot with a
+    later, larger one.
+    """
+    target = (
+        select(ReviewReadingSession.id)
+        .where(
+            ReviewReadingSession.reader_kind == ReaderKind.user,
+            ReviewReadingSession.reader_ref == reader_id,
+            ReviewReadingSession.review_id == review_id,
+            ReviewReadingSession.started_at <= func.now(),
+            ReviewReadingSession.started_at >= NOTE_VOTE_WINDOW,
+        )
+        .order_by(ReviewReadingSession.started_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    try:
+        result = db.execute(
+            update(ReviewReadingSession)
+            .where(ReviewReadingSession.id == target)
+            .values(
+                first_vote_at=func.coalesce(ReviewReadingSession.first_vote_at, func.now()),
+                active_ms_at_first_vote=func.coalesce(
+                    ReviewReadingSession.active_ms_at_first_vote,
+                    ReviewReadingSession.active_ms,
+                ),
+            )
+        )
+        changed = result.rowcount == 1
+        db.commit()
+    except Exception:  # noqa: BLE001 - a telemetry tail must never fail the vote
+        db.rollback()
+        changed = False
+        log.warning("note_vote failed", extra={"extra_fields": {
+            "review_id": str(review_id), "action": "note_vote"}})
     return changed

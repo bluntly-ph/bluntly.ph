@@ -9,6 +9,7 @@ vote write so counters can never drift from the vote rows.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -21,6 +22,21 @@ from app.models.review import Review
 from app.models.user import User
 from app.models.vote import ReviewVote
 from app.services.ranking import time_decayed_wilson
+
+
+@dataclass(frozen=True)
+class CastVoteResult:
+    """The vote just written, plus whether it was a brand-new row.
+
+    `created` answers exactly one question: did this call INSERT a
+    `ReviewVote`? A same-direction retry or a direction change both upsert an
+    existing row and are `False` — the route's first-vote telemetry (geography
+    bucket) depends on that distinction to stay "first-time votes", not "vote
+    button presses".
+    """
+
+    review: Review
+    created: bool
 
 
 def _now() -> datetime:
@@ -54,7 +70,7 @@ def _votable_or_404(review: Review) -> None:
 
 
 def cast_vote(db: Session, review: Review, voter: User,
-              direction: VoteDirection) -> Review:
+              direction: VoteDirection) -> CastVoteResult:
     _votable_or_404(review)
     if review.author_id == voter.id:
         raise AppError("You cannot vote on your own review.",
@@ -63,6 +79,7 @@ def cast_vote(db: Session, review: Review, voter: User,
 
     existing = db.scalar(select(ReviewVote).where(
         ReviewVote.review_id == review.id, ReviewVote.voter_id == voter.id))
+    created = existing is None
     if existing is None:
         db.add(ReviewVote(review_id=review.id, voter_id=voter.id, vote=direction))
     else:
@@ -75,7 +92,7 @@ def cast_vote(db: Session, review: Review, voter: User,
                        code="vote_conflict", status_code=409,
                        title="Conflicting state") from exc
     _finish_vote_write(db, review)
-    return review
+    return CastVoteResult(review=review, created=created)
 
 
 def remove_vote(db: Session, review: Review, voter_id: uuid.UUID) -> Review:
