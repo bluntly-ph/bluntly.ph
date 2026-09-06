@@ -27,7 +27,7 @@ import ast
 import uuid
 from dataclasses import fields as dataclass_fields
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 
 import pytest
@@ -464,15 +464,25 @@ def test_moderator_queue_and_publication_ignore_telemetry(client):
 
     assert absent == extreme == deleted
 
-    # Publication decision: two identical pending reviews, telemetry on one.
-    def make_pending() -> str:
+    # Publication decision: two pending reviews whose publication-relevant
+    # inputs (product, verdict, star rating, zero votes) match, but whose
+    # title/discussion differ so the pg_trgm duplicate-content heuristic never
+    # flags one of them and fails this test for an unrelated reason. Telemetry
+    # goes on one of them.
+    def make_pending(title: str, discussion: str) -> str:
         return client.post("/api/v1/reviews", headers=ah, json={
-            "product_id": pid, "title": "Pending", "discussion": "Queued for review.",
+            "product_id": pid, "title": title, "discussion": discussion,
             "verdict": "it_depends", "star_rating": 3,
         }).json()["id"]
 
-    clean_rid = make_pending()
-    noisy_rid = make_pending()
+    clean_rid = make_pending(
+        "First impressions of the build quality",
+        "Solid aluminium chassis, no flex, the hinge feels overbuilt. "
+        "Ports are well spaced. Nothing here surprised me either way.")
+    noisy_rid = make_pending(
+        "Battery and thermals after a week",
+        "Runs cool under a browser load, fans only spin up when compiling. "
+        "Charge holds through a full workday. Middle-of-the-road outcome.")
     db = SessionLocal()
     try:
         _flood_extreme_telemetry(db, _uuid.UUID(noisy_rid), 3, _uuid.UUID(reader_id))
@@ -490,9 +500,28 @@ def test_moderator_queue_and_publication_ignore_telemetry(client):
 
 
 @requires_db
-def test_honesty_fund_score_ignores_telemetry(client):
-    """A review's Honesty Score — the only telemetry-independent input to its
-    fund payout — is identical across absent / extreme / deleted telemetry."""
+def test_honesty_fund_score_and_payout_ignore_telemetry(client):
+    """A review's Honesty Fund payout — the actual money written to
+    ``HonestyFundDistribution.payout_amount`` — is identical across absent /
+    extreme / deleted telemetry, and so is its Honesty Score.
+
+    The production ``distribute`` selects the *global* eligible set (every
+    published, not-removed, honesty-fund-routed review) and splits the cycle
+    pool across it, so a fixture review left eligible in the persistent CI
+    database would change the next phase's divisor for a reason that has
+    nothing to do with telemetry.  Each phase therefore runs in its own unique
+    ``cycle_month`` and, after its ``payout_amount`` is captured, marks its
+    fixture review ``is_removed`` so every phase distributes over the same
+    baseline eligible set.  Production decision logic is untouched.
+
+    ``distribute`` writes one row per scored eligible review, so the payout is
+    re-derived independently from the persisted rows of the phase's cycle:
+    ``payout_i == floor_to_centavo(pool * score_i / sum(all scores))``.
+
+    No clock is frozen: the only time-derived input is ``account_age_days``
+    (``(now - created_at).days``), a whole-day quantity that cannot change
+    across the seconds separating the three phases, and nothing sub-day is
+    compared."""
     import uuid as _uuid
     from datetime import date as _date
 
@@ -502,6 +531,7 @@ def test_honesty_fund_score_ignores_telemetry(client):
     from app.models.commission import Commission
     from app.models.enums import CommissionTarget
     from app.models.honesty_fund import HonestyFundDistribution
+    from app.models.review import Review
     from app.services.earnings import split_commission
     from app.services.honesty_fund_service import distribute
 
@@ -527,7 +557,7 @@ def test_honesty_fund_score_ignores_telemetry(client):
     finally:
         db.close()
 
-    def run_case(*, flood: bool, purge: bool) -> Decimal:
+    def run_case(*, flood: bool, purge: bool) -> tuple[Decimal, Decimal]:
         _, author_token, _ = register_and_token(client)
         _, voter_token, _ = register_and_token(client)
         ah = _auth(author_token)
@@ -586,18 +616,41 @@ def test_honesty_fund_score_ignores_telemetry(client):
             db.commit()
             result = distribute(db, cycle_month=cycle)
             assert result["status"] == "distributed", result
-            row = db.scalar(select(HonestyFundDistribution).where(
-                HonestyFundDistribution.cycle_month == cycle,
-                HonestyFundDistribution.review_id == _uuid.UUID(rid)))
+
+            rows = db.scalars(select(HonestyFundDistribution).where(
+                HonestyFundDistribution.cycle_month == cycle)).all()
+            row = next((r for r in rows
+                        if r.review_id == _uuid.UUID(rid)), None)
             assert row is not None
-            return Decimal(row.honesty_score)
+            payout = Decimal(row.payout_amount)
+            score = Decimal(row.honesty_score)
+            pool = Decimal(row.pool_amount)
+
+            # Our unique cycle carries exactly the one seeded commission, so its
+            # pool is the fixed 30% Honesty Fund share of gross 100.00.
+            assert pool == Decimal("30.00")
+            # Re-derive the payout from the persisted rows of this cycle,
+            # independently of the in-memory arithmetic in ``distribute``.
+            total_score = sum((Decimal(r.honesty_score) for r in rows),
+                              Decimal("0"))
+            assert total_score > 0
+            expected = (pool * score / total_score).quantize(
+                Decimal("0.01"), rounding=ROUND_FLOOR)
+            assert payout == expected
+
+            # Neutralise this phase's eligible review so the next phase
+            # distributes over the same baseline set. The cycle row stays.
+            review = db.get(Review, _uuid.UUID(rid))
+            review.is_removed = True
+            db.commit()
+            return payout, score
         finally:
             db.close()
 
     absent = run_case(flood=False, purge=False)
     extreme = run_case(flood=True, purge=False)
     deleted = run_case(flood=True, purge=True)
-    assert absent > 0
+    assert absent[0] > 0
     assert absent == extreme == deleted
 
 
@@ -638,6 +691,7 @@ def test_internal_payout_eligibility_and_amount_ignore_telemetry(client):
         finally:
             db.close()
 
+        flood_rid: uuid.UUID | None = None
         if flood:
             db = SessionLocal()
             try:
@@ -646,7 +700,8 @@ def test_internal_payout_eligibility_and_amount_ignore_telemetry(client):
                 _, mtok, _ = register_and_token(client, role="moderator")
                 rid, _ = make_published_review(client, _auth(atok), _auth(mtok),
                                                name=f"PayIso-{_uuid.uuid4().hex[:6]}")
-                _flood_extreme_telemetry(db, _uuid.UUID(rid), 4, user_uuid)
+                flood_rid = _uuid.UUID(rid)
+                _flood_extreme_telemetry(db, flood_rid, 4, user_uuid)
             finally:
                 db.close()
         if purge:
@@ -658,6 +713,14 @@ def test_internal_payout_eligibility_and_amount_ignore_telemetry(client):
                 db.commit()
             finally:
                 db.close()
+            # Also clear the flood review's own sessions and its first-vote geo
+            # bucket, so the purge leaves nothing of the telemetry behind.
+            if flood_rid is not None:
+                db = SessionLocal()
+                try:
+                    _purge_telemetry(db, flood_rid)
+                finally:
+                    db.close()
 
         db = SessionLocal()
         try:
