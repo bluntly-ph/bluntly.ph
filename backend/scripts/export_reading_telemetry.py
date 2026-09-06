@@ -16,8 +16,8 @@ without building a persisted graph or exposing a new identity surface:
                  that answer "how much active reading came before the vote".
   relationships  Voter <-> reviewer overlap, derived on read from
                  `review_votes` over at most the author's 30 most recent
-                 published reviews. No edge table, no voter identity beyond
-                 the id `review_votes` already stores.
+                 published reviews, all bound to --since-days. No edge table,
+                 no voter identity beyond the id `review_votes` already stores.
   geo-summary    Identity-free hourly geography aggregates only: first-time
                  votes by place next to request traffic by the same place.
 
@@ -60,10 +60,25 @@ RELATIONSHIP_WINDOW = 30
 #: Names this tool refuses for --output because they are not a plain file on
 #: disk: stdout/stderr/null aliases and the Windows reserved device names.
 _FORBIDDEN_NAMES = {
-    "-", "con", "prn", "aux", "nul",
+    "-",
     "/dev/stdout", "/dev/stderr", "/dev/null", "/dev/fd/1", "/dev/fd/2",
 }
 _FORBIDDEN_PREFIXES = ("/dev/", "\\\\.\\", "\\\\?\\")
+
+#: Windows reserved device basenames. Windows resolves these to the device
+#: regardless of any extension or trailing text after the first '.'  (e.g.
+#: "NUL.csv" still opens the NUL device), so membership is checked against the
+#: basename with everything from the first '.' stripped off, never the raw
+#: string. https://learn.microsoft.com/windows/win32/fileio/naming-a-file
+_RESERVED_DEVICE_BASENAMES = {
+    "con", "prn", "aux", "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
+}
+#: Console device names accessed by exact name only -- they are not affected
+#: by the "strip after first dot" rule above because the literal name (with
+#: its trailing '$') is what the OS matches.
+_RESERVED_DEVICE_EXACT_NAMES = {"conin$", "conout$"}
 
 
 class OutputPathError(ValueError):
@@ -74,11 +89,14 @@ def _validate_output_path(raw: str) -> str:
     stripped = raw.strip()
     lowered = stripped.lower()
     basename = os.path.basename(stripped.rstrip("/\\")).lower()
+    basename_no_suffix = basename.split(".", 1)[0]
     if (
         not stripped
         or lowered in _FORBIDDEN_NAMES
         or basename in _FORBIDDEN_NAMES
         or lowered.startswith(_FORBIDDEN_PREFIXES)
+        or basename_no_suffix in _RESERVED_DEVICE_BASENAMES
+        or basename in _RESERVED_DEVICE_EXACT_NAMES
     ):
         raise OutputPathError(
             f"--output must name a regular file path, not {raw!r}."
@@ -247,10 +265,13 @@ def export_relationships(
     """Voter <-> reviewer overlap, derived on read (design §10).
 
     No edge table. For each author with a review published in the window, look
-    at only their `RELATIONSHIP_WINDOW` most recent published reviews and tally
-    votes per voter over exactly that bounded set — an older review past the
-    window contributes nothing, matching `fraud_service`'s "computed on read,
-    bounded queries" posture.
+    at only their `RELATIONSHIP_WINDOW` most recent published reviews *that are
+    themselves inside the same `--since-days` window* and tally votes per voter
+    over exactly that bounded set. An older review — one published before the
+    cutoff — must not be pulled in just because the author also has one recent
+    review, and neither must a vote whose own `created_at` predates the cutoff:
+    both the review and the vote are independently window-bound, matching
+    `fraud_service`'s "computed on read, bounded queries" posture.
     """
     cutoff = _cutoff(since_days, now)
     author_ids = db.execute(
@@ -274,6 +295,7 @@ def export_relationships(
                 .where(
                     Review.author_id == author_id,
                     Review.published_at.isnot(None),
+                    Review.published_at >= cutoff,
                     Review.is_removed.is_(False),
                 )
                 .order_by(Review.published_at.desc())
@@ -284,7 +306,10 @@ def export_relationships(
             eligible = len(recent_ids)
             tally = db.execute(
                 select(ReviewVote.voter_id, func.count().label("voted"))
-                .where(ReviewVote.review_id.in_(recent_ids))
+                .where(
+                    ReviewVote.review_id.in_(recent_ids),
+                    ReviewVote.created_at >= cutoff,
+                )
                 .group_by(ReviewVote.voter_id)
             ).all()
             for voter_id, voted in tally:

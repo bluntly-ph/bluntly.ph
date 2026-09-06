@@ -75,9 +75,24 @@ def bounded_purge(
     `table` and `time_column` must be an exact pair from `PURGE_TARGETS` — this
     is the allow-list that makes building the DELETE by string interpolation
     safe; `cutoff` and `batch_size` remain ordinary bound parameters.
+
+    `batch_size` and `max_batches` are caller-overridable for tests, but the
+    architectural maxima (5,000 and 40, whose product is the 200,000-row-per-
+    table-per-run ceiling) are enforced here regardless of what a caller
+    passes — an override outside `1..RETENTION_BATCH` / `1..MAX_BATCHES_PER_RUN`
+    fails closed rather than silently clamping, so a caller error surfaces
+    immediately instead of quietly running an oversized or no-op sweep.
     """
     if PURGE_TARGETS.get(table) != time_column:
         raise ValueError(f"{table}.{time_column} is not an allow-listed retention target")
+    if not (0 < batch_size <= RETENTION_BATCH):
+        raise ValueError(
+            f"batch_size must be between 1 and {RETENTION_BATCH}, got {batch_size!r}"
+        )
+    if not (0 < max_batches <= MAX_BATCHES_PER_RUN):
+        raise ValueError(
+            f"max_batches must be between 1 and {MAX_BATCHES_PER_RUN}, got {max_batches!r}"
+        )
 
     # PostgreSQL does not accept LIMIT on DELETE, so the batch is selected by a
     # subquery and the outer DELETE targets exactly those ids.

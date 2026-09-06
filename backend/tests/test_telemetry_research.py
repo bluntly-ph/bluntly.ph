@@ -61,6 +61,25 @@ def test_output_path_rejects_stdout_and_device_names(bad):
         _validate_output_path(bad)
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "NUL.csv", "nul.csv", "CON.csv", "con.txt", "PRN.csv", "AUX.csv",
+        "COM1", "com1.csv", "COM9.csv", "LPT1", "lpt1.csv", "LPT9.csv",
+        "CONOUT$", "conout$", "CONIN$", "conin$",
+        "reports/NUL.csv", "reports\\COM1.csv",
+    ],
+)
+def test_output_path_rejects_reserved_device_names_with_suffixes(bad, tmp_path):
+    # Must reject on string inspection alone -- never touch/create the path,
+    # since opening a device name like NUL on Windows has a real side effect.
+    before = set(tmp_path.iterdir()) if tmp_path.exists() else set()
+    with pytest.raises(OutputPathError):
+        _validate_output_path(bad)
+    after = set(tmp_path.iterdir()) if tmp_path.exists() else set()
+    assert before == after
+
+
 def test_output_path_accepts_a_plain_file_path(tmp_path):
     target = tmp_path / "out.csv"
     assert _validate_output_path(str(target)) == str(target)
@@ -205,6 +224,79 @@ def test_relationship_export_ignores_an_authors_31st_older_review(
         rows = list(csv.reader(handle))
 
     assert rows[0] == export_module.RELATIONSHIPS_HEADER
+    assert rows[1:] == []
+    assert result.rows_written == 0
+
+
+@requires_db
+def test_relationship_export_excludes_an_authors_review_outside_the_since_days_window(
+    db, export_fixture, tmp_path
+):
+    """An author qualifies via one recent review, but a second, older review of
+    theirs (outside --since-days, though still inside the 90-day retention
+    horizon) must not be pulled into the bounded 30-review window just because
+    the author has activity -- and its vote must not be tallied either."""
+    now = datetime.now(UTC)
+    recent_review_id = uuid.uuid4()
+    old_review_id = uuid.uuid4()
+    reviews = [
+        Review(
+            id=recent_review_id, product_id=EXPORT_PRODUCT_ID, author_id=EXPORT_AUTHOR_ID,
+            title="Recent review", discussion="Body text.",
+            verdict=Verdict.it_depends, star_rating=4,
+            published_at=now - timedelta(days=1),
+        ),
+        Review(
+            id=old_review_id, product_id=EXPORT_PRODUCT_ID, author_id=EXPORT_AUTHOR_ID,
+            title="Old review outside the since-days window", discussion="Body text.",
+            verdict=Verdict.it_depends, star_rating=4,
+            published_at=now - timedelta(days=20),
+        ),
+    ]
+    db.add_all(reviews)
+    db.commit()
+    db.execute(insert(ReviewVote).values(
+        review_id=old_review_id, voter_id=EXPORT_VOTER_ID, vote=VoteDirection.up,
+    ))
+    db.commit()
+
+    out_path = tmp_path / "relationships.csv"
+    result = export_relationships(db, str(out_path), since_days=7)
+
+    with open(out_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+
+    assert rows[1:] == []
+    assert result.rows_written == 0
+
+
+@requires_db
+def test_relationship_export_excludes_a_vote_cast_before_the_since_days_window(
+    db, export_fixture, tmp_path
+):
+    """The review itself is inside the window, but its vote's own creation
+    timestamp is not -- the tally must be bound by vote `created_at`, not only
+    by the parent review's `published_at`."""
+    now = datetime.now(UTC)
+    review = Review(
+        id=EXPORT_REVIEW_ID, product_id=EXPORT_PRODUCT_ID, author_id=EXPORT_AUTHOR_ID,
+        title="In-window review with a stale vote", discussion="Body text.",
+        verdict=Verdict.it_depends, star_rating=4, published_at=now - timedelta(days=1),
+    )
+    db.add(review)
+    db.commit()
+    db.execute(insert(ReviewVote).values(
+        review_id=EXPORT_REVIEW_ID, voter_id=EXPORT_VOTER_ID, vote=VoteDirection.up,
+        created_at=now - timedelta(days=20),
+    ))
+    db.commit()
+
+    out_path = tmp_path / "relationships.csv"
+    result = export_relationships(db, str(out_path), since_days=7)
+
+    with open(out_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+
     assert rows[1:] == []
     assert result.rows_written == 0
 

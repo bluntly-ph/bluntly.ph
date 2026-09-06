@@ -77,6 +77,30 @@ def test_purge_targets_allow_list_matches_the_four_telemetry_tables():
     }
 
 
+# --- bounded_purge fails closed on out-of-range caller overrides -------------
+#
+# Validation must happen before any SQL is built, so these pass db=None, same
+# as test_bounded_purge_rejects_targets_outside_the_allow_list above. Bounding
+# batch_size <= 5,000 and max_batches <= 40 individually also bounds their
+# product <= 200,000, which is the architectural per-table-per-run ceiling.
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, -5000, 5001, 100_000])
+def test_bounded_purge_rejects_batch_size_overrides_outside_1_5000(batch_size):
+    with pytest.raises(ValueError):
+        bounded_purge(
+            None, "review_reading_sessions", "started_at", BASE, batch_size=batch_size
+        )
+
+
+@pytest.mark.parametrize("max_batches", [0, -1, -40, 41, 1000])
+def test_bounded_purge_rejects_max_batches_overrides_outside_1_40(max_batches):
+    with pytest.raises(ValueError):
+        bounded_purge(
+            None, "review_reading_sessions", "started_at", BASE, max_batches=max_batches
+        )
+
+
 # --- Bounded, batched retention against a real database ---------------------
 
 
