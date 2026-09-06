@@ -417,10 +417,19 @@ def vote_review(review_id: uuid.UUID, payload: VoteIn, request: Request,
     enforce_rate_limit(request, "vote", max_requests=settings.vote_rate_limit_max)
     review = review_service.get_review_or_404(db, review_id)
     result = vote_service.cast_vote(db, review, user, payload.vote)
+    # Capture every scalar the telemetry tails (and their logs) need *before*
+    # either one can run. A tail's caught rollback — or an uncaught raise from
+    # the first tail reaching the second — expires every ORM object in the
+    # session, so `result.review.id` read afterward would trigger a lazy
+    # reload outside this guard and could turn an already-committed vote into
+    # an HTTP failure.
+    voted_review_id = result.review.id
+    created = result.created
     # Echo the vote just cast rather than re-reading it: the client uses this
     # response to set its pressed state, so it must not come back empty. Built
-    # before the telemetry tail below: a failed telemetry rollback can expire
-    # this ORM object, and the already-committed vote response must survive it.
+    # (and fully serialized) before the telemetry tail below: a failed
+    # telemetry rollback can expire the underlying ORM object, and the
+    # already-committed vote response must survive it.
     out = _out(result.review, payload.vote)
 
     # Write-only, best-effort telemetry tail. Each helper below owns its own
@@ -428,20 +437,20 @@ def vote_review(review_id: uuid.UUID, payload: VoteIn, request: Request,
     # isolates a second time so an unexpected raise straight out of a helper
     # (not just a caught one) can never turn a successful vote into an error.
     try:
-        reading_telemetry_service.note_vote(db, result.review.id, user.id)
+        reading_telemetry_service.note_vote(db, voted_review_id, user.id)
     except Exception:  # noqa: BLE001 - the vote response must survive this
         db.rollback()
         logger.warning("vote telemetry tail failed", extra={"extra_fields": {
-            "review_id": str(result.review.id), "action": "note_vote"}})
+            "review_id": str(voted_review_id), "action": "note_vote"}})
 
-    if result.created:
+    if created:
         try:
             request_traffic_service.record_first_vote_geo(
-                db, result.review.id, from_headers(request.headers))
+                db, voted_review_id, from_headers(request.headers))
         except Exception:  # noqa: BLE001 - same reasoning
             db.rollback()
             logger.warning("vote telemetry tail failed", extra={"extra_fields": {
-                "review_id": str(result.review.id), "action": "record_first_vote_geo"}})
+                "review_id": str(voted_review_id), "action": "record_first_vote_geo"}})
 
     return out
 

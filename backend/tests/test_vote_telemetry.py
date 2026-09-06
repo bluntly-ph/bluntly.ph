@@ -342,6 +342,71 @@ def test_a_forced_telemetry_exception_still_leaves_the_vote_and_wilson_committed
 
 
 @requires_db
+def test_a_rollback_expired_review_object_does_not_crash_the_tail(
+    client, db, vote_context, monkeypatch
+):
+    """Reviewer-verified fail-open gap: `note_vote` catches its own errors and
+    rolls back internally (it never raises), which expires every ORM object
+    in the route's session — including `result.review`. The old route code
+    still dereferenced `result.review.id` after that for the geo tail and its
+    log line, so a persistent DB failure there could turn an already-committed
+    vote into a 500. This reproduces that by rolling back *and* detaching the
+    review object, which makes any further attribute access raise
+    `DetachedInstanceError` without needing a real DB outage — proving the
+    route no longer needs to touch the ORM object once a tail has run.
+    """
+    from app.api.v1.routes import reviews as reviews_route
+
+    def rollback_and_detach_review(session, review_id, _reader_id):
+        session.rollback()
+        obj = session.get(Review, review_id)
+        if obj is not None:
+            session.expunge(obj)
+        return False
+
+    monkeypatch.setattr(
+        reviews_route.reading_telemetry_service, "note_vote", rollback_and_detach_review
+    )
+
+    geo_headers = {
+        "x-vercel-ip-country": "PH",
+        "x-vercel-ip-country-region": "NCR",
+        "x-vercel-ip-city": "Manila",
+    }
+    response = client.post(
+        f"/api/v1/reviews/{vote_context.review.id}/vote",
+        headers={**_auth(vote_context.voter.id), **geo_headers},
+        json={"vote": "up"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["helpful_votes"], body["unhelpful_votes"]) == (1, 0)
+    assert float(body["wilson_score"]) > 0
+
+    db.expire_all()
+    stored_vote = db.scalar(
+        select(ReviewVote).where(
+            ReviewVote.review_id == vote_context.review.id,
+            ReviewVote.voter_id == vote_context.voter.id,
+        )
+    )
+    assert stored_vote is not None
+    assert stored_vote.vote == VoteDirection.up
+
+    # The geo tail runs after note_vote, in the `if result.created:` branch —
+    # it must still fire (and succeed) even though the review object was
+    # detached by the first tail, because it only ever needs the plain id.
+    geo_rows = db.execute(
+        select(ReviewFirstVoteGeoBucket).where(
+            ReviewFirstVoteGeoBucket.review_id == vote_context.review.id
+        )
+    ).scalars().all()
+    assert len(geo_rows) == 1
+    assert geo_rows[0].first_vote_count == 1
+
+
+@requires_db
 def test_first_vote_geo_increments_only_on_the_creating_vote(client, db, vote_context):
     geo_headers = {
         "x-vercel-ip-country": "PH",
