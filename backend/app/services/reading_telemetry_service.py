@@ -318,9 +318,17 @@ def record_checkpoint(
                 ReviewReadingSession.max_seq < excluded.max_seq,
                 ReviewReadingSession.checkpoints < MAX_CHECKPOINTS,
             ),
-        )
+        ).returning(ReviewReadingSession.id)
     )
-    changed = result.rowcount == 1
+    # `id` is server-generated, so Postgres attaches it to the RETURNING row
+    # only when a row was actually inserted or the conflict WHERE matched;
+    # the WHERE-fenced no-op path returns nothing. `CursorResult.rowcount`
+    # is documented as unreliable for a RETURNING statement (commonly -1)
+    # unless the `preserve_rowcount` execution option is set -- an option
+    # added in SQLAlchemy 2.0.28, newer than this project's declared
+    # `sqlalchemy>=2.0,<2.1` floor, and still DBAPI-dependent even where
+    # available -- so the RETURNING scalar itself is the change signal.
+    changed = result.scalar_one_or_none() is not None
     if changed:
         db.commit()
     return changed

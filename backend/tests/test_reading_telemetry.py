@@ -462,6 +462,31 @@ def test_first_checkpoint_creates_one_server_derived_user_row(db, telemetry_cont
 
 
 @requires_db
+def test_first_checkpoint_commits_so_a_second_connection_can_see_it(db, telemetry_context):
+    """`changed` now comes from the RETURNING scalar, not rowcount -- prove
+    the row it reports is actually committed, not merely visible within
+    record_checkpoint's own still-open transaction. A second, independent
+    connection from the same pool can only see it if `db.commit()` really
+    ran on real PostgreSQL."""
+    assert svc.record_checkpoint(
+        db,
+        _service_checkpoint(),
+        _user_identity(telemetry_context.user.id),
+        country=None,
+        user_agent=None,
+    )
+
+    engine = db.get_bind()
+    with engine.connect() as other_connection:
+        visible = other_connection.execute(
+            select(ReviewReadingSession.id).where(
+                ReviewReadingSession.impression_id == IMPRESSION_ID
+            )
+        ).scalar_one_or_none()
+    assert visible is not None
+
+
+@requires_db
 def test_first_checkpoint_creates_one_anon_row_without_user_identity(db, telemetry_context):
     assert svc.record_checkpoint(
         db,
@@ -762,7 +787,7 @@ def test_elapsed_clamp_uses_non_overflowing_postgresql_arithmetic():
         def execute(self, statement):
             nonlocal compiled_sql
             compiled_sql = str(statement.compile(dialect=postgresql.dialect()))
-            return SimpleNamespace(rowcount=0)
+            return SimpleNamespace(scalar_one_or_none=lambda: None)
 
         def commit(self):
             raise AssertionError("a zero-row UPSERT must not commit")
@@ -784,6 +809,48 @@ def test_elapsed_clamp_uses_non_overflowing_postgresql_arithmetic():
     elapsed_suffix = compiled_sql[elapsed_cast : elapsed_cast + 250]
     assert "AS BIGINT" in elapsed_suffix
     assert elapsed_suffix.index("AS BIGINT") < elapsed_suffix.index("AS INTEGER")
+    # `review_reading_sessions.id` is server-generated, so this upsert must
+    # explicitly RETURNING it -- that scalar, not rowcount, is how
+    # record_checkpoint below decides whether a row actually changed.
+    assert "RETURNING review_reading_sessions.id" in compiled_sql
+
+
+def test_record_checkpoint_reads_the_returned_id_not_rowcount():
+    """A completed PostgreSQL upsert reports success via the row RETURNING
+    hands back, not via `CursorResult.rowcount`.
+
+    `review_reading_sessions.id` is server-generated, so SQLAlchemy's
+    postgresql dialect attaches a RETURNING clause to this table's INSERT
+    regardless of intent. Per SQLAlchemy's own docs, rowcount for a
+    RETURNING statement is unreliable (commonly -1) unless the caller opts
+    in with the `preserve_rowcount` execution option -- and that option was
+    only added in SQLAlchemy 2.0.28, newer than this project's declared
+    `sqlalchemy>=2.0,<2.1` floor, and remains DBAPI-dependent even where it
+    exists. `FakeResult` below deliberately has no `rowcount` attribute at
+    all: a correct implementation never touches it.
+    """
+
+    class FakeResult:
+        def scalar_one_or_none(self):
+            return uuid.uuid4()
+
+    class CompilingSession:
+        def get(self, _model, _key):
+            return SimpleNamespace(discussion="Four literal words here.", star_rating=4)
+
+        def execute(self, statement):
+            return FakeResult()
+
+        def commit(self):
+            pass
+
+    assert svc.record_checkpoint(
+        CompilingSession(),
+        _service_checkpoint(),
+        _user_identity(),
+        country=None,
+        user_agent=None,
+    )
 
 
 @requires_db
