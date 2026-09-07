@@ -129,6 +129,17 @@ def retention_review(db):
         display_name="Retention Fixture",
     )
     product = Product(id=RETENTION_PRODUCT_ID, canonical_name="Retention Fixture Product")
+    # Flushed before the review is even constructed. `Review.author_id` is a
+    # bare FK column with no declared `relationship()`, so SQLAlchemy's
+    # unit-of-work has no dependency edge telling it `users` must be inserted
+    # before `reviews` — batching them in one `add_all`/`commit` lets it flush
+    # them in the wrong order and fail with a FK violation on a genuinely
+    # empty table. Flushing the parents first (the pattern `make_user` +
+    # `test_affiliate_ingest.py` already use elsewhere in this suite) sidesteps
+    # the ordering question entirely: by the time `review` exists, its parents
+    # are already persisted rows, not just pending objects.
+    db.add_all([user, product])
+    db.flush()
     review = Review(
         id=RETENTION_REVIEW_ID,
         product_id=RETENTION_PRODUCT_ID,
@@ -138,7 +149,7 @@ def retention_review(db):
         verdict=Verdict.it_depends,
         star_rating=4,
     )
-    db.add_all([user, product, review])
+    db.add(review)
     db.commit()
     try:
         yield review

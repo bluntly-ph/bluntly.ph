@@ -298,6 +298,16 @@ def telemetry_context(db):
         display_name="Other Telemetry Reader",
     )
     product = Product(id=PRODUCT_ID, canonical_name="Telemetry Fixture Product")
+    # Flushed before either review is constructed. `Review.author_id`/
+    # `product_id` are bare FK columns with no declared `relationship()`, so
+    # SQLAlchemy's unit-of-work has no dependency edge forcing `users`/
+    # `products` to insert before `reviews` — batching all five objects into
+    # one `add_all`/`commit` lets it flush them in the wrong order and fail
+    # with a FK violation on a genuinely empty table. Flushing the parents
+    # first (the pattern `make_user` + `test_affiliate_ingest.py` already use
+    # elsewhere in this suite) sidesteps the ordering question entirely.
+    db.add_all([user, other_user, product])
+    db.flush()
     review = Review(
         id=REVIEW_ID,
         product_id=PRODUCT_ID,
@@ -316,7 +326,7 @@ def telemetry_context(db):
         verdict=Verdict.hard_pass,
         star_rating=2,
     )
-    db.add_all([user, other_user, product, review, other_review])
+    db.add_all([review, other_review])
     db.commit()
     try:
         yield SimpleNamespace(

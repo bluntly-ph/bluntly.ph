@@ -165,6 +165,30 @@ def export_fixture(db):
         clean()
 
 
+def _rows_matching(header: list[str], data_rows: list[list[str]], **key_values: str) -> list[dict]:
+    """Data rows (as `dict`s keyed by header) whose named columns equal the
+    given values, converted to `str` for comparison against raw CSV text.
+
+    The isolated-database test project is shared and cumulative -- it is
+    reused across every CI run rather than recreated per run (see
+    `.github/workflows/ci.yml`'s "Backend (isolated database)" job) -- so an
+    export scanning a `since_days` time window with no id filter of its own
+    will legitimately see rows other tests, and other CI runs, have left
+    inside that same window. Asserting an export's *total* row count or
+    reading `rows[1]` positionally both assume the table holds only this
+    fixture's data, which is not a safe assumption here. Filtering by this
+    fixture's own ids fixes that: the fixture deletes by those exact ids on
+    both setup and teardown, so a row matching them can only be one this
+    fixture itself created.
+    """
+    matches = []
+    for row in data_rows:
+        record = dict(zip(header, row, strict=True))
+        if all(record.get(key) == str(value) for key, value in key_values.items()):
+            matches.append(record)
+    return matches
+
+
 # --- Step 4, case 1: export writes only its named file and no database row --
 
 
@@ -201,18 +225,24 @@ def test_export_readings_writes_only_the_named_file_and_touches_no_row(
     assert db.scalar(select(func.count()).select_from(Review)) == before_reviews
 
     assert list(tmp_path.iterdir()) == [out_path]
-    assert result.rows_written == 1
-
+    # Not `result.rows_written == 1`: the isolated-database test project is
+    # shared and cumulative (reused across CI runs, not recreated per run),
+    # so other tests' reading-session rows from the last 7 days legitimately
+    # appear in this same export. What this test owns and can assert on is
+    # its own review's row, found by id rather than by position.
     with open(out_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
     assert rows[0] == export_module.READINGS_HEADER
-    data = dict(zip(rows[0], rows[1], strict=True))
-    assert data["review_id"] == str(EXPORT_REVIEW_ID)
+    assert result.rows_written == len(rows) - 1
+    assert "reader_ref" not in rows[0] and "anon_ref" not in rows[0]
+
+    matches = _rows_matching(rows[0], rows[1:], review_id=EXPORT_REVIEW_ID)
+    assert len(matches) == 1, f"expected exactly one row for {EXPORT_REVIEW_ID}, found {matches}"
+    data = matches[0]
     assert data["reader_kind"] == "anon"
     assert data["country"] == "PH"
     assert data["active_ms"] == "12345"
     assert data["word_count_at_view"] == "42"
-    assert "reader_ref" not in rows[0] and "anon_ref" not in rows[0]
 
 
 # --- Step 4, case 2: relationship export ignores the 31st-older review ------
@@ -251,8 +281,13 @@ def test_relationship_export_ignores_an_authors_31st_older_review(
         rows = list(csv.reader(handle))
 
     assert rows[0] == export_module.RELATIONSHIPS_HEADER
-    assert rows[1:] == []
-    assert result.rows_written == 0
+    assert result.rows_written == len(rows) - 1
+    # Not `rows[1:] == []`: the isolated-database test project is shared and
+    # cumulative, so other authors' rows from the last 90 days legitimately
+    # appear here too. What this test owns is that ITS author -- who has a
+    # vote only on the 31st-oldest review, excluded by RELATIONSHIP_WINDOW --
+    # produces no row at all, for any voter.
+    assert _rows_matching(rows[0], rows[1:], author_id=EXPORT_AUTHOR_ID) == []
 
 
 @requires_db
@@ -293,8 +328,12 @@ def test_relationship_export_excludes_an_authors_review_outside_the_since_days_w
     with open(out_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
 
-    assert rows[1:] == []
-    assert result.rows_written == 0
+    assert result.rows_written == len(rows) - 1
+    # Not `rows[1:] == []`: see the 31st-review test above for why a global
+    # emptiness assertion is unsafe against the shared test database. The
+    # author DOES qualify (their recent review is in-window), but their
+    # only vote sits on the excluded old review, so no row for them exists.
+    assert _rows_matching(rows[0], rows[1:], author_id=EXPORT_AUTHOR_ID) == []
 
 
 @requires_db
@@ -324,8 +363,12 @@ def test_relationship_export_excludes_a_vote_cast_before_the_since_days_window(
     with open(out_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
 
-    assert rows[1:] == []
-    assert result.rows_written == 0
+    assert result.rows_written == len(rows) - 1
+    # Not `rows[1:] == []`: see the 31st-review test above for why a global
+    # emptiness assertion is unsafe against the shared test database. The
+    # review is in-window, but the vote's own `created_at` predates the
+    # cutoff, so the tally must exclude it and no row for this author exists.
+    assert _rows_matching(rows[0], rows[1:], author_id=EXPORT_AUTHOR_ID) == []
 
 
 @requires_db
@@ -351,10 +394,17 @@ def test_relationship_export_counts_a_vote_inside_the_window(
     with open(out_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
 
-    assert result.rows_written == 1
-    data = dict(zip(rows[0], rows[1], strict=True))
-    assert data["author_id"] == str(EXPORT_AUTHOR_ID)
-    assert data["voter_id"] == str(EXPORT_VOTER_ID)
+    assert result.rows_written == len(rows) - 1
+    # Not `result.rows_written == 1`: at `since_days=90` the export legitimately
+    # also picks up every other author/voter pair the shared test database has
+    # accumulated within the last 90 days, across every other test and every
+    # prior CI run. This fixture's own (author, voter) pair is what the test
+    # can actually assert on.
+    matches = _rows_matching(
+        rows[0], rows[1:], author_id=EXPORT_AUTHOR_ID, voter_id=EXPORT_VOTER_ID)
+    assert len(matches) == 1, (
+        f"expected exactly one row for ({EXPORT_AUTHOR_ID}, {EXPORT_VOTER_ID}), found {matches}")
+    data = matches[0]
     assert data["voted"] == "1"
     assert data["eligible"] == "1"
 

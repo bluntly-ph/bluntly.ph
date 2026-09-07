@@ -70,6 +70,16 @@ def vote_context(db):
         display_name="Vote Telemetry Voter",
     )
     product = Product(id=PRODUCT_ID, canonical_name="Vote Telemetry Fixture Product")
+    # Flushed before the review is constructed. `Review.author_id`/
+    # `product_id` are bare FK columns with no declared `relationship()`, so
+    # SQLAlchemy's unit-of-work has no dependency edge forcing `users`/
+    # `products` to insert before `reviews` — batching all four objects into
+    # one `add_all`/`commit` lets it flush them in the wrong order and fail
+    # with a FK violation on a genuinely empty table. Flushing the parents
+    # first (the pattern `make_user` + `test_affiliate_ingest.py` already use
+    # elsewhere in this suite) sidesteps the ordering question entirely.
+    db.add_all([author, voter, product])
+    db.flush()
     review = Review(
         id=REVIEW_ID,
         product_id=PRODUCT_ID,
@@ -80,7 +90,7 @@ def vote_context(db):
         star_rating=4,
         published_at=datetime.now(UTC) - timedelta(days=1),
     )
-    db.add_all([author, voter, product, review])
+    db.add(review)
     db.commit()
     try:
         yield SimpleNamespace(author=author, voter=voter, review=review)
