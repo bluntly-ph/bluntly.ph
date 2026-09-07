@@ -171,18 +171,25 @@ export function reviewIdLabel(review: { review_id: string | null; id: string }):
 }
 
 /**
- * How many reports were filed against this review.
+ * How many reports were filed against this review, or `null` when this console
+ * cannot tell.
  *
  * Reports are already fetched for the Report tab, so this costs no request.
  * `target_ref` holds either the UUID or the human reference depending on how
  * the report was filed — `admin_overview_service._reported_review_ids` unions
  * both forms for exactly this reason, and matching only one would under-count.
+ * When a row matches, `target_report_count` is the backend's own total for
+ * that target, so it is exact and is returned as-is.
  *
- * `target_report_count` is the backend's own total for that target, so it is
- * preferred over counting rows. A review whose reports all fall outside the
- * 50-row report window reads as 0; the panel says so.
+ * NULL, NEVER ZERO, when nothing matches. The feed this searches is the 50
+ * most recent reports, and `getReports` returns an empty array when the fetch
+ * FAILS as well as when there is genuinely nothing. So "no matching row" has
+ * three possible causes — no reports exist, this review's reports fell outside
+ * the newest 50, or the request errored — and only the first would justify
+ * printing "0". Printing it anyway tells a moderator this review is unreported
+ * when it may be the most-reported one on the site.
  */
-export function reportCountFor(item: QueueCard, reports: ReportRow[]): number {
+export function reportCountFor(item: QueueCard, reports: ReportRow[]): number | null {
   const ids = new Set([item.review.id, item.review.review_id].filter(Boolean));
   for (const row of reports) {
     if (
@@ -192,7 +199,7 @@ export function reportCountFor(item: QueueCard, reports: ReportRow[]): number {
       return row.target_report_count;
     }
   }
-  return 0;
+  return null;
 }
 
 /* ------------------------------------------------------------- engagement */
@@ -210,6 +217,11 @@ const NO_COMMENT_SOURCE =
   "comment_count is served by GET /reviews/{id}/full, which the queue does " +
   "not call. The queue card carries no comment total.";
 
+const NO_REPORT_EVIDENCE =
+  "This console reads only the 50 most recent reports, and that partial feed " +
+  "names no report against this review. A failed reports request looks " +
+  "identical to an empty one, so absence here is not evidence of zero.";
+
 const NO_TOP_COMMENT =
   "Comments are returned oldest-first with no ranking parameter, so there is " +
   "no server-side notion of a top comment to show.";
@@ -221,12 +233,16 @@ const NO_TOP_COMMENT =
  * and the top comment have no source that reaches this screen, and say so.
  */
 export function engagementFor(item: QueueCard, reports: ReportRow[]) {
+  const reportCount = reportCountFor(item, reports);
+
   return {
     upvotes: item.review.helpful_votes,
     downvotes: item.review.unhelpful_votes,
     views: unavailable("Views", NO_VIEW_SOURCE),
     shares: unavailable("Shares", NO_SHARE_SOURCE),
-    reports: available("Reports", String(reportCountFor(item, reports))),
+    reports: reportCount === null
+      ? unavailable("Reports", NO_REPORT_EVIDENCE)
+      : available("Reports", String(reportCount)),
     comments: unavailable("Comments", NO_COMMENT_SOURCE),
     topComment: unavailable("Top comment", NO_TOP_COMMENT),
   };
@@ -289,3 +305,64 @@ export const FLAGGED_VOTERS_UNAVAILABLE =
 export const REVERSE_IMAGE_SEARCH_UNAVAILABLE =
   "FR-8 layer 3 names no provider. Nothing in this build performs reverse " +
   "image search or plagiarism scoring.";
+
+/* ------------------------------------------------- selection and tab links */
+
+/** The console's four tabs, in the order frame 5017:3758 draws them. */
+export type Tab = "reviews" | "answers" | "report" | "support";
+
+const TAB_KEYS: Tab[] = ["reviews", "answers", "report", "support"];
+
+export const QUEUE_ROUTE = "/moderate/review-queue";
+
+export function isTab(value: string | null | undefined): value is Tab {
+  return typeof value === "string" && (TAB_KEYS as string[]).includes(value);
+}
+
+/**
+ * The row the detail panel shows.
+ *
+ * Chosen from the rows CURRENTLY VISIBLE, never from the whole queue. Picking
+ * from the full source let the panel keep describing a review that the active
+ * filter or the current page had scrolled away — a moderator reading the
+ * evidence for one review while the table highlighted none of it, which is
+ * exactly how the wrong review gets actioned.
+ */
+export function selectVisibleQueueItem<T extends QueueCard>(
+  visible: T[],
+  selectedId: string | null,
+): T | null {
+  if (visible.length === 0) return null;
+  return visible.find((row) => row.review.id === selectedId) ?? visible[0];
+}
+
+/**
+ * Where a tab points.
+ *
+ * The tabs are links, not local state. `AdminShell` titles the page from
+ * `?tab` and `AdminNav` highlights its Q&A entry by matching `tab=answers`, so
+ * a tab held only in component state left the heading and the rail describing
+ * a different tab than the one on screen — and made the view unshareable.
+ * The URL is the single source of truth; these hrefs are how it changes.
+ *
+ * The active priority filter rides along so switching tabs and coming back
+ * does not silently widen what the moderator is looking at.
+ */
+export function tabHref(tab: Tab, priority: Priority | ""): string {
+  const params = new URLSearchParams({ tab });
+  if (priority) params.set("priority", priority.toLowerCase());
+  return `${QUEUE_ROUTE}?${params.toString()}`;
+}
+
+/**
+ * The short label on the Voting Distribution panel.
+ *
+ * Wording matters here. `review_first_vote_geo_buckets` DOES record per-review
+ * vote geography — `request_traffic_service.record_first_vote_geo` writes a row
+ * on every newly created vote. What does not exist is a read path. Saying the
+ * data is "not measured" states the opposite of the truth about what this
+ * product collects, which is the wrong answer to give anyone asking a privacy
+ * or retention question.
+ */
+export const VOTING_GEOGRAPHY_SHORT =
+  "Collected per review, but not served to this console.";

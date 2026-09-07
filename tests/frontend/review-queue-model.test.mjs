@@ -11,6 +11,9 @@ import {
   relativeAge,
   reportCountFor,
   reviewIdLabel,
+  selectVisibleQueueItem,
+  tabHref,
+  VOTING_GEOGRAPHY_SHORT,
 } from "../../components/admin/review-queue-model.ts";
 
 /**
@@ -299,12 +302,12 @@ test("reportCountFor also matches a report filed against the human reference", (
   assert.equal(reportCountFor(item(), [byHumanRef]), 3);
 });
 
-test("reportCountFor is zero when no report targets this review", () => {
+test("reportCountFor is unavailable when the partial feed has no matching target", () => {
   const elsewhere = report({
     report: { target_ref: "rev_zzzzzzzzzz" },
     target: { id: "another-review" },
   });
-  assert.equal(reportCountFor(item(), [elsewhere]), 0);
+  assert.equal(reportCountFor(item(), [elsewhere]), null);
 });
 
 /* ------------------------------------------------------------- engagement */
@@ -319,6 +322,28 @@ test("engagementFor reports per-review reports from the loaded report feed", () 
   const stats = engagementFor(item(), [report()]);
   assert.equal(stats.reports.available, true);
   assert.equal(stats.reports.value, "3");
+});
+
+test("engagementFor never turns absence from a partial report feed into zero", () => {
+  const stats = engagementFor(item(), []);
+  assert.equal(stats.reports.available, false);
+  assert.match(stats.reports.reason, /partial|available/i);
+});
+
+test("selectVisibleQueueItem cannot retain a detail outside the visible page", () => {
+  const first = item({ review: { id: "first" } });
+  const second = item({ review: { id: "second" } });
+  assert.equal(selectVisibleQueueItem([first], "second")?.review.id, "first");
+  assert.equal(selectVisibleQueueItem([], "second"), null);
+  // The same id IS honoured once that row is on the visible page, which is
+  // what makes the fallback above a filter/paging rule rather than the
+  // selection being ignored outright.
+  assert.equal(selectVisibleQueueItem([first, second], "second")?.review.id, "second");
+});
+
+test("tabHref makes the URL the shareable source of truth", () => {
+  assert.equal(tabHref("answers", "High"), "/moderate/review-queue?tab=answers&priority=high");
+  assert.equal(tabHref("reviews", ""), "/moderate/review-queue?tab=reviews");
 });
 
 test("engagementFor marks views, shares and comments unavailable rather than zero", () => {
@@ -393,4 +418,13 @@ test("authorTrustStats survives a queue card whose author was deleted", () => {
   assert.equal(byLabel["Trust Score"].available, false);
   // The signals block is author-independent, so it still resolves.
   assert.equal(byLabel["Total Reviews"].value, "15");
+});
+
+test("the geography label does not claim vote geography goes unrecorded", () => {
+  // `review_first_vote_geo_buckets` DOES store per-review vote geography — it
+  // is written on every first vote. What is missing is a read path. Saying it
+  // is "not measured" tells a moderator the opposite of the truth, and would
+  // send anyone chasing a retention or privacy question to the wrong place.
+  assert.doesNotMatch(VOTING_GEOGRAPHY_SHORT, /not (measured|collected|recorded|tracked)/i);
+  assert.match(VOTING_GEOGRAPHY_SHORT, /collected|recorded|stored/i);
 });

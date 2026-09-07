@@ -6,6 +6,7 @@ import {
   answerTabLabel,
   qaAuthorStats,
   questionRows,
+  questionEmptyMessage,
   selectAnswer,
 } from "../../components/admin/qa-answers-model.ts";
 
@@ -155,4 +156,10 @@ test("questionRows tolerates a question whose product and asker are missing", ()
   const orphan = question({ id: "x", product_name: null, asker: null });
   assert.deepEqual(questionRows([orphan], "anything").map((q) => q.id), []);
   assert.deepEqual(questionRows([orphan], "").map((q) => q.id), ["x"]);
+});
+
+test("questionEmptyMessage distinguishes an outage from a truly empty queue", () => {
+  assert.equal(questionEmptyMessage(null, 0), "Questions are temporarily unavailable.");
+  assert.equal(questionEmptyMessage([], 0), "No questions have been asked yet.");
+  assert.equal(questionEmptyMessage([question()], 0), "No question matches this search.");
 });

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowFatDown,
@@ -26,6 +27,7 @@ import type { QaQuestion } from "@/components/admin/qa-answers-model";
 import {
   FLAGGED_VOTERS_UNAVAILABLE,
   REVERSE_IMAGE_SEARCH_UNAVAILABLE,
+  VOTING_GEOGRAPHY_SHORT,
   VOTING_GEOGRAPHY_UNAVAILABLE,
   accountAgeLabel,
   authorTrustStats,
@@ -35,8 +37,12 @@ import {
   queueRows,
   relativeAge,
   reviewIdLabel,
+  selectVisibleQueueItem,
+  tabHref,
+  isTab,
   type Priority,
   type Stat,
+  type Tab,
 } from "@/components/admin/review-queue-model";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { QueueItem, ReportItem } from "@/lib/moderation";
@@ -66,8 +72,6 @@ import type { QueueItem, ReportItem } from "@/lib/moderation";
  * A "0" in any of those cells would read as a measurement. On a fraud-review
  * screen that is the one mistake worth designing against.
  */
-
-type Tab = "reviews" | "answers" | "report" | "support";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "reviews", label: "Reviews" },
@@ -105,7 +109,7 @@ export function ReviewQueueScreen({
   pending: QueueItem[];
   edited: QueueItem[];
   reports: ReportItem[];
-  questions: QaQuestion[];
+  questions: QaQuestion[] | null;
   initialTab: Tab;
   initialPriority: Priority | null;
   /**
@@ -120,7 +124,14 @@ export function ReviewQueueScreen({
    */
   now: number;
 }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  // The URL is the single source of truth for which tab is showing, so the
+  // shell's heading, AdminNav's highlight and this component can never
+  // disagree, and the view a moderator is looking at is the view they can
+  // paste to someone else. The tabs below are links that change it.
+  const searchParams = useSearchParams();
+  const urlTab = searchParams?.get("tab") ?? null;
+  const tab: Tab = isTab(urlTab) ? urlTab : initialTab;
+
   const [list, setList] = useState<QueueList>("in_review");
   const [query, setQuery] = useState("");
   const [priority, setPriority] = useState<Priority | "">(initialPriority ?? "");
@@ -139,7 +150,7 @@ export function ReviewQueueScreen({
   );
 
   const { visible, pageCount, current, firstIndex, lastIndex } = paginate(rows, pageSize, page);
-  const selected = source.find((i) => i.review.id === selectedId) ?? visible[0] ?? null;
+  const selected = selectVisibleQueueItem(visible, selectedId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -150,14 +161,14 @@ export function ReviewQueueScreen({
           const count =
             t.key === "reviews" ? pending.length
             : t.key === "report" ? reports.length
-            : t.key === "answers" ? questions.length
+            : t.key === "answers" ? (questions?.length ?? 0)
             : 0;
 
           return (
-            <button
+            <Link
               key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
+              href={tabHref(t.key, priority)}
+              scroll={false}
               aria-current={tab === t.key ? "page" : undefined}
               className={`rounded-[var(--radius-sm)] px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
                 tab === t.key
@@ -167,7 +178,7 @@ export function ReviewQueueScreen({
             >
               {t.label}
               {count > 0 ? <span className="ml-1.5 text-[11px] opacity-70">{count}</span> : null}
-            </button>
+            </Link>
           );
         })}
       </div>
@@ -711,7 +722,7 @@ function ReviewDetail({
             <Metric
               stat={engagement.reports}
               icon={<Flag size={16} className="text-[var(--accent-danger)]" />}
-              hint="Counted from the 50 most recent reports this console loaded."
+              hint="The backend's own total for this review, found in the loaded report feed."
             />
             <Metric stat={engagement.comments} icon={<ChatCircle size={16} />} />
           </div>
@@ -745,7 +756,7 @@ function ReviewDetail({
             aria-hidden="true"
           />
           <p className="text-[10px] leading-snug text-[var(--text-secondary)]">
-            Not measured per review.{" "}
+            {VOTING_GEOGRAPHY_SHORT}{" "}
             <Link
               href="/moderate/analytics"
               className="underline hover:text-[var(--accent-primary)]"

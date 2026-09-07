@@ -168,3 +168,22 @@ export function questionRows<T extends QaQuestion>(rows: T[], query: string): T[
       (q.asker?.username ?? "").toLowerCase().includes(needle),
   );
 }
+
+/**
+ * What to say when the question list shows nothing.
+ *
+ * `getQuestions` returns `null` when the Q&A request failed, and the page used
+ * to collapse that into an empty array — so an API outage rendered "No
+ * questions have been asked yet.", telling a moderator the queue was clear
+ * when it was simply unreadable. An outage and an empty queue are different
+ * facts and must read differently.
+ */
+export function questionEmptyMessage(
+  questions: QaQuestion[] | null,
+  matchCount: number,
+): string {
+  if (matchCount > 0) return "";
+  if (questions === null) return "Questions are temporarily unavailable.";
+  if (questions.length === 0) return "No questions have been asked yet.";
+  return "No question matches this search.";
+}

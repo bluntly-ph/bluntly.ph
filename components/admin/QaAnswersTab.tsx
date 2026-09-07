@@ -8,6 +8,7 @@ import {
   answerPhotos,
   answerTabLabel,
   qaAuthorStats,
+  questionEmptyMessage,
   questionRows,
   selectAnswer,
   type QaAuthor,
@@ -49,16 +50,21 @@ export function QaAnswersTab({
   questions,
   now,
 }: {
-  questions: QaQuestion[];
+  /**
+   * `null` means the Q&A request failed, which is NOT the same as "no
+   * questions" and must not read like it. See `questionEmptyMessage`.
+   */
+  questions: QaQuestion[] | null;
   /** The server's render instant — see ReviewQueueScreen's `now`. */
   now: number;
 }) {
   const [query, setQuery] = useState("");
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(
-    questions[0]?.id ?? null,
+    questions?.[0]?.id ?? null,
   );
 
-  const rows = questionRows(questions, query);
+  const rows = questionRows(questions ?? [], query);
+  const emptyMessage = questionEmptyMessage(questions, rows.length);
   const selectedId =
     rows.some((q) => q.id === selectedQuestionId) ? selectedQuestionId : (rows[0]?.id ?? null);
 
@@ -72,7 +78,7 @@ export function QaAnswersTab({
           Questions and their answers
         </h2>
 
-        <div className="shrink-0 px-4 pt-4">
+        <div className="shrink-0 px-4 pt-4" hidden={questions === null}>
           <div className="relative w-full max-w-[18rem]">
             <MagnifyingGlass
               size={16}
@@ -91,10 +97,15 @@ export function QaAnswersTab({
 
         <div className="min-h-0 flex-1 overflow-auto p-2">
           {rows.length === 0 ? (
-            <p className="px-2 py-12 text-center text-[13px] text-[var(--text-secondary)]">
-              {questions.length === 0
-                ? "No questions have been asked yet."
-                : "No question matches this search."}
+            <p
+              role={questions === null ? "alert" : undefined}
+              className={`px-2 py-12 text-center text-[13px] ${
+                questions === null
+                  ? "text-[var(--accent-danger)]"
+                  : "text-[var(--text-secondary)]"
+              }`}
+            >
+              {emptyMessage}
             </p>
           ) : (
             <ul className="flex flex-col">

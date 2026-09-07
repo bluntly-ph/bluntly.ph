@@ -41,7 +41,9 @@ export default async function ReviewQueuePage({
   // the answer count and the trust of everyone involved, and the per-question
   // detail is fetched through the BFF only for the row a moderator opens.
   // `getQuestions` returns null when the API is unreachable — a failing Q&A
-  // list must not blank the review queue, same defence as `getReports`.
+  // list must not blank the review queue, same defence as `getReports`. That
+  // null is passed THROUGH rather than flattened to []: an outage and an empty
+  // queue are different facts, and the tab says which one it is.
   const [{ pending, edited, fetchedAt }, reports, questions] = await Promise.all([
     getQueue(),
     getReports(),
@@ -53,7 +55,7 @@ export default async function ReviewQueuePage({
       pending={pending}
       edited={edited}
       reports={reports}
-      questions={questions ?? []}
+      questions={questions}
       initialTab={tab}
       initialPriority={priority}
       now={fetchedAt}
