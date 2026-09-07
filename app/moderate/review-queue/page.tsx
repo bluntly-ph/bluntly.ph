@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { ReviewQueueScreen } from "@/components/admin/ReviewQueueScreen";
 import { getQueue, getReports } from "@/lib/moderation";
+import { getQuestions } from "@/lib/qa";
 
 export const metadata: Metadata = {
   title: "Review queue — bluntly admin",
@@ -35,15 +36,27 @@ export default async function ReviewQueuePage({
           ? "Low"
           : null;
 
-  const [{ pending, edited }, reports] = await Promise.all([getQueue(), getReports()]);
+  // The Answers tab reads the public Q&A endpoints. There is no `/admin` Q&A
+  // route and this needs none: `GET /questions` already returns the asker,
+  // the answer count and the trust of everyone involved, and the per-question
+  // detail is fetched through the BFF only for the row a moderator opens.
+  // `getQuestions` returns null when the API is unreachable — a failing Q&A
+  // list must not blank the review queue, same defence as `getReports`.
+  const [{ pending, edited, fetchedAt }, reports, questions] = await Promise.all([
+    getQueue(),
+    getReports(),
+    getQuestions(),
+  ]);
 
   return (
     <ReviewQueueScreen
       pending={pending}
       edited={edited}
       reports={reports}
+      questions={questions ?? []}
       initialTab={tab}
       initialPriority={priority}
+      now={fetchedAt}
     />
   );
 }

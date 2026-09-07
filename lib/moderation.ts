@@ -107,17 +107,32 @@ export async function getReports(): Promise<ReportItem[]> {
 export async function getQueue(): Promise<{
   pending: QueueItem[];
   edited: QueueItem[];
+  /**
+   * When this queue was read, as epoch milliseconds.
+   *
+   * The screen writes every timestamp as "3s ago", and it renders on the
+   * server before it hydrates on the client. Reading the clock inside the
+   * component would give those two renders different answers and tear the
+   * table's hydration; reading it once here, where the data is fetched, gives
+   * the whole page one consistent "as of". It also belongs to the data rather
+   * than to the render — these ages are relative to the fetch, not to now.
+   */
+  fetchedAt: number;
 }> {
   const token = await getSessionToken();
-  if (!token) return { pending: [], edited: [] };
+  if (!token) return { pending: [], edited: [], fetchedAt: Date.now() };
   try {
     const res = await apiFetch<{
       pending: QueueItem[];
       edited_since_monetized: QueueItem[];
     }>("/api/v1/admin/review-queue?limit=50", { token });
-    return { pending: res.pending, edited: res.edited_since_monetized };
+    return {
+      pending: res.pending,
+      edited: res.edited_since_monetized,
+      fetchedAt: Date.now(),
+    };
   } catch {
-    return { pending: [], edited: [] };
+    return { pending: [], edited: [], fetchedAt: Date.now() };
   }
 }
 
