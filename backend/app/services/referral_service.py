@@ -11,11 +11,13 @@ only this module's internals change.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.errors import AppError
@@ -31,7 +33,29 @@ from app.models.moderation import ModerationLog
 from app.models.product import Product, ProductPlatform
 from app.models.review import ReferralLink, Review
 from app.models.session import Session as ClickSession
+from app.models.user import User
+from app.schemas.referral import (
+    QueueAuthor,
+    QueueCounts,
+    QueueItem,
+    QueuePage,
+    QueuePlatform,
+    QueuePriorityAssessment,
+    QueuePriorityFactor,
+    QueueProduct,
+    QueueSignals,
+)
+from app.schemas.review import ReviewOut
+from app.services import fraud_service, report_service
 from app.services.contract_service import ensure_contract
+from app.services.moderation_priority import (
+    PriorityAssessment,
+    PriorityBand,
+    PriorityFacts,
+    PriorityLane,
+    SlaState,
+    evaluate_priority,
+)
 from app.services.pii import retention_deadlines
 from app.services.review_service import recompute_product_aggregates
 from app.services.trust_service import recompute_user_trust
@@ -321,6 +345,298 @@ def get_queue(db: Session, limit: int = 50, offset: int = 0) -> tuple[list[Revie
                Review.is_removed.is_(False))
         .order_by(Review.updated_at.desc())))
     return pending, edited
+
+
+# --- Canonical, server-side prioritized queue (design §5) ------------------- #
+#
+# `get_queue` above is the pre-priority view: pending sorted by age, edited by
+# recency, each paged in SQL. It stays for the deprecated `pending` /
+# `edited_since_monetized` response arrays. The prioritized queue below loads the
+# WHOLE backlog, runs the pure policy evaluator on every candidate, and only then
+# orders and pages — so a high-priority review is on page one even when it was
+# created after the first fifty.
+
+_QueueKind = Literal["pending", "edited"]
+
+_BASIS_FOR_KIND: dict[_QueueKind, Literal["review_created_at", "review_updated_at"]] = {
+    "pending": "review_created_at",
+    "edited": "review_updated_at",
+}
+
+
+@dataclass(frozen=True)
+class QueueQuery:
+    """Server-side filters + paging for the prioritized review queue.
+
+    Ordering is by policy alone (assessment order key, then review id); ``offset``
+    only picks which already-ordered slice to return. ``cursor`` is accepted for
+    forward compatibility and unused in this slice.
+    """
+
+    band: PriorityBand | None = None
+    lane: PriorityLane | None = None
+    sla: SlaState | None = None
+    factor: str | None = None
+    q: str | None = None
+    limit: int = 50
+    offset: int = 0
+    cursor: str | None = None
+
+
+@dataclass(frozen=True)
+class _AssessedCard:
+    review_id: uuid.UUID
+    kind: _QueueKind
+    item: QueueItem
+    order_key: tuple
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    """DB timestamps are ``timestamptz`` (aware); coerce any stray naive value to
+    UTC so the pure evaluator never rejects a real queue candidate."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def assessment_to_queue_schema(assessment: PriorityAssessment) -> QueuePriorityAssessment:
+    """Map the pure-policy dataclass onto the wire schema (design §5). The
+    internal ``order_key`` is deliberately not serialized — ordering is the
+    server's job, not the client's."""
+    return QueuePriorityAssessment(
+        policy_version=assessment.policy_version,
+        lane=assessment.lane,
+        score=assessment.integrity_score,
+        band=assessment.band,
+        sla_state=assessment.sla_state,
+        due_at=assessment.due_at,
+        factors=[
+            QueuePriorityFactor(
+                code=factor.code,
+                observed=factor.observed,
+                contribution=factor.contribution,
+                explanation=factor.explanation,
+            )
+            for factor in assessment.factors
+        ],
+    )
+
+
+def _all_queue_candidates(db: Session) -> list[tuple[Review, _QueueKind]]:
+    """Every review currently in the moderator queue, unpaginated.
+
+    Same membership rules as ``get_queue``, without its limit/offset: the
+    prioritized queue must see the whole backlog to place work correctly.
+    """
+    pending = db.scalars(
+        select(Review).where(
+            Review.earn_eligible_status == EarnEligibleStatus.pending,
+            Review.published_at.is_(None),
+            Review.is_removed.is_(False),
+        )
+    ).all()
+    edited = db.scalars(
+        select(Review)
+        .join(ReferralLink, ReferralLink.review_id == Review.id)
+        .where(
+            Review.earn_eligible_status == EarnEligibleStatus.monetized,
+            ReferralLink.status == ReferralLinkStatus.active,
+            Review.current_version > ReferralLink.review_version,
+            Review.is_removed.is_(False),
+        )
+    ).all()
+    # Disjoint by construction: `pending` status vs `monetized` status.
+    return [(r, "pending") for r in pending] + [(r, "edited") for r in edited]
+
+
+def _build_assessed_cards(
+    db: Session,
+    reviews: list[tuple[Review, _QueueKind]],
+    *,
+    now: datetime | None = None,
+) -> list[_AssessedCard]:
+    """Build one queue card + priority assessment per (review, kind).
+
+    Batched: one products(+platforms) query, one authors query, one report-facts
+    batch. Fraud signals stay per-review — they are already bounded (3 queries
+    each, see ``fraud_service``) and match the existing queue's cost model.
+    """
+    evaluated_at = _ensure_utc(now) if now is not None else datetime.now(UTC)
+    if not reviews:
+        return []
+
+    product_ids = {review.product_id for review, _ in reviews}
+    products = {
+        product.id: product
+        for product in db.scalars(
+            select(Product)
+            .options(selectinload(Product.platforms))
+            .where(Product.id.in_(product_ids))
+        )
+    }
+    author_ids = {review.author_id for review, _ in reviews if review.author_id}
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        authors = {
+            user.id: user
+            for user in db.scalars(select(User).where(User.id.in_(author_ids)))
+        }
+
+    report_facts = report_service.report_facts_by_target(
+        db, ModerationTargetType.review, [review.id for review, _ in reviews]
+    )
+
+    cards: list[_AssessedCard] = []
+    for review, kind in reviews:
+        product = products.get(review.product_id)
+        author = authors.get(review.author_id) if review.author_id else None
+        signals = fraud_service.compute_signals(db, review, author)
+        edited = kind == "edited"
+
+        # Temporary queue-entry-time approximation (no lifecycle column yet):
+        # creation for an initial pending review, last edit for an edited one.
+        queued_at = _ensure_utc(
+            review.created_at if kind == "pending" else review.updated_at
+        )
+        facts = report_facts.get(review.id, report_service.NO_REPORTS)
+        assessment = evaluate_priority(
+            PriorityFacts(
+                queued_at=queued_at,
+                report_count=facts.count,
+                report_reasons=facts.reasons,
+                edited_since_monetized=edited,
+                velocity=signals["velocity"],
+                collusion=signals["collusion"],
+                duplicate_content=signals["duplicate_content"],
+                manually_escalated=False,
+            ),
+            now=evaluated_at,
+        )
+
+        platforms = list(product.platforms) if product is not None else []
+        item = QueueItem(
+            review=ReviewOut.model_validate(review),
+            product=QueueProduct(
+                id=product.id if product is not None else review.product_id,
+                canonical_name=product.canonical_name if product is not None else None,
+                source_url=product.source_url if product is not None else None,
+                platforms=[
+                    QueuePlatform(platform=p.platform, is_monetizable=p.is_monetizable)
+                    for p in platforms
+                ],
+            ),
+            author=(
+                QueueAuthor(
+                    id=author.id,
+                    display_name=author.display_name,
+                    trust_stage=author.trust_stage,
+                    reputation_score=author.reputation_score,
+                )
+                if author is not None
+                else None
+            ),
+            suggested_platform=suggested_platform_from(product, platforms),
+            edited_since_monetized=edited,
+            signals=QueueSignals(**signals),
+            priority=assessment_to_queue_schema(assessment),
+            queue_time_basis=_BASIS_FOR_KIND[kind],
+            suggested_sub_id=sub_id_for_review(review.id),
+        )
+        cards.append(
+            _AssessedCard(
+                review_id=review.id,
+                kind=kind,
+                item=item,
+                order_key=assessment.order_key,
+            )
+        )
+    return cards
+
+
+def _card_matches(card: _AssessedCard, query: QueueQuery) -> bool:
+    priority = card.item.priority
+    if query.band is not None and priority.band != query.band:
+        return False
+    if query.lane is not None and priority.lane != query.lane:
+        return False
+    if query.sla is not None and priority.sla_state != query.sla:
+        return False
+    if query.factor is not None and query.factor not in {f.code for f in priority.factors}:
+        return False
+    if query.q and query.q.strip():
+        needle = query.q.strip().lower()
+        haystack = " ".join(
+            part
+            for part in (
+                card.item.review.title,
+                card.item.review.discussion,
+                card.item.product.canonical_name,
+            )
+            if part
+        ).lower()
+        if needle not in haystack:
+            return False
+    return True
+
+
+def _queue_counts(cards: list[_AssessedCard]) -> QueueCounts:
+    by_lane = {lane.value: 0 for lane in PriorityLane}
+    by_band = {band.value: 0 for band in PriorityBand}
+    by_sla = {state.value: 0 for state in SlaState}
+    for card in cards:
+        priority = card.item.priority
+        by_lane[priority.lane.value] += 1
+        by_band[priority.band.value] += 1
+        by_sla[priority.sla_state.value] += 1
+    return QueueCounts(
+        total=len(cards), by_lane=by_lane, by_band=by_band, by_sla=by_sla
+    )
+
+
+def _paginate_cards(cards: list[_AssessedCard], query: QueueQuery) -> QueuePage:
+    limit = max(1, min(query.limit, 100))
+    offset = max(0, query.offset)
+
+    filtered = [card for card in cards if _card_matches(card, query)]
+    # Policy order, then review id — a total order, so repeated calls are stable
+    # and `offset` is a pure index into an already-correct sequence.
+    filtered.sort(key=lambda card: (card.order_key, card.review_id))
+
+    counts = _queue_counts(filtered)
+    window = filtered[offset : offset + limit]
+    return QueuePage(
+        items=[card.item for card in window],
+        total=len(filtered),
+        next_cursor=None,
+        counts=counts,
+    )
+
+
+def get_prioritized_queue(
+    db: Session, query: QueueQuery, *, now: datetime | None = None
+) -> QueuePage:
+    """Evaluate the whole moderator backlog against the priority policy, apply
+    server filters, order by policy, then return the requested page (design §5).
+
+    Ordering correctness never depends on ``offset``; ``next_cursor`` is ``None``
+    in this compatibility slice.
+    """
+    cards = _build_assessed_cards(db, _all_queue_candidates(db), now=now)
+    return _paginate_cards(cards, query)
+
+
+def build_queue_items(
+    db: Session,
+    reviews: list[tuple[Review, _QueueKind]],
+    *,
+    now: datetime | None = None,
+) -> dict[uuid.UUID, QueueItem]:
+    """Queue cards (priority included) keyed by review id, for callers that keep
+    their own ordering — i.e. the deprecated pending/edited response arrays."""
+    return {
+        card.review_id: card.item
+        for card in _build_assessed_cards(db, reviews, now=now)
+    }
 
 
 def suggested_platform_from(product: Product | None,

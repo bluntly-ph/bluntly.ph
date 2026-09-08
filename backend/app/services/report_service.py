@@ -18,8 +18,10 @@ Two rules keep the queue meaningful:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
+from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -108,8 +110,6 @@ def report_counts(
     """How many distinct reports each target has, for badging the moderator queue."""
     if not target_refs:
         return {}
-    from sqlalchemy import func
-
     rows = db.execute(
         select(ModerationLog.target_ref, func.count(ModerationLog.id))
         .where(
@@ -120,3 +120,68 @@ def report_counts(
         .group_by(ModerationLog.target_ref)
     ).all()
     return {row[0]: row[1] for row in rows}
+
+
+@dataclass(frozen=True)
+class ReportFacts:
+    """The only report information the priority policy is allowed to see: how
+    many people flagged a target and which enum reasons they picked. Never the
+    notes, the evidence URLs, or who reported."""
+
+    count: int
+    reasons: frozenset[ModerationReason]
+
+
+#: Returned for a target that has no reports, so callers can index unconditionally.
+NO_REPORTS = ReportFacts(count=0, reasons=frozenset())
+
+
+def report_facts_by_target(
+    db: Session,
+    target_type: ModerationTargetType,
+    target_refs: Collection[uuid.UUID],
+) -> dict[uuid.UUID, ReportFacts]:
+    """Batch the report count and reason set for a bounded set of targets.
+
+    Two grouped queries over ``moderation_logs`` (action=report) — one counting
+    the distinct report rows, one collecting the distinct enum reasons. Targets
+    with no reports are simply absent from the result; use :data:`NO_REPORTS`
+    as the default. Nothing here loads a note, an evidence URL, or a
+    ``reporter_id``.
+    """
+    refs = list(dict.fromkeys(target_refs))
+    if not refs:
+        return {}
+
+    count_rows = db.execute(
+        select(ModerationLog.target_ref, func.count(ModerationLog.id))
+        .where(
+            ModerationLog.action == ModerationAction.report,
+            ModerationLog.target_type == target_type,
+            ModerationLog.target_ref.in_(refs),
+        )
+        .group_by(ModerationLog.target_ref)
+    ).all()
+    counts = {row[0]: row[1] for row in count_rows}
+
+    reasons: dict[uuid.UUID, set[ModerationReason]] = {}
+    reason_rows = db.execute(
+        select(ModerationLog.target_ref, ModerationLog.reason)
+        .where(
+            ModerationLog.action == ModerationAction.report,
+            ModerationLog.target_type == target_type,
+            ModerationLog.target_ref.in_(refs),
+            ModerationLog.reason.is_not(None),
+        )
+        .distinct()
+    ).all()
+    for target_ref, reason in reason_rows:
+        reasons.setdefault(target_ref, set()).add(reason)
+
+    return {
+        target_ref: ReportFacts(
+            count=count,
+            reasons=frozenset(reasons.get(target_ref, ())),
+        )
+        for target_ref, count in counts.items()
+    }

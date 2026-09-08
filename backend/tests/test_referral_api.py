@@ -1,8 +1,15 @@
 """Referral link flow (M2 slice 1) — publication gate, attach/publish/reject/revoke,
-attribution redirect, RBAC (integration)."""
+attribution redirect, RBAC (integration).
+
+Also the canonical priority-queue contract (Task 2): the prioritized `items`
+slice, its `counts`, server filters, and stable policy ordering.
+"""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
+from app.services.moderation_priority import PriorityBand, PriorityLane, SlaState
 from tests.conftest import owned_photo_url, register_and_token, requires_db
 
 SHOPEE_URL = "https://shopee.ph/product/abc-i.123.456"
@@ -249,3 +256,274 @@ def test_unpublish_does_not_leave_a_paying_link(client):
     assert client.post(f"/api/v1/admin/reviews/{rid}/unpublish", headers=mh,
                        json={}).status_code == 200
     assert client.get(f"/r/{rid}", follow_redirects=False).status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Canonical priority queue contract (Task 2)
+# --------------------------------------------------------------------------- #
+
+_NOW = datetime(2026, 9, 8, 12, 0, 0, tzinfo=UTC)
+
+
+def _assessed_card(review_id, order_key, *, band, lane, sla, kind="pending",
+                   title="card", discussion="body", product_name=None, factors=()):
+    """A hand-built ``referral_service._AssessedCard`` for the pure ordering/
+    filter/count helpers — no database, no evaluator."""
+    from app.schemas.referral import (
+        QueueItem,
+        QueuePriorityAssessment,
+        QueuePriorityFactor,
+        QueueProduct,
+    )
+    from app.schemas.review import ReviewOut
+    from app.services import referral_service
+
+    priority = QueuePriorityAssessment(
+        policy_version="review-priority-v1", lane=lane, score=0, band=band,
+        sla_state=sla, due_at=_NOW,
+        factors=[QueuePriorityFactor(code=c, observed=True, contribution=5,
+                                     explanation=c) for c in factors],
+    )
+    review = ReviewOut(
+        id=review_id, product_id=review_id, title=title, discussion=discussion,
+        verdict="it_depends", star_rating=3, verification_status="unverified",
+        current_version=1, earn_eligible_status="pending",
+        created_at=_NOW, updated_at=_NOW,
+    )
+    item = QueueItem(
+        review=review,
+        product=QueueProduct(id=review_id, canonical_name=product_name),
+        priority=priority,
+    )
+    return referral_service._AssessedCard(
+        review_id=review_id, kind=kind, item=item, order_key=order_key,
+    )
+
+
+def test_assessment_to_queue_schema_maps_every_field():
+    from app.models.enums import ModerationReason
+    from app.services.moderation_priority import PriorityFacts, evaluate_priority
+    from app.services.referral_service import assessment_to_queue_schema
+
+    facts = PriorityFacts(
+        queued_at=_NOW - timedelta(hours=6), report_count=4,
+        report_reasons=frozenset({ModerationReason.fake_proof}),
+        edited_since_monetized=True, velocity=True, collusion=False,
+        duplicate_content=False, manually_escalated=False,
+    )
+    assessment = evaluate_priority(facts, now=_NOW)
+    schema = assessment_to_queue_schema(assessment)
+
+    assert schema.policy_version == "review-priority-v1"
+    assert schema.lane == assessment.lane
+    assert schema.score == assessment.integrity_score
+    assert schema.band == assessment.band
+    assert schema.sla_state == assessment.sla_state
+    assert schema.due_at == assessment.due_at
+    assert [f.code for f in schema.factors] == [f.code for f in assessment.factors]
+    assert [f.contribution for f in schema.factors] == [
+        f.contribution for f in assessment.factors]
+    # order_key is server-internal and must not leak onto the wire.
+    assert "order_key" not in schema.model_dump()
+
+
+def test_paginate_cards_orders_by_policy_then_review_id_filters_and_counts():
+    import uuid
+
+    from app.services import referral_service as rs
+
+    a, b, c = uuid.UUID(int=1), uuid.UUID(int=2), uuid.UUID(int=3)
+    cards = [
+        _assessed_card(b, (2, 2, 0), band=PriorityBand.low,
+                       lane=PriorityLane.routine, sla=SlaState.on_track),
+        # a and c share an order_key -> deterministic tie-break on review id.
+        _assessed_card(c, (1, 0, 0), band=PriorityBand.high,
+                       lane=PriorityLane.reported, sla=SlaState.overdue,
+                       factors=("report_count_4_plus",)),
+        _assessed_card(a, (1, 0, 0), band=PriorityBand.high,
+                       lane=PriorityLane.reported, sla=SlaState.overdue,
+                       factors=("report_count_4_plus",)),
+    ]
+
+    page = rs._paginate_cards(cards, rs.QueueQuery(limit=2))
+    assert [item.review.id for item in page.items] == [a, c]
+    assert page.total == 3
+    assert page.next_cursor is None
+    assert page.counts.total == 3
+    assert page.counts.by_band["high"] == 2
+    assert page.counts.by_band["low"] == 1
+    assert page.counts.by_lane["reported"] == 2
+    assert page.counts.by_sla["overdue"] == 2
+
+    # Stable across repeated calls.
+    assert [i.review.id for i in rs._paginate_cards(cards, rs.QueueQuery()).items] == \
+           [i.review.id for i in rs._paginate_cards(cards, rs.QueueQuery()).items]
+
+    # Server filters narrow both the page and the counts.
+    band_only = rs._paginate_cards(cards, rs.QueueQuery(band=PriorityBand.low))
+    assert [i.review.id for i in band_only.items] == [b]
+    assert band_only.total == 1 and band_only.counts.by_band["low"] == 1
+
+    factor_only = rs._paginate_cards(
+        cards, rs.QueueQuery(factor="report_count_4_plus"))
+    assert {i.review.id for i in factor_only.items} == {a, c}
+
+    lane_miss = rs._paginate_cards(cards, rs.QueueQuery(lane=PriorityLane.escalated))
+    assert lane_miss.items == [] and lane_miss.total == 0
+
+
+def _make_pending(client, headers, token, *, verdict="it_depends", stars=3):
+    """A pending (unpublished) review whose title carries a unique ``token`` so
+    the queue's ``q`` filter can scope a test to exactly its own fixtures."""
+    pid = client.post("/api/v1/products", headers=headers,
+                      json={"name": f"PrioWidget {token}",
+                            "category": "electronics"}).json()["id"]
+    body = {"product_id": pid, "title": f"Queued {token}",
+            "discussion": f"Priority-contract fixture {token}; weeks of use.",
+            "verdict": verdict, "star_rating": stars,
+            "photo_url": owned_photo_url(headers)}
+    return client.post("/api/v1/reviews", headers=headers, json=body).json()["id"]
+
+
+def _backdate(review_ids, *, hours):
+    import uuid as _uuid
+
+    from app.db.session import SessionLocal
+    from app.models.review import Review
+
+    db = SessionLocal()
+    try:
+        stamp = datetime.now(UTC) - timedelta(hours=hours)
+        for rid in review_ids:
+            db.get(Review, _uuid.UUID(rid)).created_at = stamp
+        db.commit()
+    finally:
+        db.close()
+
+
+@requires_db
+def test_review_queue_priority_pagination_and_band_filter(client):
+    """The pinned Task 2 example, scoped with ``q`` so it is stable on the
+    persistent test database."""
+    import uuid
+
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    moderator_headers = _auth(mod_token)
+
+    token = uuid.uuid4().hex[:12]
+    rids = [_make_pending(client, ah, token) for _ in range(3)]
+    # Two days in the queue on a 24h routine SLA -> overdue -> band "high".
+    _backdate(rids, hours=48)
+
+    response = client.get(
+        f"/api/v1/admin/review-queue?limit=2&band=high&q={token}",
+        headers=moderator_headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 3
+    assert len(body["items"]) == 2
+    assert all(item["priority"]["band"] == "high" for item in body["items"])
+    assert body["items"][0]["priority"]["policy_version"] == "review-priority-v1"
+    assert body["counts"]["by_band"]["high"] == 3
+    assert body["counts"]["total"] == 3
+    # Each card still says which timestamp stood in for the queue-entry time.
+    assert all(item["queue_time_basis"] == "review_created_at"
+               for item in body["items"])
+
+
+@requires_db
+def test_review_queue_high_priority_new_review_leads_page_one(client):
+    """A high-priority review created AFTER a batch of ordinary ones still leads
+    page one — the old created-at ordering would have buried it last."""
+    import uuid
+
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+
+    token = uuid.uuid4().hex[:12]
+    ordinary = [_make_pending(client, ah, token) for _ in range(3)]
+
+    # Created last, so it is newest by created_at. Published, reported four times
+    # for fake proof, then unpublished -> back to pending WITH the report facts.
+    hot = _make_pending(client, ah, token, stars=4)
+    assert client.post(f"/api/v1/admin/reviews/{hot}/publish", headers=mh).status_code == 200
+    for _ in range(4):
+        _, reporter_token, _ = register_and_token(client)
+        assert client.post(f"/api/v1/reviews/{hot}/report", headers=_auth(reporter_token),
+                           json={"reason": "fake_proof"}).status_code == 201
+    assert client.post(f"/api/v1/admin/reviews/{hot}/unpublish", headers=mh,
+                       json={}).status_code == 200
+
+    body = client.get(f"/api/v1/admin/review-queue?q={token}&limit=10",
+                      headers=mh).json()
+    ids = [item["review"]["id"] for item in body["items"]]
+    assert set(ids) == {hot, *ordinary}
+    assert ids[0] == hot
+    assert body["items"][0]["priority"]["band"] == "high"
+    assert body["items"][0]["priority"]["lane"] == "reported"
+    assert any(f["code"] == "report_count_4_plus"
+               for f in body["items"][0]["priority"]["factors"])
+
+    # Recency alone would have placed it dead last.
+    created = {item["review"]["id"]: item["review"]["created_at"]
+              for item in body["items"]}
+    assert created[hot] == max(created.values())
+
+
+@requires_db
+def test_review_queue_ties_are_stable_across_repeated_calls(client):
+    import uuid as _uuid
+
+    from app.db.session import SessionLocal
+    from app.models.review import Review
+
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+
+    token = _uuid.uuid4().hex[:12]
+    rids = [_make_pending(client, ah, token) for _ in range(4)]
+
+    # Identical queued_at -> identical order_key -> the only differentiator is the
+    # review UUID appended to the sort key.
+    db = SessionLocal()
+    try:
+        stamp = datetime.now(UTC) - timedelta(hours=1)
+        for rid in rids:
+            db.get(Review, _uuid.UUID(rid)).created_at = stamp
+        db.commit()
+    finally:
+        db.close()
+
+    first = client.get(f"/api/v1/admin/review-queue?q={token}&limit=10",
+                       headers=mh).json()["items"]
+    second = client.get(f"/api/v1/admin/review-queue?q={token}&limit=10",
+                        headers=mh).json()["items"]
+    order_one = [i["review"]["id"] for i in first]
+    order_two = [i["review"]["id"] for i in second]
+    assert order_one == order_two
+    assert order_one == sorted(order_one, key=_uuid.UUID)
+
+
+@requires_db
+def test_review_queue_invalid_filters_return_422(client):
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+    for qs in ("band=urgent", "lane=nowhere", "sla=late", "limit=0", "limit=500",
+               "offset=-1"):
+        resp = client.get(f"/api/v1/admin/review-queue?{qs}", headers=mh)
+        assert resp.status_code == 422, f"{qs} -> {resp.status_code}"
+
+
+@requires_db
+def test_review_queue_non_moderator_forbidden(client):
+    _, author_token, _ = register_and_token(client)
+    resp = client.get("/api/v1/admin/review-queue?band=high&limit=2",
+                      headers=_auth(author_token))
+    assert resp.status_code == 403

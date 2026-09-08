@@ -176,3 +176,44 @@ def test_report_count_aggregates_distinct_reporters(client):
     assert len(mine) == 3
     # Three separate people flagged the same review — the queue must show that.
     assert all(i["target_report_count"] == 3 for i in mine)
+
+
+@requires_db
+def test_report_facts_by_target_batches_count_and_reason_set(client):
+    """The priority policy's only window into reports: a per-target count and the
+    distinct enum reasons — no notes, no evidence URLs, no reporter identity."""
+    from app.db.session import SessionLocal
+    from app.models.enums import ModerationReason, ModerationTargetType
+    from app.services.report_service import ReportFacts, report_facts_by_target
+
+    _, author_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    ah, mh = _auth(author_token), _auth(mod_token)
+
+    reported, _ = make_published_review(client, ah, mh, name="FactsWidget")
+    quiet, _ = make_published_review(client, ah, mh, name="QuietWidget")
+
+    for reason, notes in (("fake_proof", "receipt reused"),
+                          ("fake_proof", "same photo elsewhere"),
+                          ("harassment", "targets the seller")):
+        _, reporter_token, _ = register_and_token(client)
+        assert client.post(f"/api/v1/reviews/{reported}/report", headers=_auth(reporter_token),
+                           json={"reason": reason, "notes": notes}).status_code == 201
+
+    absent = uuid.uuid4()
+    db = SessionLocal()
+    try:
+        facts = report_facts_by_target(
+            db, ModerationTargetType.review,
+            [uuid.UUID(reported), uuid.UUID(quiet), absent],
+        )
+    finally:
+        db.close()
+
+    assert isinstance(facts[uuid.UUID(reported)], ReportFacts)
+    assert facts[uuid.UUID(reported)].count == 3
+    assert facts[uuid.UUID(reported)].reasons == frozenset(
+        {ModerationReason.fake_proof, ModerationReason.harassment})
+    # Targets with no reports are simply absent — callers default to NO_REPORTS.
+    assert uuid.UUID(quiet) not in facts
+    assert absent not in facts

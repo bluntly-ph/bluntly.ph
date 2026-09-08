@@ -7,87 +7,61 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.security import require_role
 from app.db.session import get_db
-from app.models.product import Product, ProductPlatform
-from app.models.review import Review
 from app.models.user import User
 from app.schemas.referral import (
     AttachLinkRequest,
     OptionalReasonRequest,
-    QueueAuthor,
-    QueueItem,
-    QueuePlatform,
-    QueueProduct,
-    QueueSignals,
     ReasonRequest,
     ReferralLinkOut,
     ReviewQueueResponse,
 )
 from app.schemas.review import ReviewOut
-from app.services import fraud_service, referral_service, review_service
+from app.services import referral_service, review_service
+from app.services.moderation_priority import PriorityBand, PriorityLane, SlaState
 
 router = APIRouter(prefix="/admin", tags=["admin: referral"],
                    dependencies=[Depends(require_role("moderator"))])
 
 
-def _queue_item(db: Session, review: Review, product: Product,
-                platforms: list[ProductPlatform], author: User | None,
-                *, edited: bool) -> QueueItem:
-    """Build a queue card. Fraud signals (slice 5) are computed here — queue
-    payload only, advisory only, never on public endpoints."""
-    return QueueItem(
-        review=ReviewOut.model_validate(review),
-        product=QueueProduct(
-            id=product.id, canonical_name=product.canonical_name,
-            source_url=product.source_url,
-            platforms=[QueuePlatform(platform=p.platform, is_monetizable=p.is_monetizable)
-                       for p in platforms],
-        ),
-        author=(QueueAuthor(id=author.id, display_name=author.display_name,
-                            trust_stage=author.trust_stage,
-                            reputation_score=author.reputation_score) if author else None),
-        suggested_platform=referral_service.suggested_platform_from(product, platforms),
-        edited_since_monetized=edited,
-        signals=QueueSignals(**fraud_service.compute_signals(db, review, author)),
-        suggested_sub_id=referral_service.sub_id_for_review(review.id),
+@router.get("/review-queue", response_model=ReviewQueueResponse,
+            summary="Moderator queue: policy-prioritized reviews (+ deprecated split views)")
+def review_queue(
+    db: Session = Depends(get_db),
+    band: PriorityBand | None = Query(None, description="Filter to one priority band."),
+    lane: PriorityLane | None = Query(None, description="Filter to one routing lane."),
+    sla: SlaState | None = Query(None, description="Filter to one SLA state."),
+    factor: str | None = Query(None, max_length=64,
+                               description="Filter to cards carrying this factor code."),
+    q: str | None = Query(None, max_length=200,
+                          description="Free-text match on review title/body or product."),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> ReviewQueueResponse:
+    limit = min(limit, 100)
+    query = referral_service.QueueQuery(
+        band=band, lane=lane, sla=sla, factor=factor, q=q, limit=limit, offset=offset,
+    )
+    page = referral_service.get_prioritized_queue(db, query)
+
+    # Deprecated duplicate views: same membership, ordering and offset paging as
+    # before, so existing callers (and the Next client, until Task 4) keep
+    # working. Removed once `items` is the only consumer.
+    pending, edited = referral_service.get_queue(db, limit=limit, offset=offset)
+    legacy = referral_service.build_queue_items(
+        db, [(r, "pending") for r in pending] + [(r, "edited") for r in edited],
     )
 
-
-@router.get("/review-queue", response_model=ReviewQueueResponse,
-            summary="Moderator queue: pending reviews + monetized-but-edited")
-def review_queue(db: Session = Depends(get_db),
-                 limit: int = Query(50, ge=1, le=100),
-                 offset: int = Query(0, ge=0)
-                 ) -> ReviewQueueResponse:
-    limit = min(limit, 100)
-    pending, edited = referral_service.get_queue(db, limit=limit, offset=offset)
-    reviews = pending + edited
-
-    # Batch-load products (+ their platforms) and authors — one query each, no N+1.
-    product_ids = {r.product_id for r in reviews}
-    products: dict = {}
-    if product_ids:
-        products = {p.id: p for p in db.scalars(
-            select(Product).options(selectinload(Product.platforms))
-            .where(Product.id.in_(product_ids)))}
-    author_ids = {r.author_id for r in reviews if r.author_id}
-    authors: dict = {}
-    if author_ids:
-        authors = {u.id: u for u in db.scalars(
-            select(User).where(User.id.in_(author_ids)))}
-
-    def build(review: Review, *, edited: bool) -> QueueItem:
-        product = products[review.product_id]
-        author = authors.get(review.author_id) if review.author_id else None
-        return _queue_item(db, review, product, product.platforms, author, edited=edited)
-
     return ReviewQueueResponse(
-        pending=[build(r, edited=False) for r in pending],
-        edited_since_monetized=[build(r, edited=True) for r in edited],
+        items=page.items,
+        total=page.total,
+        next_cursor=page.next_cursor,
+        counts=page.counts,
+        pending=[legacy[r.id] for r in pending],
+        edited_since_monetized=[legacy[r.id] for r in edited],
     )
 
 
