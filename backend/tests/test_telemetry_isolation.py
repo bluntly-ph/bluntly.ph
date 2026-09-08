@@ -57,6 +57,7 @@ DECISION_MODULES = (
     "services/admin_overview_service.py",
     "services/referral_service.py",
     "services/fraud_service.py",
+    "services/moderation_priority.py",
     "services/honesty_fund_service.py",
     "services/payout_service.py",
     "services/commission_service.py",
@@ -155,6 +156,34 @@ def test_no_decision_module_imports_reading_telemetry(rel_path):
         f"{rel_path} imports reading telemetry {hits}. Telemetry is "
         "collection-only (spec §8): a decision module that can see it can be "
         "made to depend on it by a later edit."
+    )
+
+
+def test_moderation_priority_module_contains_no_forbidden_telemetry_field_names():
+    """The pure priority policy (design §5) must not even *name* a telemetry
+    field — not just avoid importing the telemetry modules. A stray
+    ``active_ms`` kwarg or attribute access would be a decision module quietly
+    growing a reading-telemetry dependency one edit at a time."""
+    path = APP / "services/moderation_priority.py"
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    identifiers: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            identifiers.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            identifiers.add(node.attr)
+        elif isinstance(node, ast.arg):
+            identifiers.add(node.arg)
+        elif isinstance(node, ast.keyword) and node.arg:
+            identifiers.add(node.arg)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            identifiers.add(node.name)
+
+    leaked = identifiers & TELEMETRY_FIELD_NAMES
+    assert not leaked, (
+        f"moderation_priority.py names forbidden telemetry fields: {leaked}"
     )
 
 
