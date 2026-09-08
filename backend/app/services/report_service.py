@@ -18,7 +18,7 @@ Two rules keep the queue meaningful:
 from __future__ import annotations
 
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -135,6 +135,14 @@ class ReportFacts:
 #: Returned for a target that has no reports, so callers can index unconditionally.
 NO_REPORTS = ReportFacts(count=0, reasons=frozenset())
 
+_QUERY_CHUNK_SIZE = 500
+
+
+def _chunks(values: Collection[uuid.UUID]) -> Iterator[tuple[uuid.UUID, ...]]:
+    items = tuple(dict.fromkeys(values))
+    for start in range(0, len(items), _QUERY_CHUNK_SIZE):
+        yield items[start : start + _QUERY_CHUNK_SIZE]
+
 
 def report_facts_by_target(
     db: Session,
@@ -153,30 +161,32 @@ def report_facts_by_target(
     if not refs:
         return {}
 
-    count_rows = db.execute(
-        select(ModerationLog.target_ref, func.count(ModerationLog.id))
-        .where(
-            ModerationLog.action == ModerationAction.report,
-            ModerationLog.target_type == target_type,
-            ModerationLog.target_ref.in_(refs),
-        )
-        .group_by(ModerationLog.target_ref)
-    ).all()
-    counts = {row[0]: row[1] for row in count_rows}
-
+    counts: dict[uuid.UUID, int] = {}
     reasons: dict[uuid.UUID, set[ModerationReason]] = {}
-    reason_rows = db.execute(
-        select(ModerationLog.target_ref, ModerationLog.reason)
-        .where(
-            ModerationLog.action == ModerationAction.report,
-            ModerationLog.target_type == target_type,
-            ModerationLog.target_ref.in_(refs),
-            ModerationLog.reason.is_not(None),
-        )
-        .distinct()
-    ).all()
-    for target_ref, reason in reason_rows:
-        reasons.setdefault(target_ref, set()).add(reason)
+    for chunk in _chunks(refs):
+        count_rows = db.execute(
+            select(ModerationLog.target_ref, func.count(ModerationLog.id))
+            .where(
+                ModerationLog.action == ModerationAction.report,
+                ModerationLog.target_type == target_type,
+                ModerationLog.target_ref.in_(chunk),
+            )
+            .group_by(ModerationLog.target_ref)
+        ).all()
+        counts.update((target_ref, int(count)) for target_ref, count in count_rows)
+
+        reason_rows = db.execute(
+            select(ModerationLog.target_ref, ModerationLog.reason)
+            .where(
+                ModerationLog.action == ModerationAction.report,
+                ModerationLog.target_type == target_type,
+                ModerationLog.target_ref.in_(chunk),
+                ModerationLog.reason.is_not(None),
+            )
+            .distinct()
+        ).all()
+        for target_ref, reason in reason_rows:
+            reasons.setdefault(target_ref, set()).add(reason)
 
     return {
         target_ref: ReportFacts(

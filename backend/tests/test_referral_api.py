@@ -371,6 +371,62 @@ def test_paginate_cards_orders_by_policy_then_review_id_filters_and_counts():
     lane_miss = rs._paginate_cards(cards, rs.QueueQuery(lane=PriorityLane.escalated))
     assert lane_miss.items == [] and lane_miss.total == 0
 
+    sla_only = rs._paginate_cards(cards, rs.QueueQuery(sla=SlaState.on_track))
+    assert [i.review.id for i in sla_only.items] == [b]
+    assert sla_only.total == 1 and sla_only.counts.by_sla["on_track"] == 1
+
+    second_item = rs._paginate_cards(cards, rs.QueueQuery(limit=1, offset=1))
+    assert [i.review.id for i in second_item.items] == [c]
+    # Counts and total describe the filtered queue, not the offset window.
+    assert second_item.total == 3 and second_item.counts.total == 3
+
+
+def test_review_queue_reuses_one_assessment_for_compatibility_views(monkeypatch):
+    import uuid
+
+    from app.api.v1.routes import admin_referral
+    from app.services import referral_service as rs
+
+    review_id = uuid.UUID(int=41)
+    card = _assessed_card(
+        review_id,
+        (3, 2, 0),
+        band=PriorityBand.low,
+        lane=PriorityLane.routine,
+        sla=SlaState.on_track,
+    )
+    page = rs._paginate_cards([card], rs.QueueQuery())
+    snapshot = rs.PrioritizedQueueSnapshot(
+        page=page,
+        pending=[card.item],
+        edited_since_monetized=[],
+    )
+
+    monkeypatch.setattr(
+        rs,
+        "get_prioritized_queue_snapshot",
+        lambda db, query: snapshot,
+    )
+
+    def duplicate_evaluation_is_a_bug(*args, **kwargs):
+        raise AssertionError("compatibility arrays must reuse the prioritized assessment")
+
+    monkeypatch.setattr(rs, "get_queue", duplicate_evaluation_is_a_bug)
+    monkeypatch.setattr(rs, "build_queue_items", duplicate_evaluation_is_a_bug)
+
+    response = admin_referral.review_queue(
+        db=object(),
+        band=None,
+        lane=None,
+        sla=None,
+        factor=None,
+        q=None,
+        limit=50,
+        offset=0,
+    )
+    assert response.pending == response.items
+    assert response.edited_since_monetized == []
+
 
 def _make_pending(client, headers, token, *, verdict="it_depends", stars=3):
     """A pending (unpublished) review whose title carries a unique ``token`` so
@@ -397,6 +453,50 @@ def _backdate(review_ids, *, hours):
         for rid in review_ids:
             db.get(Review, _uuid.UUID(rid)).created_at = stamp
         db.commit()
+    finally:
+        db.close()
+
+
+def _insert_pending_reviews(*, count, token):
+    """Insert a large, isolated queue cohort in one transaction.
+
+    Every fixture is anonymous and has its own product, so duplicate-content
+    matching cannot turn the ordinary cohort into integrity-lane work.
+    """
+    import uuid
+
+    from app.db.session import SessionLocal
+    from app.models.enums import EarnEligibleStatus, Verdict
+    from app.models.product import Product
+    from app.models.review import Review
+
+    db = SessionLocal()
+    try:
+        review_ids = []
+        for index in range(count):
+            product = Product(
+                product_id=f"prd_{uuid.uuid4().hex[:10]}",
+                canonical_name=f"Boundary product {token} {index}",
+                category="electronics",
+            )
+            db.add(product)
+            db.flush()
+            review = Review(
+                review_id=f"rev_{uuid.uuid4().hex[:10]}",
+                product_id=product.id,
+                author_id=None,
+                title=f"Boundary queue {token} {index}",
+                discussion=f"Independent boundary fixture {index} for {token}.",
+                verdict=Verdict.it_depends,
+                star_rating=3,
+                published_at=None,
+                earn_eligible_status=EarnEligibleStatus.pending,
+            )
+            db.add(review)
+            db.flush()
+            review_ids.append(str(review.id))
+        db.commit()
+        return review_ids
     finally:
         db.close()
 
@@ -446,7 +546,7 @@ def test_review_queue_high_priority_new_review_leads_page_one(client):
     mh = _auth(mod_token)
 
     token = uuid.uuid4().hex[:12]
-    ordinary = [_make_pending(client, ah, token) for _ in range(3)]
+    ordinary = _insert_pending_reviews(count=51, token=token)
 
     # Created last, so it is newest by created_at. Published, reported four times
     # for fake proof, then unpublished -> back to pending WITH the report facts.
@@ -459,20 +559,43 @@ def test_review_queue_high_priority_new_review_leads_page_one(client):
     assert client.post(f"/api/v1/admin/reviews/{hot}/unpublish", headers=mh,
                        json={}).status_code == 200
 
-    body = client.get(f"/api/v1/admin/review-queue?q={token}&limit=10",
-                      headers=mh).json()
+    from app.db.session import SessionLocal
+    from app.services.referral_service import get_queue
+
+    db = SessionLocal()
+    try:
+        old_first_50, _ = get_queue(db, limit=50)
+        assert hot not in {str(review.id) for review in old_first_50}
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/admin/review-queue?q={token}&limit=10", headers=mh
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
     ids = [item["review"]["id"] for item in body["items"]]
-    assert set(ids) == {hot, *ordinary}
+    assert body["total"] == 52
+    assert len(ids) == 10
     assert ids[0] == hot
+    assert set(ids[1:]).issubset(set(ordinary))
     assert body["items"][0]["priority"]["band"] == "high"
     assert body["items"][0]["priority"]["lane"] == "reported"
     assert any(f["code"] == "report_count_4_plus"
                for f in body["items"][0]["priority"]["factors"])
 
     # Recency alone would have placed it dead last.
-    created = {item["review"]["id"]: item["review"]["created_at"]
-              for item in body["items"]}
-    assert created[hot] == max(created.values())
+    from app.models.review import Review
+
+    db = SessionLocal()
+    try:
+        hot_created_at = db.get(Review, uuid.UUID(hot)).created_at
+        ordinary_created_ats = [
+            db.get(Review, uuid.UUID(review_id)).created_at for review_id in ordinary
+        ]
+    finally:
+        db.close()
+    assert all(created_at < hot_created_at for created_at in ordinary_created_ats)
 
 
 @requires_db
@@ -509,6 +632,56 @@ def test_review_queue_ties_are_stable_across_repeated_calls(client):
     order_two = [i["review"]["id"] for i in second]
     assert order_one == order_two
     assert order_one == sorted(order_one, key=_uuid.UUID)
+    factor_sets = [
+        tuple(factor["code"] for factor in item["priority"]["factors"])
+        for item in first
+    ]
+    assert all(factor_sets), "the tie regression must exercise non-empty assessments"
+    assert len(set(factor_sets)) == 1
+
+
+@requires_db
+def test_review_queue_mixes_pending_and_edited_sources_with_truthful_time_basis(client):
+    import uuid
+
+    _, author_token, _ = register_and_token(client)
+    ah = _auth(author_token)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mh = _auth(mod_token)
+
+    token = uuid.uuid4().hex[:12]
+    pending_id = _make_pending(client, ah, token)
+    edited_id = _make_pending(client, ah, token, stars=4)
+    attach = client.post(
+        f"/api/v1/admin/reviews/{edited_id}/referral-link",
+        headers=mh,
+        json={"url": SHOPEE_URL, "platform": "shopee"},
+    )
+    assert attach.status_code == 200, attach.text
+    edit = client.patch(
+        f"/api/v1/reviews/{edited_id}",
+        headers=ah,
+        json={"title": f"Edited queue {token}", "change_note": "clarified"},
+    )
+    assert edit.status_code == 200, edit.text
+
+    response = client.get(
+        f"/api/v1/admin/review-queue?q={token}&limit=10", headers=mh
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    by_id = {item["review"]["id"]: item for item in body["items"]}
+    assert body["total"] == 2
+    assert set(by_id) == {pending_id, edited_id}
+    assert by_id[pending_id]["queue_time_basis"] == "review_created_at"
+    assert by_id[pending_id]["edited_since_monetized"] is False
+    assert by_id[edited_id]["queue_time_basis"] == "review_updated_at"
+    assert by_id[edited_id]["edited_since_monetized"] is True
+    assert by_id[edited_id]["priority"]["lane"] == "integrity"
+    assert any(
+        factor["code"] == "edited_after_monetization"
+        for factor in by_id[edited_id]["priority"]["factors"]
+    )
 
 
 @requires_db

@@ -11,6 +11,7 @@ only this module's internals change.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -391,6 +392,24 @@ class _AssessedCard:
     order_key: tuple
 
 
+@dataclass(frozen=True)
+class PrioritizedQueueSnapshot:
+    """One evaluation pass shared by the canonical and compatibility views."""
+
+    page: QueuePage
+    pending: list[QueueItem]
+    edited_since_monetized: list[QueueItem]
+
+
+_QUERY_CHUNK_SIZE = 500
+
+
+def _chunks(values: Collection[uuid.UUID]) -> Iterator[tuple[uuid.UUID, ...]]:
+    items = tuple(dict.fromkeys(values))
+    for start in range(0, len(items), _QUERY_CHUNK_SIZE):
+        yield items[start : start + _QUERY_CHUNK_SIZE]
+
+
 def _ensure_utc(value: datetime) -> datetime:
     """DB timestamps are ``timestamptz`` (aware); coerce any stray naive value to
     UTC so the pure evaluator never rejects a real queue candidate."""
@@ -433,7 +452,7 @@ def _all_queue_candidates(db: Session) -> list[tuple[Review, _QueueKind]]:
             Review.earn_eligible_status == EarnEligibleStatus.pending,
             Review.published_at.is_(None),
             Review.is_removed.is_(False),
-        )
+        ).order_by(Review.created_at.asc())
     ).all()
     edited = db.scalars(
         select(Review)
@@ -443,7 +462,7 @@ def _all_queue_candidates(db: Session) -> list[tuple[Review, _QueueKind]]:
             ReferralLink.status == ReferralLinkStatus.active,
             Review.current_version > ReferralLink.review_version,
             Review.is_removed.is_(False),
-        )
+        ).order_by(Review.updated_at.desc())
     ).all()
     # Disjoint by construction: `pending` status vs `monetized` status.
     return [(r, "pending") for r in pending] + [(r, "edited") for r in edited]
@@ -457,40 +476,47 @@ def _build_assessed_cards(
 ) -> list[_AssessedCard]:
     """Build one queue card + priority assessment per (review, kind).
 
-    Batched: one products(+platforms) query, one authors query, one report-facts
-    batch. Fraud signals stay per-review — they are already bounded (3 queries
-    each, see ``fraud_service``) and match the existing queue's cost model.
+    Product, author, report, and fraud facts are all loaded in bounded batches.
+    No fact source performs a query per review.
     """
     evaluated_at = _ensure_utc(now) if now is not None else datetime.now(UTC)
     if not reviews:
         return []
 
     product_ids = {review.product_id for review, _ in reviews}
-    products = {
-        product.id: product
-        for product in db.scalars(
-            select(Product)
-            .options(selectinload(Product.platforms))
-            .where(Product.id.in_(product_ids))
+    products: dict[uuid.UUID, Product] = {}
+    for chunk in _chunks(product_ids):
+        products.update(
+            (product.id, product)
+            for product in db.scalars(
+                select(Product)
+                .options(selectinload(Product.platforms))
+                .where(Product.id.in_(chunk))
+            )
         )
-    }
     author_ids = {review.author_id for review, _ in reviews if review.author_id}
     authors: dict[uuid.UUID, User] = {}
-    if author_ids:
-        authors = {
-            user.id: user
-            for user in db.scalars(select(User).where(User.id.in_(author_ids)))
-        }
+    for chunk in _chunks(author_ids):
+        authors.update(
+            (user.id, user)
+            for user in db.scalars(select(User).where(User.id.in_(chunk)))
+        )
 
     report_facts = report_service.report_facts_by_target(
         db, ModerationTargetType.review, [review.id for review, _ in reviews]
+    )
+    signals_by_review = fraud_service.compute_signals_by_review(
+        db,
+        [review for review, _ in reviews],
+        authors,
+        now=evaluated_at,
     )
 
     cards: list[_AssessedCard] = []
     for review, kind in reviews:
         product = products.get(review.product_id)
         author = authors.get(review.author_id) if review.author_id else None
-        signals = fraud_service.compute_signals(db, review, author)
+        signals = signals_by_review[review.id]
         edited = kind == "edited"
 
         # Temporary queue-entry-time approximation (no lifecycle column yet):
@@ -621,8 +647,26 @@ def get_prioritized_queue(
     Ordering correctness never depends on ``offset``; ``next_cursor`` is ``None``
     in this compatibility slice.
     """
+    return get_prioritized_queue_snapshot(db, query, now=now).page
+
+
+def get_prioritized_queue_snapshot(
+    db: Session, query: QueueQuery, *, now: datetime | None = None
+) -> PrioritizedQueueSnapshot:
+    """Evaluate once, then derive the canonical page and deprecated split views.
+
+    Candidate loading preserves the old pending/edited ordering. Building the
+    compatibility arrays from the same assessed cards avoids recomputing every
+    signal and priority merely to serialize the legacy response fields.
+    """
     cards = _build_assessed_cards(db, _all_queue_candidates(db), now=now)
-    return _paginate_cards(cards, query)
+    pending = [card.item for card in cards if card.kind == "pending"]
+    edited = [card.item for card in cards if card.kind == "edited"]
+    return PrioritizedQueueSnapshot(
+        page=_paginate_cards(cards, query),
+        pending=pending[query.offset : query.offset + query.limit],
+        edited_since_monetized=edited,
+    )
 
 
 def build_queue_items(

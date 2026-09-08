@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid as _uuid
+from datetime import UTC, datetime
 
 from tests.conftest import owned_photo_url, register_and_token, requires_db
 from tests.test_votes_api import make_published_review
@@ -24,6 +25,111 @@ def _signals(rid: str):
         review = db.get(Review, _uuid.UUID(rid))
         author = db.get(User, review.author_id) if review.author_id else None
         return compute_signals(db, review, author)
+    finally:
+        db.close()
+
+
+def test_signal_batch_empty_input_does_not_touch_the_database():
+    from app.services.fraud_service import compute_signals_by_review
+
+    class NoDatabaseCalls:
+        def execute(self, *args, **kwargs):
+            raise AssertionError("empty batches must not execute SQL")
+
+        def scalars(self, *args, **kwargs):
+            raise AssertionError("empty batches must not execute SQL")
+
+    assert compute_signals_by_review(NoDatabaseCalls(), [], {}) == {}
+
+
+@requires_db
+def test_signal_batch_preserves_values_with_constant_query_count(client):
+    from sqlalchemy import event
+
+    from app.db.session import SessionLocal
+    from app.models.review import Review
+    from app.models.user import User
+    from app.services.fraud_service import compute_signals, compute_signals_by_review
+
+    _, author_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    ah, mh = _auth(author_token), _auth(mod_token)
+
+    body = (
+        "I used this vacuum every day for six weeks. Battery life is strong, "
+        "suction works well on hardwood, and the dust bin is easy to empty."
+    )
+    pid = client.post(
+        "/api/v1/products",
+        headers=ah,
+        json={"name": "BatchSignalWidget", "category": "electronics"},
+    ).json()["id"]
+
+    def make(discussion: str) -> str:
+        response = client.post(
+            "/api/v1/reviews",
+            headers=ah,
+            json={
+                "product_id": pid,
+                "title": "Batch signal review",
+                "discussion": discussion,
+                "verdict": "yes_absolutely",
+                "star_rating": 4,
+                "photo_url": owned_photo_url(ah),
+            },
+        )
+        return response.json()["id"]
+
+    original_id = make(body)
+    assert client.post(
+        f"/api/v1/admin/reviews/{original_id}/publish", headers=mh
+    ).status_code == 200
+    near_copy_id = make(body + " I would recommend it for small flats.")
+    distinct_id = make(
+        "The motor failed on day two and support never replied, so I returned. "
+        "This was a completely different ownership experience."
+    )
+
+    db = SessionLocal()
+    try:
+        reviews = [
+            db.get(Review, _uuid.UUID(near_copy_id)),
+            db.get(Review, _uuid.UUID(distinct_id)),
+        ]
+        author = db.get(User, reviews[0].author_id)
+        evaluated_at = datetime.now(UTC)
+        statements: list[str] = []
+
+        def record_statement(*args):
+            statements.append(args[2])
+
+        event.listen(db.bind, "before_cursor_execute", record_statement)
+        try:
+            batched = compute_signals_by_review(
+                db,
+                reviews,
+                {author.id: author},
+                now=evaluated_at,
+            )
+        finally:
+            event.remove(db.bind, "before_cursor_execute", record_statement)
+
+        # One vote query, one reciprocal-vote query, one author-count query, and
+        # one lateral duplicate query: the count is per batch, not per review.
+        assert len(statements) == 4
+        assert set(batched) == {review.id for review in reviews}
+        assert batched[reviews[0].id]["duplicate_content"] is True
+        assert batched[reviews[0].id]["duplicate_of"] == original_id
+        assert batched[reviews[1].id]["duplicate_content"] is False
+        assert all(signals["velocity"] is False for signals in batched.values())
+        assert all(signals["collusion"] is False for signals in batched.values())
+        assert all(signals["author_review_count"] >= 3 for signals in batched.values())
+
+        # The original one-review API remains a semantic wrapper around the same
+        # batched facts, including the evaluated-at instant used for account age.
+        assert compute_signals(
+            db, reviews[0], author, now=evaluated_at
+        ) == batched[reviews[0].id]
     finally:
         db.close()
 

@@ -45,23 +45,15 @@ def review_queue(
     query = referral_service.QueueQuery(
         band=band, lane=lane, sla=sla, factor=factor, q=q, limit=limit, offset=offset,
     )
-    page = referral_service.get_prioritized_queue(db, query)
-
-    # Deprecated duplicate views: same membership, ordering and offset paging as
-    # before, so existing callers (and the Next client, until Task 4) keep
-    # working. Removed once `items` is the only consumer.
-    pending, edited = referral_service.get_queue(db, limit=limit, offset=offset)
-    legacy = referral_service.build_queue_items(
-        db, [(r, "pending") for r in pending] + [(r, "edited") for r in edited],
-    )
+    snapshot = referral_service.get_prioritized_queue_snapshot(db, query)
 
     return ReviewQueueResponse(
-        items=page.items,
-        total=page.total,
-        next_cursor=page.next_cursor,
-        counts=page.counts,
-        pending=[legacy[r.id] for r in pending],
-        edited_since_monetized=[legacy[r.id] for r in edited],
+        items=snapshot.page.items,
+        total=snapshot.page.total,
+        next_cursor=snapshot.page.next_cursor,
+        counts=snapshot.page.counts,
+        pending=snapshot.pending,
+        edited_since_monetized=snapshot.edited_since_monetized,
     )
 
 
