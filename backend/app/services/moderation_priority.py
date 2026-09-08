@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.models.enums import ModerationReason
 
@@ -140,9 +140,16 @@ _REPORT_REASON_LABELS: dict[ModerationReason, str] = {
 }
 
 
-def _require_aware_utc(value: datetime, name: str) -> None:
+def _to_utc(value: datetime, name: str) -> datetime:
+    """Reject naive input; normalize any timezone-aware input to UTC.
+
+    Every timestamp this module produces — ``due_at`` and the two datetimes in
+    ``order_key`` — must be UTC regardless of what the caller passed in, so a
+    later comparison or serialization never has to reconcile mixed offsets.
+    """
     if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
         raise ValueError(f"{name} must be a timezone-aware datetime")
+    return value.astimezone(UTC)
 
 
 def _report_count_factor(report_count: int) -> PriorityFactor | None:
@@ -209,10 +216,13 @@ def evaluate_priority(facts: PriorityFacts, *, now: datetime) -> PriorityAssessm
     """Evaluate one already-loaded candidate against policy v1.
 
     Raises ``ValueError`` if ``facts.queued_at`` or ``now`` is a naive
-    datetime — SLA math must never silently assume a timezone.
+    datetime — SLA math must never silently assume a timezone. Any other
+    timezone-aware input is normalized to UTC before use, so ``due_at`` and
+    ``order_key`` always carry UTC timestamps regardless of the caller's
+    offset.
     """
-    _require_aware_utc(facts.queued_at, "facts.queued_at")
-    _require_aware_utc(now, "now")
+    queued_at = _to_utc(facts.queued_at, "facts.queued_at")
+    now = _to_utc(now, "now")
 
     factors: list[PriorityFactor] = []
     if facts.edited_since_monetized:
@@ -246,8 +256,8 @@ def evaluate_priority(facts: PriorityFacts, *, now: datetime) -> PriorityAssessm
 
     lane = _lane_for(facts)
     target = _SLA_TARGETS[lane]
-    due_at = facts.queued_at + target
-    sla_state = _sla_state_for(elapsed=now - facts.queued_at, target=target)
+    due_at = queued_at + target
+    sla_state = _sla_state_for(elapsed=now - queued_at, target=target)
     band = _band_for(lane=lane, sla_state=sla_state, integrity_score=integrity_score)
 
     order_key = (
@@ -255,7 +265,7 @@ def evaluate_priority(facts: PriorityFacts, *, now: datetime) -> PriorityAssessm
         _SLA_RANK[sla_state],
         -integrity_score,
         due_at,
-        facts.queued_at,
+        queued_at,
     )
 
     return PriorityAssessment(

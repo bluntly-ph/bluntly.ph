@@ -6,7 +6,7 @@ function over already-loaded facts.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -428,6 +428,37 @@ def test_naive_queued_at_raises_value_error():
 def test_naive_now_raises_value_error():
     with pytest.raises(ValueError, match="now"):
         evaluate_priority(_facts(), now=datetime(2026, 9, 8, 12, 0, 0))
+
+
+# --------------------------------------------------------------------------- #
+# Non-UTC but timezone-aware datetimes are normalized to UTC
+# --------------------------------------------------------------------------- #
+
+def test_aware_non_utc_input_is_normalized_to_utc_due_at_and_order_key():
+    """A UTC+08:00 caller must get exactly the same assessment as the UTC
+    equivalent instant — normalized to UTC, not merely accepted as-is."""
+    plus8 = timezone(timedelta(hours=8))
+    queued_at_plus8 = (NOW - timedelta(hours=1)).astimezone(plus8)
+    now_plus8 = NOW.astimezone(plus8)
+    assert queued_at_plus8.utcoffset() == timedelta(hours=8)  # sanity: not already UTC
+
+    facts_plus8 = _facts(queued_at=queued_at_plus8, report_count=1, collusion=True)
+    facts_utc = _facts(queued_at=NOW - timedelta(hours=1), report_count=1, collusion=True)
+
+    result_plus8 = evaluate_priority(facts_plus8, now=now_plus8)
+    result_utc = evaluate_priority(facts_utc, now=NOW)
+
+    # Same instant, same assessment.
+    assert result_plus8 == result_utc
+
+    # And the output timestamps are concretely UTC, not merely equal instants
+    # expressed in another offset.
+    assert result_plus8.due_at.tzinfo == UTC
+    assert result_plus8.due_at.utcoffset() == timedelta(0)
+    order_key_due_at = result_plus8.order_key[3]
+    order_key_queued_at = result_plus8.order_key[4]
+    assert order_key_due_at.tzinfo == UTC
+    assert order_key_queued_at.tzinfo == UTC
 
 
 def test_policy_version_constant():
