@@ -139,3 +139,19 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/**
+ * A photo URL worth rendering, or null.
+ *
+ * Lives here rather than in `lib/reviews.ts` because it is a pure string check
+ * that both server and CLIENT components need — the review composer's product
+ * picker is a client component, and importing it from the `server-only` module
+ * broke that page at build time while typechecking clean.
+ *
+ * `example.com` is excluded on purpose: seeded and test rows carry those, and a
+ * broken-image icon in a product list reads as a broken product.
+ */
+export function usablePhoto(url: string | null | undefined): string | null {
+  if (!url || url.includes("example.com")) return null;
+  return url.startsWith("http") ? url : null;
+}

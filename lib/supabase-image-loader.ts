@@ -23,6 +23,23 @@
  *
  * Anything that is not a Supabase public object is returned untouched, so a
  * blob: preview or a future host still renders rather than 404ing.
+ *
+ * `resize=contain` is LOAD-BEARING, not a refinement (QA-001). Supabase's
+ * default is `resize=cover`, and cover with a width but no height does not
+ * scale the height at all: a 1801x1800 product photo asked for at width 240
+ * came back 240x1800 — the full original height squeezed into a 240px column.
+ * Measured on production 2026-09-09:
+ *
+ *   ?width=240                 240x1800   331,306 B   (squashed)
+ *   ?width=240&resize=contain  240x 240    21,362 B   (correct)
+ *
+ * Every Supabase-hosted image on the site goes through this function, so the
+ * default was distorting product photos, review photos and avatars alike —
+ * and at a 36px thumbnail a 1:7.5 sliver of a photo is indistinguishable from
+ * a broken image, which is how it was reported.
+ *
+ * A Next loader is only ever given the target WIDTH, so the height cannot be
+ * passed; `contain` is what makes width-only meaningful.
  */
 
 const PUBLIC_OBJECT = "/storage/v1/object/public/";
@@ -42,6 +59,7 @@ export default function supabaseImageLoader({
   const url = new URL(src);
   url.pathname = url.pathname.replace(PUBLIC_OBJECT, RENDER_IMAGE);
   url.searchParams.set("width", String(width));
+  url.searchParams.set("resize", "contain");
   // Supabase accepts 20-100 and defaults to 80; Next's default is 75.
   url.searchParams.set("quality", String(quality ?? 75));
   return url.toString();

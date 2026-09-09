@@ -255,9 +255,16 @@ export function queueTimeBasisLabel(item: QueueCard): string {
     : "measured from submission";
 }
 
-/** How long this card has been waiting, on its own declared basis. */
+/**
+ * How long this card has been waiting, on its own declared basis.
+ *
+ * A DURATION ("3h"), not a relative timestamp ("3h ago"). The panel reads
+ * "Waiting 3h", and "Waiting 3h ago" is not a thing a queue can say.
+ */
 export function queueAgeLabel(item: QueueCard, now: number = Date.now()): string {
-  return relativeAge(item.review.created_at, now);
+  const started = Date.parse(item.review.created_at);
+  if (Number.isNaN(started)) return "";
+  return durationLabel(Math.max(0, (now - started) / 1000));
 }
 
 /**

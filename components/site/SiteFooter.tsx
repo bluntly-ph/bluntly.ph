@@ -1,21 +1,29 @@
 import Link from "next/link";
-import {
-  FacebookLogo,
-  InstagramLogo,
-  RedditLogo,
-  TiktokLogo,
-} from "@phosphor-icons/react/dist/ssr";
+import { RedditLogo } from "@phosphor-icons/react/dist/ssr";
 
 import { Logo } from "@/components/ui/Logo";
 import { FOOTER_LINKS } from "@/lib/landing-data";
 
-// bluntly's own profiles. These were network homepages until BUG-002 — a
-// "Follow us" icon that drops you on reddit.com follows nobody.
-const SOCIALS = [
-  { label: "Reddit", href: "https://www.reddit.com/r/bluntlyph", Icon: RedditLogo },
-  { label: "Instagram", href: "https://www.instagram.com/bluntlyph", Icon: InstagramLogo },
-  { label: "Facebook", href: "https://www.facebook.com/bluntlyph", Icon: FacebookLogo },
-  { label: "TikTok", href: "https://www.tiktok.com/@bluntlyph", Icon: TiktokLogo },
+/**
+ * bluntly's own profiles (BUG-002, QA-005).
+ *
+ * These were network homepages until BUG-002 — a "Follow us" icon that drops
+ * you on reddit.com follows nobody. They were then pointed at `/bluntlyph`
+ * handles on four networks, and QA-005 found the obvious next problem: none of
+ * those accounts exists, so all four icons lead to a 404. A dead link under
+ * "Follow us" is worse than no link; it reads as an abandoned product.
+ *
+ * The list is therefore EMPTY until the accounts are real, and the whole block
+ * hides itself when it is empty. Add an entry the day an account exists and the
+ * design comes back with it — re-import that network's icon from
+ * `@phosphor-icons/react/dist/ssr` and nothing else needs changing. `RedditLogo`
+ * stays imported only because it types the list.
+ */
+const SOCIALS: { label: string; href: string; Icon: typeof RedditLogo }[] = [
+  // { label: "Reddit", href: "https://www.reddit.com/r/bluntlyph", Icon: RedditLogo },
+  // { label: "Instagram", href: "https://www.instagram.com/bluntlyph", Icon: InstagramLogo },
+  // { label: "Facebook", href: "https://www.facebook.com/bluntlyph", Icon: FacebookLogo },
+  // { label: "TikTok", href: "https://www.tiktok.com/@bluntlyph", Icon: TiktokLogo },
 ];
 
 /**
@@ -38,6 +46,7 @@ export function SiteFooter() {
         <FooterColumn title="About" links={FOOTER_LINKS.about} />
         <FooterColumn title="Read" links={FOOTER_LINKS.read} />
 
+        {SOCIALS.length > 0 ? (
         <div>
           <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">
             Follow us
@@ -58,6 +67,7 @@ export function SiteFooter() {
             ))}
           </ul>
         </div>
+        ) : null}
       </div>
 
       <div className="mx-auto w-full max-w-[72rem] px-6 pb-10 lg:px-10">

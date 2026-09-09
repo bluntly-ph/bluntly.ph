@@ -189,8 +189,11 @@ test("queue age is labelled as the approximation it currently is", () => {
   // Until the queue-entry migration lands, "queued at" is the review's
   // created_at (or updated_at for an edited one). The screen must not present
   // either as precise lifecycle timing.
+  // A duration, not a relative timestamp: the panel reads "Waiting 3h", and
+  // "Waiting 3h ago" is not a thing a queue can say.
   const label = queueAgeLabel(item(), NOW);
-  assert.match(label, /ago/);
+  assert.match(label, /^\d+[smhd]$/);
+  assert.doesNotMatch(label, /ago/);
   assert.match(QUEUE_TIME_APPROXIMATE, /created_at/);
 });
 

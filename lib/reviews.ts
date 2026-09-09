@@ -1,6 +1,7 @@
 import "server-only";
 
 import { apiFetch } from "./api/client";
+import { usablePhoto } from "./image";
 import {
   FEATURED_REVIEW,
   READING_REVIEWS,
@@ -163,10 +164,10 @@ function authorName(item: FeedItem): string {
 }
 
 /** A submitted photo we can actually render — not the synthetic seed placeholder. */
-export function usablePhoto(url: string | null | undefined): string | null {
-  if (!url || url.includes("example.com")) return null;
-  return url.startsWith("http") ? url : null;
-}
+// Defined in `lib/image.ts` (client-safe) and re-exported here so the server
+// components already importing it from this module keep working. Imported as
+// well as re-exported, because the helpers below call it.
+export { usablePhoto };
 
 /**
  * The card headline. Reviewers write titles that already name the product

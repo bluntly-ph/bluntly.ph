@@ -16,14 +16,28 @@ import {
   Image as ImageIcon,
   MagnifyingGlass,
   Link as LinkIcon,
+  Plus,
   Star,
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
-import { prepareImageForUpload } from "@/lib/image";
+import { prepareImageForUpload, usablePhoto } from "@/lib/image";
 
-type Product = { id: string; canonical_name: string | null; category: string | null };
+type Product = {
+  id: string;
+  canonical_name: string | null;
+  category: string | null;
+  /**
+   * The product photo the catalogue already stores.
+   *
+   * QA-001: the picker drew a grey square for every result and never asked for
+   * this, so a reviewer choosing between "Anker 737" and "Aukey 10000mAh" had
+   * two identical blank tiles to tell them apart. `ProductOut` has served
+   * `image_url` all along; only this type omitted it.
+   */
+  image_url: string | null;
+};
 type Verdict = "yes_absolutely" | "it_depends" | "hard_pass";
 
 const VERDICTS: { value: Verdict; label: string; hint: string; ring: string }[] = [
@@ -57,14 +71,36 @@ const lines = (s: string) =>
 /* ------------------------------------------------------------------ draft */
 
 /**
- * The draft (BUG-024).
+ * The draft (BUG-024, QA-003).
  *
  * Everything typed lives in one object so saving is a single write and
- * restoring is a single read. Version the key rather than migrating: a stale
- * shape from an older build should be ignored, not half-applied to a form whose
- * fields have moved.
+ * restoring is a single read. Version the key rather than migrating a shape: a
+ * stale shape from an older build should be ignored, not half-applied to a form
+ * whose fields have moved.
+ *
+ * v1 stored ONE draft under one key, and the autosave rewrote that key on every
+ * keystroke. So starting a review of a second product silently destroyed the
+ * first — the reviewer got one "unfinished review" banner naming whichever
+ * product they had touched last, and no way back to the other. QA-003 found it
+ * with two Tefal drafts; it applies to any two.
+ *
+ * v2 keeps a map, one entry per product, so drafts stop competing for a slot.
  */
-const DRAFT_KEY = "bluntly:review-draft:v1";
+const DRAFTS_KEY = "bluntly:review-drafts:v2";
+const LEGACY_DRAFT_KEY = "bluntly:review-draft:v1";
+
+/** The slot for work begun before a product was chosen. */
+const UNPICKED = "__no-product__";
+
+/**
+ * A ceiling, so a reviewer who abandons many drafts cannot fill localStorage
+ * and break saving for the draft they actually care about. Oldest goes first.
+ */
+const MAX_DRAFTS = 10;
+
+function draftSlot(product: Product | null): string {
+  return product?.id ?? UNPICKED;
+}
 
 type Draft = {
   step: number;
@@ -103,11 +139,10 @@ const EMPTY_DRAFT: Draft = {
   savedAt: 0,
 };
 
-function readDraft(): Draft | null {
+/** One stored draft, cleaned up, or null if it is not worth offering. */
+function reviveDraft(parsed: Partial<Draft> | null | undefined): Draft | null {
   try {
-    const raw = window.localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Draft>;
+    if (!parsed) return null;
     // A draft with nothing in it is noise — don't offer to resume it.
     if (!parsed.product && !parsed.discussion?.trim() && !parsed.title?.trim()) {
       return null;
@@ -123,9 +158,62 @@ function readDraft(): Draft | null {
   }
 }
 
-function clearDraft() {
+/** Every stored draft, newest first. Reads the v1 key too, once. */
+function readDrafts(): { slot: string; draft: Draft }[] {
+  const found = new Map<string, Draft>();
+
   try {
-    window.localStorage.removeItem(DRAFT_KEY);
+    const raw = window.localStorage.getItem(DRAFTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, Partial<Draft>>;
+      for (const [slot, value] of Object.entries(parsed ?? {})) {
+        const draft = reviveDraft(value);
+        if (draft) found.set(slot, draft);
+      }
+    }
+  } catch {
+    /* see clearDraft */
+  }
+
+  // The v1 draft is worth one more read: a reviewer mid-review when this
+  // shipped should not lose it. It is folded into the map and the old key
+  // dropped, so this happens exactly once.
+  try {
+    const legacy = window.localStorage.getItem(LEGACY_DRAFT_KEY);
+    if (legacy) {
+      const draft = reviveDraft(JSON.parse(legacy) as Partial<Draft>);
+      const slot = draftSlot(draft?.product ?? null);
+      if (draft && !found.has(slot)) found.set(slot, draft);
+      window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    }
+  } catch {
+    /* see clearDraft */
+  }
+
+  return [...found.entries()]
+    .map(([slot, draft]) => ({ slot, draft }))
+    .sort((a, b) => (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0));
+}
+
+function writeDraft(slot: string, draft: Draft) {
+  try {
+    const kept = readDrafts().filter((entry) => entry.slot !== slot);
+    // Newest first, so the oldest fall off the end once the cap is reached.
+    const next: Record<string, Draft> = { [slot]: draft };
+    for (const entry of kept.slice(0, MAX_DRAFTS - 1)) next[entry.slot] = entry.draft;
+    window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(next));
+  } catch {
+    /* see clearDraft */
+  }
+}
+
+function clearDraft(slot: string) {
+  try {
+    const next: Record<string, Draft> = {};
+    for (const entry of readDrafts()) {
+      if (entry.slot !== slot) next[entry.slot] = entry.draft;
+    }
+    window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(next));
   } catch {
     /* private mode, quota — losing a draft must never break submission */
   }
@@ -172,28 +260,23 @@ export function WriteReviewForm() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [product, setProduct] = useState<Product | null>(null);
   const [phase, setPhase] = useState<"product" | "steps" | "done">("product");
-  const [dismissed, setDismissed] = useState(false);
 
   const hydrated = useHydrated();
   // Captured once, at hydration: the autosave below rewrites the same key on
   // every keystroke, and re-reading it would keep resurrecting the banner with
   // the reviewer's own in-progress work.
-  const savedDraft = useMemo(() => (hydrated ? readDraft() : null), [hydrated]);
-  const resumable = dismissed ? null : savedDraft;
+  const savedDrafts = useMemo(() => (hydrated ? readDrafts() : []), [hydrated]);
+  // Slots the reviewer has already dealt with this visit — resumed or
+  // discarded — so a banner does not reappear over the work it opened.
+  const [handled, setHandled] = useState<string[]>([]);
+  const resumable = savedDrafts.filter((entry) => !handled.includes(entry.slot));
 
   // Persist on every change, but only once there is something worth keeping.
   // Writing to an external store is what effects are for; no state is set here.
   useEffect(() => {
     if (!hydrated) return;
     if (!product && !draft.discussion.trim() && !draft.title.trim()) return;
-    try {
-      window.localStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({ ...draft, product, savedAt: Date.now() }),
-      );
-    } catch {
-      /* see clearDraft */
-    }
+    writeDraft(draftSlot(product), { ...draft, product, savedAt: Date.now() });
   }, [draft, product, hydrated]);
 
   const patch = useCallback(
@@ -201,18 +284,20 @@ export function WriteReviewForm() {
     [],
   );
 
-  function resume() {
-    const saved = resumable;
+  function resume(slot: string) {
+    const saved = savedDrafts.find((entry) => entry.slot === slot)?.draft;
     if (!saved) return;
     setDraft(saved);
     setProduct(saved.product);
     setPhase(saved.product ? "steps" : "product");
-    setDismissed(true);
+    // Only this one is dealt with. Any other draft keeps its banner, so
+    // switching between two unfinished reviews stays possible.
+    setHandled((slots) => [...slots, slot]);
   }
 
-  function discard() {
-    clearDraft();
-    setDismissed(true);
+  function discard(slot: string) {
+    clearDraft(slot);
+    setHandled((slots) => [...slots, slot]);
   }
 
   if (phase === "done") {
@@ -225,9 +310,7 @@ export function WriteReviewForm() {
 
   return (
     <div className="mx-auto w-full max-w-[42rem] px-6 py-8 lg:py-10">
-      {resumable ? (
-        <ResumeBanner draft={resumable} onResume={resume} onDiscard={discard} />
-      ) : null}
+      <ResumeList drafts={resumable} onResume={resume} onDiscard={discard} />
 
       {phase === "product" ? (
         <ProductStep
@@ -244,7 +327,7 @@ export function WriteReviewForm() {
           patch={patch}
           onChangeProduct={() => setPhase("product")}
           onDone={() => {
-            clearDraft();
+            clearDraft(draftSlot(product));
             setPhase("done");
           }}
         />
@@ -269,27 +352,227 @@ function ResumeBanner({
       })
     : null;
   return (
-    <div className="mb-6 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] p-4">
-      <p className="text-[14px] font-semibold text-[var(--text-primary)]">
-        You have an unfinished review
-        {draft.product?.canonical_name ? ` of ${draft.product.canonical_name}` : ""}.
-      </p>
-      {when ? (
-        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Saved {when}.</p>
-      ) : null}
-      <div className="mt-3 flex gap-2">
+    <div className="flex items-start justify-between gap-3 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] p-4">
+      <div className="min-w-0">
+        <p className="text-[14px] font-semibold text-[var(--text-primary)]">
+          {draft.product?.canonical_name
+            ? `Unfinished review of ${draft.product.canonical_name}`
+            : "Unfinished review"}
+        </p>
+        {when ? (
+          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Saved {when}.</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 gap-2">
         <Button type="button" size="sm" onClick={onResume}>
-          Pick up where I left off
+          Pick up
         </Button>
         <Button type="button" size="sm" variant="secondary" onClick={onDiscard}>
-          Start fresh
+          Discard
         </Button>
       </div>
     </div>
   );
 }
 
+/**
+ * Every unfinished review, not just the last one touched.
+ *
+ * One banner per draft. A reviewer with drafts of two products has to be able
+ * to see both — a single banner naming one of them is how QA-003's second Tefal
+ * draft "disappeared": it was there, it just had nothing pointing at it.
+ */
+function ResumeList({
+  drafts,
+  onResume,
+  onDiscard,
+}: {
+  drafts: { slot: string; draft: Draft }[];
+  onResume: (slot: string) => void;
+  onDiscard: (slot: string) => void;
+}) {
+  if (drafts.length === 0) return null;
+  return (
+    <div className="mb-6 flex flex-col gap-2">
+      {drafts.length > 1 ? (
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          You have {drafts.length} unfinished reviews.
+        </p>
+      ) : null}
+      {drafts.map(({ slot, draft }) => (
+        <ResumeBanner
+          key={slot}
+          draft={draft}
+          onResume={() => onResume(slot)}
+          onDiscard={() => onDiscard(slot)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- pros/cons */
+
+/**
+ * Suggested phrases for step 4 (QA-002).
+ *
+ * The approved design offers these as one-tap chips; the live form offered a
+ * bare "one per line" textarea, which is a blank page at the exact moment a
+ * reviewer is least sure what to write. The wording is the design's own.
+ *
+ * They are a STARTING POINT, not a vocabulary: the free-text field below them
+ * is equally prominent, and a typed phrase is stored identically to a tapped
+ * one. Restricting reviews to a fixed set of phrases would flatten the specific
+ * detail that makes a review worth reading.
+ */
+const PRO_SUGGESTIONS = [
+  "Worth it!",
+  "Good build quality",
+  "Portable",
+  "Affordable",
+  "Feels premium",
+  "Easy to use",
+];
+
+const CON_SUGGESTIONS = [
+  "Not worth it",
+  "Too expensive",
+  "Flimsy",
+  "Not as advertised",
+  "Looks better in the photos",
+];
+
+/**
+ * Chips plus free text, over the same newline-joined string the draft and the
+ * submit payload already use — so nothing downstream changes shape.
+ */
+function PhrasePicker({
+  tone,
+  label,
+  prompt,
+  suggestions,
+  addLabel,
+  value,
+  onChange,
+}: {
+  tone: "pro" | "con";
+  label: string;
+  prompt: string;
+  suggestions: string[];
+  addLabel: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [custom, setCustom] = useState("");
+  const chosen = lines(value);
+  const has = (phrase: string) =>
+    chosen.some((c) => c.toLowerCase() === phrase.toLowerCase());
+
+  function toggle(phrase: string) {
+    const next = has(phrase)
+      ? chosen.filter((c) => c.toLowerCase() !== phrase.toLowerCase())
+      : [...chosen, phrase];
+    onChange(next.join("\n"));
+  }
+
+  function addCustom() {
+    const phrase = custom.trim();
+    if (!phrase || has(phrase)) {
+      setCustom("");
+      return;
+    }
+    onChange([...chosen, phrase].join("\n"));
+    setCustom("");
+  }
+
+  // Typed phrases render as chips too, so a reviewer can remove one the same
+  // way they added it rather than hunting through a textarea.
+  const extras = chosen.filter(
+    (c) => !suggestions.some((s) => s.toLowerCase() === c.toLowerCase()),
+  );
+  const accent =
+    tone === "pro" ? "text-[var(--accent-trust)]" : "text-[var(--accent-danger)]";
+
+  return (
+    <div className="rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-hairline-inset)]">
+      <p className={`text-[13px] font-semibold ${accent}`}>{label}</p>
+      <p className="mt-0.5 text-[12px] text-[var(--text-secondary)]">{prompt}</p>
+
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {[...suggestions, ...extras].map((phrase) => {
+          const on = has(phrase);
+          return (
+            <li key={phrase}>
+              <button
+                type="button"
+                onClick={() => toggle(phrase)}
+                aria-pressed={on}
+                className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-[13px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
+                  on
+                    ? "border-[var(--accent-primary)] bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] text-[var(--accent-primary)]"
+                    : "border-[var(--line-hairline-30)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]"
+                }`}
+              >
+                <Plus size={14} weight="bold" aria-hidden="true" />
+                {phrase}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="mt-3 flex gap-2">
+        <input
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // The picker sits inside the step form; Enter adds a phrase here
+              // rather than advancing the step.
+              e.preventDefault();
+              addCustom();
+            }
+          }}
+          onBlur={addCustom}
+          placeholder={addLabel}
+          aria-label={addLabel}
+          className={`${inputCls} h-10`}
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------------------------------------------------- product */
+
+/**
+ * A product's photo in the picker, or a neutral tile when there isn't one.
+ *
+ * Most of the catalogue has no image yet, so the tile stays — but it is now a
+ * fallback rather than the only thing this component could draw.
+ */
+function ProductThumb({ product }: { product: Product }) {
+  const src = usablePhoto(product.image_url);
+  if (!src) {
+    return (
+      <span
+        aria-hidden="true"
+        className="h-9 w-9 shrink-0 rounded-[8px] bg-[var(--base-gray-200)]"
+      />
+    );
+  }
+  return (
+    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-[8px] bg-[var(--base-gray-200)]">
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes="36px"
+        className="object-cover"
+      />
+    </span>
+  );
+}
 
 function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
   const [q, setQ] = useState("");
@@ -390,7 +673,7 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
               onClick={() => onPick(p)}
               className="flex w-full items-center gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-3 text-left shadow-[var(--shadow-hairline-inset)] hover:outline hover:outline-1 hover:outline-[var(--accent-primary)]"
             >
-              <span className="h-9 w-9 shrink-0 rounded-[8px] bg-[var(--base-gray-200)]" />
+              <ProductThumb product={p} />
               <span className="text-[14px] font-medium text-[var(--text-primary)]">
                 {p.canonical_name ?? "Unnamed product"}
               </span>
@@ -674,25 +957,24 @@ function StepsFlow({
 
         {step === 3 ? (
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Pros (one per line)">
-              <textarea
-                value={draft.pros}
-                onChange={(e) => patch({ pros: e.target.value })}
-                rows={5}
-                autoFocus
-                placeholder={"Genuinely quiet\nBattery lasts a full day"}
-                className={`${inputCls} resize-y py-3`}
-              />
-            </Field>
-            <Field label="Cons (one per line)">
-              <textarea
-                value={draft.cons}
-                onChange={(e) => patch({ cons: e.target.value })}
-                rows={5}
-                placeholder={"Charging port feels flimsy\nNo case included"}
-                className={`${inputCls} resize-y py-3`}
-              />
-            </Field>
+            <PhrasePicker
+              tone="pro"
+              label="Pros"
+              prompt="What's great about this product?"
+              suggestions={PRO_SUGGESTIONS}
+              addLabel="Add a pro…"
+              value={draft.pros}
+              onChange={(pros) => patch({ pros })}
+            />
+            <PhrasePicker
+              tone="con"
+              label="Cons"
+              prompt="What are the downsides worth mentioning?"
+              suggestions={CON_SUGGESTIONS}
+              addLabel="Add a con…"
+              value={draft.cons}
+              onChange={(cons) => patch({ cons })}
+            />
           </div>
         ) : null}
 

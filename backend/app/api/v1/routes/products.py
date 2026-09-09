@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -152,8 +152,9 @@ def list_products(db: Session = Depends(get_db), limit: int = Query(50, ge=1, le
                   q: str | None = Query(None, max_length=200),
                   include_low_trust: bool = False) -> list[ProductOut]:
     stmt = select(Product)
-    if q and q.strip():
-        stmt = stmt.where(Product.canonical_name.ilike(f"%{q.strip()}%"))
+    needle = (q or "").strip()
+    if needle:
+        stmt = stmt.where(Product.canonical_name.ilike(f"%{needle}%"))
     # Visibility threshold (M2 slice 4): with enough reviews and a trust score
     # below the configured floor, a product drops out of the default listing.
     # Threshold 0.0 (default) disables the filter entirely.
@@ -162,7 +163,33 @@ def list_products(db: Session = Depends(get_db), limit: int = Query(50, ge=1, le
             Product.review_count < settings.product_trust_min_reviews,
             Product.trust_score >= settings.product_trust_visibility_threshold,
         ))
-    rows = db.scalars(stmt.order_by(Product.created_at.desc()).limit(limit))
+    # Relevance first when there is something to be relevant to (QA-001).
+    #
+    # `ilike %needle%` matches anywhere in the name, so "ma" hits "10000mAh" and
+    # "MacBook" alike — that is fine as a NET, but ordering the net by
+    # `created_at DESC` meant the newest row won regardless of how well it
+    # matched. Searching "ma" returned a product someone had just submitted
+    # ahead of every actual match, which reads as a broken search.
+    #
+    # The ranking is deliberately explainable rather than clever: an exact name,
+    # then a name that starts with the term, then a word inside the name that
+    # starts with it, then a bare substring — and only then the newest. A
+    # reviewer typing "anker" gets the Ankers, not whatever was added today.
+    if needle:
+        lowered = func.lower(Product.canonical_name)
+        term = needle.lower()
+        rank = case(
+            (lowered == term, 0),
+            (lowered.like(f"{term}%"), 1),
+            # A word boundary: the term starts a word somewhere in the name.
+            (lowered.like(f"% {term}%"), 2),
+            else_=3,
+        )
+        stmt = stmt.order_by(rank, func.length(Product.canonical_name),
+                             Product.created_at.desc())
+    else:
+        stmt = stmt.order_by(Product.created_at.desc())
+    rows = db.scalars(stmt.limit(limit))
     return [_product_out(p) for p in rows]
 
 
