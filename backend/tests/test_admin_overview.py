@@ -63,19 +63,32 @@ def test_no_exception_detail_reaches_the_response():
     assert "ValueError" not in body
 
 
+class _NoRows:
+    """What `Session.scalars`/`execute` return for a query that matched nothing.
+
+    A bare `[]` is not that: `ScalarResult` is iterable AND has `.all()`, and
+    the queue assessment's candidate loader calls the latter. A fake that only
+    supports the half the old code used turns a contract change into a spurious
+    failure — or, worse, hides a real one.
+    """
+
+    def __iter__(self):
+        return iter(())
+
+    def all(self):
+        return []
+
+
 def test_a_healthy_response_says_nothing_is_missing():
     class Empty:
         def scalars(self, *a, **k):
-            return []
+            return _NoRows()
 
         def scalar(self, *a, **k):
             return 0
 
         def execute(self, *a, **k):
-            class R:
-                def all(self_):
-                    return []
-            return R()
+            return _NoRows()
 
     out = route.admin_overview(db=Empty())
     assert out.unavailable == []
@@ -91,13 +104,18 @@ def test_the_breakdown_always_has_the_four_designed_bars():
     assert all(b.count == 0 for b in bars)
 
 
-def test_urgent_is_the_flagged_count_not_the_queue_size():
+def test_urgent_is_the_overdue_count_not_the_high_band():
+    """"Urgent" used to be an alias of `high_priority`, so the pill could only
+    ever repeat the headline beside it. Under policy v1 they answer different
+    questions: High is how much attention the item deserves, overdue is how much
+    of the backlog has already missed its lane's SLA."""
     o = svc.AdminOverview(
         queue_total=24, high_priority=7, approved_today=18, approved_delta=3,
         pending_affiliate=18, honesty_fund_pool=Decimal("4320"),
-        honesty_fund_month=date(2026, 5, 1),
+        honesty_fund_month=date(2026, 5, 1), approaching_sla=5, overdue_sla=2,
     )
-    assert o.urgent == 7
+    assert o.urgent == 2
+    assert o.high_priority == 7
 
 
 @pytest.mark.parametrize("utc_moment,expected", [
@@ -196,6 +214,7 @@ def test_one_subsystem_failing_leaves_the_other_intact(monkeypatch):
                             approved_delta=3, pending_affiliate=18,
                             honesty_fund_pool=Decimal("4320"),
                             honesty_fund_month=date(2026, 5, 1),
+                            approaching_sla=4, overdue_sla=2,
                             breakdown=[svc.BreakdownBar("Earn Eligible", 7)],
                             activity=[svc.ActivityItem("publish", None, "RV1",
                                                        datetime.now(UTC))]))
@@ -206,8 +225,9 @@ def test_one_subsystem_failing_leaves_the_other_intact(monkeypatch):
     monkeypatch.setattr(route.admin_overview_service, "affiliate_health", boom)
     out = route.admin_overview(db=None)
     assert out.unavailable == ["affiliate"]
-    # The counts survived.
-    assert (out.queue_total, out.urgent, out.approved_delta) == (24, 7, 3)
+    # The counts survived. `urgent` is the overdue figure, not `high_priority`.
+    assert (out.queue_total, out.high_priority, out.approved_delta) == (24, 7, 3)
+    assert (out.urgent, out.approaching_sla, out.overdue_sla) == (2, 4, 2)
     assert out.activity[0].target_ref == "RV1"
 
 
@@ -344,19 +364,19 @@ def test_a_null_target_ref_stays_none(monkeypatch):
     assert svc._activity(_DB())[0].target_ref is None
 
 
-def test_reported_ids_are_strings_so_the_flag_comparison_can_match():
-    """The silent half of the same mismatch: these are compared against
-    `str(review.id)`, so as UUIDs the intersection was always empty and the
-    design's "urgent" pill could never leave zero."""
-    ref = _uuid.uuid4()
+def test_the_flagged_bar_matches_reported_targets_by_id():
+    """The original defect was a type mismatch: report ids arrived as UUIDs and
+    were compared against `str(review.id)`, so the intersection was always empty
+    and the Flagged bar could never leave zero. Both sides of the comparison now
+    come from the same canonical assessment pass, as UUIDs."""
+    reported_id = _uuid.uuid4()
 
-    class _DB:
-        def scalars(self, *a, **k):
-            return [ref]
-
-    found = svc._reported_review_ids(_DB())
-    assert found == {str(ref)}
-    assert {str(ref)} & found, "a reported review no longer matches the queue"
+    bars = svc._breakdown(
+        _EmptyDB(),
+        [_QueueRow(reported_id), _QueueRow(_uuid.uuid4())],
+        frozenset({reported_id}),
+    )
+    assert _bar(bars, "Flagged") == 1, "a reported review no longer matches the queue"
 
 
 # The recorded coverage follow-up ---------------------------------------------
@@ -430,21 +450,29 @@ def _flagged(ov) -> int:
 
 
 @requires_db
-def test_a_reported_queued_review_is_flagged_and_high_priority(db):
+def test_a_reported_queued_review_is_flagged_but_not_yet_high(db):
     """The half that failed silently: with UUIDs on both sides of the
-    intersection the count stayed zero however much was reported."""
-    before = svc.overview(db)
+    intersection the Flagged count stayed zero however much was reported.
+
+    Under policy v1 the same review is NOT automatically High. One spam report
+    scores 20 — enough to lift it above routine work, not enough to claim a
+    moderator's next hour. Reporting something is a request for attention, not
+    a verdict, and a queue where any reported item outranks everything else is
+    a queue anyone can reorder.
+    """
+    now = datetime.now(UTC)
+    before = svc.overview(db, now=now)
 
     product = _product(db)
     review = _queued_review(db, author=make_user(db), product=product)
     _report(db, review.id, reporter=make_user(db))
 
-    after = svc.overview(db)
+    after = svc.overview(db, now=now)
 
     assert after.queue_total == before.queue_total + 1
-    assert after.high_priority == before.high_priority + 1
-    assert after.urgent == before.urgent + 1, "the design's urgent pill"
     assert _flagged(after) == _flagged(before) + 1
+    assert after.high_priority == before.high_priority, "reported is not High"
+    assert after.urgent == before.urgent, "a fresh report is inside its SLA"
 
 
 @requires_db
@@ -474,8 +502,10 @@ def test_duplicate_reports_do_not_multiply_a_flagged_review(db):
 
     after = svc.overview(db)
 
-    assert after.high_priority == before.high_priority + 1
     assert _flagged(after) == _flagged(before) + 1
+    # Three reports raise the score (bracket 2-3, not 3 x bracket 1) but the
+    # bar counts reviews, and one review is one review.
+    assert after.high_priority == before.high_priority
 
 
 @requires_db
@@ -498,3 +528,299 @@ def test_a_reported_review_outside_the_queue_is_not_urgent(db):
     assert after.queue_total == before.queue_total, "it is not awaiting moderation"
     assert after.high_priority == before.high_priority
     assert _flagged(after) == _flagged(before)
+
+
+# The canonical priority contract ---------------------------------------------
+#
+# Overview used to define "high priority" as the reviews someone had reported,
+# and alias "urgent" to that same number, while the queue underneath it ordered
+# itself by a different rule again. Two screens, two definitions, one backlog —
+# the pill could disagree with the list it sat above.
+#
+# Both now read ONE evaluation: `referral_service.assess_open_queue` assesses
+# the whole queue against policy v1, and Overview reports its aggregates. The
+# tests below pin that the headline counts ARE the assessment's counts, and
+# that `Flagged` keeps its own separate meaning (reported) rather than being
+# quietly reused as a synonym for the High band.
+
+from datetime import timedelta  # noqa: E402
+
+from app.services import referral_service  # noqa: E402
+from app.services.moderation_priority import (  # noqa: E402
+    PriorityBand,
+    PriorityLane,
+    SlaState,
+)
+
+
+class _EmptyDB:
+    """A session that answers every query with nothing."""
+
+    def scalars(self, *a, **k):
+        return _NoRows()
+
+    def scalar(self, *a, **k):
+        return 0
+
+    def execute(self, *a, **k):
+        return _NoRows()
+
+
+class _QueueRow:
+    """The handful of review attributes the breakdown bars actually read."""
+
+    def __init__(self, id):
+        self.id = id
+        self.verification_status = None
+        self.product_id = _uuid.uuid4()
+        self.author_id = _uuid.uuid4()
+
+
+def _bar(bars, label: str) -> int:
+    return next(b.count for b in bars if b.label == label)
+
+
+def _fake_summary(**counts):
+    from app.schemas.referral import QueueCounts
+
+    return referral_service.QueueAssessmentSummary(
+        reviews=(),
+        counts=QueueCounts(**counts),
+        reported_review_ids=frozenset(),
+    )
+
+
+def test_the_headline_counts_are_the_canonical_assessment_counts(monkeypatch):
+    """Overview does not recount the queue. It reports what the single
+    evaluation pass already decided, so the pill and the list cannot drift."""
+    monkeypatch.setattr(
+        referral_service,
+        "assess_open_queue",
+        lambda db, *, now=None: _fake_summary(
+            total=9,
+            by_lane={"reported": 2, "integrity": 3, "routine": 4},
+            by_band={"high": 4, "normal": 3, "low": 2},
+            by_sla={"overdue": 2, "approaching": 3, "on_track": 4},
+        ),
+    )
+
+    o = svc.overview(_EmptyDB())
+
+    assert o.queue_total == 9
+    assert o.high_priority == 4
+    assert o.approaching_sla == 3
+    assert o.overdue_sla == 2
+    assert o.urgent == 2, "the design's urgent pill is the overdue count"
+
+
+def test_high_priority_no_longer_means_reported(monkeypatch):
+    """A review reaches High by being overdue, or by scoring 40 on integrity
+    factors, with nobody having reported it at all. Defining High as "somebody
+    complained" made the headline a measure of report volume."""
+    monkeypatch.setattr(
+        referral_service,
+        "assess_open_queue",
+        lambda db, *, now=None: _fake_summary(
+            total=3,
+            by_lane={"reported": 0, "integrity": 3, "routine": 0},
+            by_band={"high": 3, "normal": 0, "low": 0},
+            by_sla={"overdue": 1, "approaching": 0, "on_track": 2},
+        ),
+    )
+
+    o = svc.overview(_EmptyDB())
+
+    assert o.high_priority == 3, "no report filed, still High"
+    assert _flagged(o) == 0, "and Flagged still means reported"
+
+
+def test_the_response_carries_both_sla_counts(monkeypatch):
+    """The route must forward the SLA figures, or the console can show a
+    backlog without showing that part of it is already late."""
+    monkeypatch.setattr(
+        referral_service,
+        "assess_open_queue",
+        lambda db, *, now=None: _fake_summary(
+            total=5,
+            by_band={"high": 1, "normal": 2, "low": 2},
+            by_sla={"overdue": 1, "approaching": 2, "on_track": 2},
+        ),
+    )
+
+    out = route.admin_overview(db=_EmptyDB())
+
+    assert out.unavailable == []
+    assert out.approaching_sla == 2
+    assert out.overdue_sla == 1
+    assert out.urgent == 1
+
+
+def test_a_failed_assessment_does_not_report_zero_late_work():
+    """An unavailable queue must not render as a calm, empty, on-time backlog.
+    `unavailable` is what lets the UI say the panel is missing instead."""
+    out = route.admin_overview(db=_Boom())
+
+    assert "overview" in out.unavailable
+    assert out.approaching_sla == 0
+    assert out.overdue_sla == 0
+
+
+# Against real rows -----------------------------------------------------------
+#
+# The fakes above prove the wiring, and a fake is exactly what let the original
+# UUID/str defect through. These run the real policy over real SQL. They assert
+# equality between the two screens rather than absolute numbers, because
+# `overview()` counts the whole database and CI runs against a shared one.
+
+
+def _vote(db, review_id, voter_id):
+    from app.models.enums import VoteDirection
+    from app.models.vote import ReviewVote
+
+    vote = ReviewVote(review_id=review_id, voter_id=voter_id, vote=VoteDirection.up)
+    db.add(vote)
+    db.flush()
+    return vote
+
+
+def _distinct_review(db, *, title, body, created_at=None):
+    """A queued review with its own product, author and body.
+
+    Its own product AND author because the duplicate-content detector only
+    considers candidates sharing one of the two — fixtures sharing either would
+    flag each other as duplicates and move the lane under test.
+    """
+    overrides = {"title": title, "discussion": body}
+    if created_at is not None:
+        overrides["created_at"] = created_at
+    return _queued_review(db, author=make_user(db), product=_product(db), **overrides)
+
+
+def _full_counts(db, now):
+    return referral_service.get_prioritized_queue(
+        db, referral_service.QueueQuery(limit=1), now=now
+    ).counts
+
+
+@requires_db
+def test_overview_totals_equal_the_canonical_queue_counts(db):
+    """The contract in one line: what the queue says its backlog is, is what
+    the Overview reports."""
+    now = datetime.now(UTC)
+
+    counts = _full_counts(db, now)
+    ov = svc.overview(db, now=now)
+
+    assert ov.queue_total == counts.total
+    assert ov.high_priority == counts.by_band.get(PriorityBand.high.value, 0)
+    assert ov.urgent == counts.by_sla.get(SlaState.overdue.value, 0)
+    assert ov.approaching_sla == counts.by_sla.get(SlaState.approaching.value, 0)
+    assert ov.overdue_sla == ov.urgent
+
+
+@requires_db
+def test_the_four_policy_shapes_classify_the_same_on_both_screens(db):
+    """A collusion-only review, a report-only review, an overdue routine review
+    and a clear on-track one. Each lands in one lane and one band, and the
+    Overview's totals are those same classifications, counted."""
+    now = datetime.now(UTC)
+    marker = _uuid.uuid4().hex[:10]
+
+    on_track = _distinct_review(
+        db,
+        title=f"{marker} on track",
+        body="Bought it, used it for a fortnight, and the battery held up fine.",
+        created_at=now - timedelta(minutes=5),
+    )
+    overdue = _distinct_review(
+        db,
+        title=f"{marker} overdue",
+        body="Arrived dented but works; the seller replaced the lid without argument.",
+        created_at=now - timedelta(hours=30),
+    )
+    reported = _distinct_review(
+        db,
+        title=f"{marker} reported",
+        body="Genuinely loud under load, which nobody in the listing mentions at all.",
+        created_at=now - timedelta(minutes=5),
+    )
+    _report(db, reported.id, reporter=make_user(db))
+
+    colluding = _distinct_review(
+        db,
+        title=f"{marker} collusion",
+        body="Compact, cheap, and the strap frayed within a month of daily use.",
+        created_at=now - timedelta(minutes=5),
+    )
+    ring = [make_user(db) for _ in range(5)]
+    for member in ring:
+        _vote(db, colluding.id, member.id)
+    # Four of the five voters get an up-vote back from the author: 4/5 = 0.8,
+    # over the 0.6 reciprocation threshold. The fifth is what keeps this a
+    # ratio rather than a clean sweep.
+    for index, member in enumerate(ring[:4]):
+        theirs = _queued_review(
+            db,
+            author=member,
+            product=_product(db),
+            title=f"ring member {index} {_uuid.uuid4().hex[:6]}",
+            discussion=f"An unrelated review body, number {index}, {_uuid.uuid4().hex}.",
+        )
+        _vote(db, theirs.id, colluding.author_id)
+
+    page = referral_service.get_prioritized_queue(
+        db, referral_service.QueueQuery(q=marker, limit=50), now=now
+    )
+    seen = {item.review.id: item.priority for item in page.items}
+    assert set(seen) == {on_track.id, overdue.id, reported.id, colluding.id}
+
+    assert seen[on_track.id].lane == PriorityLane.routine
+    assert seen[on_track.id].sla_state == SlaState.on_track
+    assert seen[on_track.id].band == PriorityBand.low
+
+    assert seen[overdue.id].lane == PriorityLane.routine
+    assert seen[overdue.id].sla_state == SlaState.overdue
+    assert seen[overdue.id].band == PriorityBand.high, "past its SLA is High"
+
+    assert seen[reported.id].lane == PriorityLane.reported
+    assert seen[reported.id].band == PriorityBand.normal
+    assert "report_count_1" in {f.code for f in seen[reported.id].factors}
+
+    assert seen[colluding.id].lane == PriorityLane.integrity
+    assert seen[colluding.id].band == PriorityBand.normal
+    assert "collusion" in {f.code for f in seen[colluding.id].factors}
+
+    counts = _full_counts(db, now)
+    ov = svc.overview(db, now=now)
+    assert ov.high_priority == counts.by_band.get(PriorityBand.high.value, 0)
+    assert ov.urgent == counts.by_sla.get(SlaState.overdue.value, 0)
+
+
+@requires_db
+def test_flagged_counts_reported_targets_not_the_high_band(db):
+    """Two different questions, and the bar answers the one it is labelled
+    with. An overdue review nobody reported is High and not Flagged; a fresh
+    reported one is Flagged and not High."""
+    now = datetime.now(UTC)
+    before = svc.overview(db, now=now)
+
+    _distinct_review(
+        db,
+        title="Late and unremarked",
+        body="Perfectly ordinary purchase, nothing controversial, it just sat waiting.",
+        created_at=now - timedelta(hours=30),
+    )
+    reported = _distinct_review(
+        db,
+        title="Fresh and complained about",
+        body="The measurements in the listing are wrong by about two centimetres.",
+        created_at=now - timedelta(minutes=1),
+    )
+    _report(db, reported.id, reporter=make_user(db))
+
+    after = svc.overview(db, now=now)
+
+    assert after.queue_total == before.queue_total + 2
+    assert after.high_priority == before.high_priority + 1, "the overdue one"
+    assert after.urgent == before.urgent + 1
+    assert _flagged(after) == _flagged(before) + 1, "the reported one"

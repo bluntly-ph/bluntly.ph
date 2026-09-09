@@ -26,12 +26,12 @@ from app.models.commission import Commission
 from app.models.enums import (
     EarnEligibleStatus,
     ModerationAction,
-    ModerationTargetType,
     VerificationStatus,
 )
 from app.models.moderation import ModerationLog
 from app.models.review import Review
 from app.models.user import User
+from app.services import referral_service
 
 MANILA = ZoneInfo("Asia/Manila")
 ZERO = Decimal("0")
@@ -69,8 +69,10 @@ class BreakdownBar:
 @dataclass(frozen=True)
 class AdminOverview:
     queue_total: int
-    #: Queue items somebody has reported. That is what makes one urgent —
-    #: not its age, which the queue's own ordering already conveys.
+    #: Queue items the canonical policy assessed as High (design §5) — escalated,
+    #: past their lane's SLA, or scoring 40+ on integrity factors. It used to be
+    #: "reviews somebody reported", which measured report volume rather than
+    #: how much of the backlog actually needs a moderator first.
     high_priority: int
     approved_today: int
     #: Signed difference against yesterday, so the UI never has to infer it.
@@ -78,45 +80,26 @@ class AdminOverview:
     pending_affiliate: int
     honesty_fund_pool: Decimal
     honesty_fund_month: date
+    #: Items at or past 75% of their lane's SLA target, and items already past
+    #: it. Separated because they call for different things: one is a warning,
+    #: the other is work that is already late.
+    approaching_sla: int = 0
+    overdue_sla: int = 0
     breakdown: list[BreakdownBar] = field(default_factory=list)
     activity: list[ActivityItem] = field(default_factory=list)
 
     @property
     def urgent(self) -> int:
-        """What the design's "7 urgent" pill counts."""
-        return self.high_priority
+        """What the design's "7 urgent" pill counts.
+
+        Overdue work, not High work. As an alias of `high_priority` the pill
+        could only ever repeat the headline sitting beside it.
+        """
+        return self.overdue_sla
 
 
 def _manila_day(moment: datetime | None = None) -> date:
     return (moment or datetime.now(MANILA)).astimezone(MANILA).date()
-
-
-def _queue_predicate():
-    """Reviews genuinely awaiting a moderator.
-
-    Mirrors `get_queue`: pending AND unpublished. Keeping the definition in one
-    shape matters — a headline count that disagrees with the list under it is
-    worse than no headline at all.
-    """
-    return (
-        Review.is_removed.is_(False),
-        Review.published_at.is_(None),
-        Review.earn_eligible_status == EarnEligibleStatus.pending,
-    )
-
-
-def _reported_review_ids(db: Session) -> set:
-    rows = db.scalars(
-        select(ModerationLog.target_ref).where(
-            ModerationLog.action == ModerationAction.report,
-            ModerationLog.target_type == ModerationTargetType.review,
-        )
-    )
-    # Compared against `str(review.id)`, so they must be strings. As UUIDs the
-    # intersection was always empty, which quietly pinned "high priority", the
-    # design's "urgent" pill and the Flagged bar to zero no matter how much was
-    # reported.
-    return {str(r) for r in rows if r}
 
 
 def _approved_on(db: Session, day: date) -> int:
@@ -135,10 +118,11 @@ def _approved_on(db: Session, day: date) -> int:
 def overview(db: Session, *, now: datetime | None = None) -> AdminOverview:
     today = _manila_day(now)
 
-    queue = list(db.scalars(select(Review).where(*_queue_predicate())))
-    reported = _reported_review_ids(db)
-    queue_ids = {str(r.id) for r in queue} | {str(r.review_id) for r in queue}
-    high_priority = len(queue_ids & reported)
+    # One assessment of the whole backlog, shared with the queue screen. The
+    # membership rule, the priority rule and the report facts all come from
+    # there, so the headline above the list cannot contradict the list.
+    assessment = referral_service.assess_open_queue(db, now=now)
+    queue = list(assessment.reviews)
 
     approved_today = _approved_on(db, today)
     approved_yesterday = _approved_on(db, today - timedelta(days=1))
@@ -158,19 +142,23 @@ def overview(db: Session, *, now: datetime | None = None) -> AdminOverview:
     ) or ZERO
 
     return AdminOverview(
-        queue_total=len(queue),
-        high_priority=high_priority,
+        queue_total=assessment.total,
+        high_priority=assessment.high_priority,
         approved_today=approved_today,
         approved_delta=approved_today - approved_yesterday,
         pending_affiliate=pending_affiliate,
         honesty_fund_pool=Decimal(pool),
         honesty_fund_month=cycle,
-        breakdown=_breakdown(db, queue, reported),
+        approaching_sla=assessment.approaching,
+        overdue_sla=assessment.overdue,
+        breakdown=_breakdown(db, queue, assessment.reported_review_ids),
         activity=_activity(db),
     )
 
 
-def _breakdown(db: Session, queue: list[Review], reported: set) -> list[BreakdownBar]:
+def _breakdown(
+    db: Session, queue: list[Review], reported: frozenset | set
+) -> list[BreakdownBar]:
     """The four bars the design labels, counted over the live queue.
 
     They deliberately overlap — one review can be both verified and a first
@@ -205,8 +193,11 @@ def _breakdown(db: Session, queue: list[Review], reported: set) -> list[Breakdow
     return [
         BreakdownBar("Earn Eligible", sum(
             1 for r in queue if r.verification_status == VerificationStatus.verified)),
-        BreakdownBar("Flagged", sum(
-            1 for r in queue if str(r.id) in reported or str(r.review_id) in reported)),
+        # Both sides are the assessment's own UUIDs. They used to be a UUID on
+        # one side and `str(...)` on the other, so the bar could never leave
+        # zero; `reviews.review_id` is the public short id and was never a
+        # report target at all.
+        BreakdownBar("Flagged", sum(1 for r in queue if r.id in reported)),
         BreakdownBar("New Product", sum(
             1 for r in queue if r.product_id not in reviewed_products)),
         BreakdownBar("First Submission", sum(

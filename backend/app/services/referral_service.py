@@ -390,6 +390,13 @@ class _AssessedCard:
     kind: _QueueKind
     item: QueueItem
     order_key: tuple
+    #: The row itself, so a caller aggregating the whole queue (the admin
+    #: Overview) can read its columns without re-querying what this pass loaded.
+    review: Review
+    #: Distinct reports filed against this review. Carried separately from the
+    #: assessment because "reported" is its own question: the Overview's
+    #: Flagged bar counts reported targets, not High ones.
+    report_count: int
 
 
 @dataclass(frozen=True)
@@ -574,6 +581,8 @@ def _build_assessed_cards(
                 kind=kind,
                 item=item,
                 order_key=assessment.order_key,
+                review=review,
+                report_count=facts.count,
             )
         )
     return cards
@@ -666,6 +675,60 @@ def get_prioritized_queue_snapshot(
         page=_paginate_cards(cards, query),
         pending=pending[query.offset : query.offset + query.limit],
         edited_since_monetized=edited,
+    )
+
+
+@dataclass(frozen=True)
+class QueueAssessmentSummary:
+    """The whole open backlog, assessed once (design §5).
+
+    Exists so the Overview's headline counts and the queue list cannot disagree
+    about what is High or what is late: they are the same numbers, from the same
+    evaluation, not two implementations of one policy.
+    """
+
+    #: Every candidate row, in candidate-loading order.
+    reviews: tuple[Review, ...]
+    #: Totals by lane, band and SLA state over that whole set.
+    counts: QueueCounts
+    #: Ids of the candidates carrying at least one report. Reported is not a
+    #: band and not a lane the Overview can read off `counts` — a reported
+    #: review can sit in any band — so it is carried explicitly.
+    reported_review_ids: frozenset[uuid.UUID]
+
+    @property
+    def total(self) -> int:
+        return self.counts.total
+
+    @property
+    def high_priority(self) -> int:
+        return self.counts.by_band.get(PriorityBand.high.value, 0)
+
+    @property
+    def approaching(self) -> int:
+        return self.counts.by_sla.get(SlaState.approaching.value, 0)
+
+    @property
+    def overdue(self) -> int:
+        return self.counts.by_sla.get(SlaState.overdue.value, 0)
+
+
+def assess_open_queue(
+    db: Session, *, now: datetime | None = None
+) -> QueueAssessmentSummary:
+    """Assess every open queue candidate against policy v1 and aggregate it.
+
+    The unfiltered, unpaginated counterpart of `get_prioritized_queue`: same
+    candidates, same evaluator, no page. Callers that need totals rather than a
+    page (the admin Overview) use this instead of paging through the queue.
+    """
+    cards = _build_assessed_cards(db, _all_queue_candidates(db), now=now)
+    return QueueAssessmentSummary(
+        reviews=tuple(card.review for card in cards),
+        counts=_queue_counts(cards),
+        reported_review_ids=frozenset(
+            card.review_id for card in cards if card.report_count > 0
+        ),
     )
 
 

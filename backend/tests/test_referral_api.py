@@ -266,9 +266,11 @@ _NOW = datetime(2026, 9, 8, 12, 0, 0, tzinfo=UTC)
 
 
 def _assessed_card(review_id, order_key, *, band, lane, sla, kind="pending",
-                   title="card", discussion="body", product_name=None, factors=()):
+                   title="card", discussion="body", product_name=None, factors=(),
+                   report_count=0):
     """A hand-built ``referral_service._AssessedCard`` for the pure ordering/
     filter/count helpers — no database, no evaluator."""
+    from app.models.review import Review
     from app.schemas.referral import (
         QueueItem,
         QueuePriorityAssessment,
@@ -295,8 +297,12 @@ def _assessed_card(review_id, order_key, *, band, lane, sla, kind="pending",
         product=QueueProduct(id=review_id, canonical_name=product_name),
         priority=priority,
     )
+    # `review` is the unsaved ORM row the whole-queue aggregation reads columns
+    # from; the pure ordering/filter/count helpers below never touch it, so an
+    # instance carrying only the id is enough and needs no session.
     return referral_service._AssessedCard(
         review_id=review_id, kind=kind, item=item, order_key=order_key,
+        review=Review(id=review_id), report_count=report_count,
     )
 
 
@@ -700,3 +706,46 @@ def test_review_queue_non_moderator_forbidden(client):
     resp = client.get("/api/v1/admin/review-queue?band=high&limit=2",
                       headers=_auth(author_token))
     assert resp.status_code == 403
+
+
+def test_assess_open_queue_aggregates_the_whole_backlog(monkeypatch):
+    """`assess_open_queue` is the Overview's only view of the queue, and every
+    DB-backed test of it skips on a machine without PostgreSQL. This pins the
+    derivation itself: totals from the same cards, and `reported` meaning at
+    least one report — NOT the reported lane, which a manual escalation outranks.
+    """
+    import uuid as _uuid
+
+    from app.services import referral_service
+    from app.services.moderation_priority import PriorityBand, PriorityLane, SlaState
+
+    high = _uuid.uuid4()
+    normal = _uuid.uuid4()
+    low = _uuid.uuid4()
+    cards = [
+        _assessed_card(high, (0, 0, 0, _NOW, _NOW), band=PriorityBand.high,
+                       lane=PriorityLane.escalated, sla=SlaState.overdue,
+                       report_count=2),
+        _assessed_card(normal, (1, 1, 0, _NOW, _NOW), band=PriorityBand.normal,
+                       lane=PriorityLane.reported, sla=SlaState.approaching,
+                       report_count=1),
+        _assessed_card(low, (3, 2, 0, _NOW, _NOW), band=PriorityBand.low,
+                       lane=PriorityLane.routine, sla=SlaState.on_track),
+    ]
+    monkeypatch.setattr(referral_service, "_all_queue_candidates", lambda db: [])
+    monkeypatch.setattr(
+        referral_service, "_build_assessed_cards", lambda db, reviews, now=None: cards
+    )
+
+    summary = referral_service.assess_open_queue(object())
+
+    assert summary.total == 3
+    assert summary.counts.by_band == {"high": 1, "normal": 1, "low": 1}
+    assert summary.counts.by_sla == {"overdue": 1, "approaching": 1, "on_track": 1}
+    assert summary.counts.by_lane["escalated"] == 1
+    assert summary.high_priority == 1
+    assert summary.approaching == 1
+    assert summary.overdue == 1
+    # The escalated card carries reports even though its lane says "escalated".
+    assert summary.reported_review_ids == {high, normal}
+    assert [r.id for r in summary.reviews] == [high, normal, low]

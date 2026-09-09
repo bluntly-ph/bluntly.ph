@@ -188,6 +188,11 @@ class AdminOverviewOut(BaseModel):
     honesty_fund_pool: str
     honesty_fund_month: date
     urgent: int
+    #: Queue depth against the policy's SLA targets: at 75% of the lane target,
+    #: and past it. `urgent` is the overdue figure; both are sent so the console
+    #: can warn before work is late rather than only after.
+    approaching_sla: int = 0
+    overdue_sla: int = 0
     breakdown: list[BreakdownBarOut]
     activity: list[ActivityItemOut]
     affiliate: AffiliateHealthOut
@@ -242,6 +247,7 @@ def admin_overview(db: Session = Depends(get_db)) -> AdminOverviewOut:
             queue_total=0, high_priority=0, approved_today=0, approved_delta=0,
             pending_affiliate=0, honesty_fund_pool="0",
             honesty_fund_month=date.today().replace(day=1), urgent=0,
+            approaching_sla=0, overdue_sla=0,
             breakdown=[], activity=[],
             affiliate=AffiliateHealthOut(
                 lifecycle=[], settlement=[], recognised_amount="0",
@@ -258,6 +264,8 @@ def _overview_payload(o, health, unavailable: list[str]) -> AdminOverviewOut:
         honesty_fund_pool=str(o.honesty_fund_pool),
         honesty_fund_month=o.honesty_fund_month,
         urgent=o.urgent,
+        approaching_sla=o.approaching_sla,
+        overdue_sla=o.overdue_sla,
         breakdown=[BreakdownBarOut(label=b.label, count=b.count) for b in o.breakdown],
         activity=[
             ActivityItemOut(action=a.action, actor=a.actor,
