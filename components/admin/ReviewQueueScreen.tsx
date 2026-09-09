@@ -2,12 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import {
   ArrowFatDown,
   ArrowFatUp,
-  ArrowsDownUp,
   CaretDown,
   CaretLeft,
   CaretRight,
@@ -25,27 +24,37 @@ import {
 import { QaAnswersTab } from "@/components/admin/QaAnswersTab";
 import type { QaQuestion } from "@/components/admin/qa-answers-model";
 import {
+  DEFAULT_LIMIT,
   FLAGGED_VOTERS_UNAVAILABLE,
+  QUEUE_LIMITS,
+  QUEUE_ROUTE,
+  QUEUE_TIME_APPROXIMATE,
   REVERSE_IMAGE_SEARCH_UNAVAILABLE,
   VOTING_GEOGRAPHY_SHORT,
   VOTING_GEOGRAPHY_UNAVAILABLE,
   accountAgeLabel,
   authorTrustStats,
   engagementFor,
-  paginate,
+  factorLines,
+  laneLabel,
   priorityOf,
-  queueRows,
+  queueAgeLabel,
+  queueHref,
+  queueTimeBasisLabel,
   relativeAge,
   reviewIdLabel,
   selectVisibleQueueItem,
+  slaStat,
   tabHref,
   isTab,
-  type Priority,
+  type Band,
+  type QueueFilters,
+  type Sla,
   type Stat,
   type Tab,
 } from "@/components/admin/review-queue-model";
 import { TrustBadge } from "@/components/ui/TrustBadge";
-import type { QueueItem, ReportItem } from "@/lib/moderation";
+import type { QueueItem, QueueResult, ReportItem } from "@/lib/moderation";
 
 /**
  * The Review Queue, built to frame 5017:3758.
@@ -85,33 +94,99 @@ const TABS: { key: Tab; label: string }[] = [
  *
  * Low is drawn `#f17a23` on `#fcf8e7` — orange type on cream, not the yellow
  * the earlier build used, which put yellow text on a yellow ground.
+ *
+ * Keyed by the band LABEL, with a neutral fallback: the server owns the band
+ * vocabulary, and a build that has not caught up to a new one must still draw
+ * the pill. An unknown band gets the neutral treatment rather than borrowing
+ * High's red, which would be this screen inventing a severity.
  */
-const PRIORITY_TONE: Record<Priority, string> = {
+const PRIORITY_TONE: Record<string, string> = {
   High: "bg-[color-mix(in_srgb,var(--accent-danger)_12%,transparent)] text-[var(--accent-danger)]",
   Normal: "bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] text-[var(--accent-trust)]",
   Low: "bg-[color-mix(in_srgb,var(--accent-star)_14%,transparent)] text-[var(--accent-primary)]",
 };
 
-const PAGE_SIZES = [10, 25, 50];
+const NEUTRAL_TONE = "bg-[var(--line-hairline-10)] text-[var(--text-secondary)]";
 
-/** The table's two lists. The frame labels these "In review" and "Archive". */
-type QueueList = "in_review" | "edited";
+function bandTone(band: string): string {
+  return PRIORITY_TONE[band] ?? NEUTRAL_TONE;
+}
+
+const BAND_CHIPS: [string, string][] = [
+  ["high", "High"],
+  ["normal", "Normal"],
+  ["low", "Low"],
+];
+
+/**
+ * The policy factor that marks a monetized review edited since its link was
+ * attached. It is what the "Edited" segment filters on, so that segment is a
+ * view of the one canonical queue rather than a second list.
+ */
+const EDITED_FACTOR = "edited_after_monetization";
+
+/** Whether the moderator is looking at a narrowed queue. */
+function hasFilters(filters: QueueFilters): boolean {
+  return Boolean(filters.band || filters.lane || filters.sla || filters.factor || filters.q);
+}
+
+/** One pagination arrow. Disabled arrows are inert text, never dead links. */
+function PageLink({
+  filters,
+  offset,
+  disabled,
+  label,
+  children,
+}: {
+  filters: QueueFilters;
+  offset: number;
+  disabled: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const className =
+    "grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-[var(--text-secondary)]";
+  if (disabled) {
+    return (
+      <span aria-hidden="true" className={`${className} opacity-35`}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={queueHref(filters, { offset })}
+      scroll={false}
+      aria-label={label}
+      className={`${className} hover:bg-[var(--line-hairline-10)]`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export function ReviewQueueScreen({
-  pending,
-  edited,
+  queue,
+  filters,
   reports,
   questions,
   initialTab,
-  initialPriority,
   now,
 }: {
-  pending: QueueItem[];
-  edited: QueueItem[];
+  /**
+   * One policy-ordered page, or the reason there isn't one.
+   *
+   * Not two arrays any more. The server evaluates every candidate, filters and
+   * orders the whole backlog, and only then cuts the page — so a High-priority
+   * review submitted after the first fifty arrives on page one instead of
+   * sitting unseen behind a client-side sort.
+   */
+  queue: QueueResult;
+  /** The canonical filters, already validated out of the URL by the page. */
+  filters: QueueFilters;
   reports: ReportItem[];
   questions: QaQuestion[] | null;
   initialTab: Tab;
-  initialPriority: Priority | null;
   /**
    * The instant the server rendered this page, used for every "3s ago".
    *
@@ -131,26 +206,23 @@ export function ReviewQueueScreen({
   const searchParams = useSearchParams();
   const urlTab = searchParams?.get("tab") ?? null;
   const tab: Tab = isTab(urlTab) ? urlTab : initialTab;
+  const router = useRouter();
 
-  const [list, setList] = useState<QueueList>("in_review");
-  const [query, setQuery] = useState("");
-  const [priority, setPriority] = useState<Priority | "">(initialPriority ?? "");
-  const [sortNewest, setSortNewest] = useState(true);
-  const [pageSize, setPageSize] = useState(10);
-  const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    pending[0]?.review.id ?? null,
-  );
+  const items = queue.available ? queue.items : [];
+  const counts = queue.available ? queue.counts : null;
+  const total = queue.available ? queue.total : 0;
 
-  const source = list === "in_review" ? pending : edited;
+  // Selection is the one piece of queue state that is genuinely local: it says
+  // which of the rows ON SCREEN the moderator is reading. Everything else —
+  // which rows those are, and in what order — belongs to the URL and the server.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = selectVisibleQueueItem(items, selectedId);
 
-  const rows = useMemo(
-    () => queueRows(source, { query, priority, newestFirst: sortNewest }),
-    [source, query, priority, sortNewest],
-  );
-
-  const { visible, pageCount, current, firstIndex, lastIndex } = paginate(rows, pageSize, page);
-  const selected = selectVisibleQueueItem(visible, selectedId);
+  const showingEdited = filters.factor === EDITED_FACTOR;
+  const firstIndex = items.length === 0 ? 0 : filters.offset + 1;
+  const lastIndex = filters.offset + items.length;
+  const pageCount = Math.max(1, Math.ceil(total / filters.limit));
+  const current = Math.floor(filters.offset / filters.limit) + 1;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -158,8 +230,12 @@ export function ReviewQueueScreen({
           sitting on the workspace card's top edge. */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
         {TABS.map((t) => {
+          // The queue count is the CURRENT filter's depth, which is what the
+          // moderator is looking at. It is deliberately not a whole-backlog
+          // figure: this page holds one page, and the Overview is where the
+          // backlog totals belong.
           const count =
-            t.key === "reviews" ? pending.length
+            t.key === "reviews" ? total
             : t.key === "report" ? reports.length
             : t.key === "answers" ? (questions?.length ?? 0)
             : 0;
@@ -167,7 +243,7 @@ export function ReviewQueueScreen({
           return (
             <Link
               key={t.key}
-              href={tabHref(t.key, priority)}
+              href={tabHref(t.key, filters)}
               scroll={false}
               aria-current={tab === t.key ? "page" : undefined}
               className={`rounded-[var(--radius-sm)] px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
@@ -186,102 +262,135 @@ export function ReviewQueueScreen({
       {tab === "reviews" ? (
         <>
           {/* Toolbar — the frame puts the list switch on the left and the
-              filter / sort / search controls on the right. */}
+              filter / search controls on the right. Every control here is a
+              link or a form that changes the URL: the server owns which rows
+              come back, so a control that filtered in place would be making a
+              claim about the whole queue from the page it can see. */}
           <div className="flex shrink-0 flex-wrap items-center gap-3 pb-3">
             <div className="inline-flex rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-0.5 shadow-[var(--shadow-card)]">
               {/* The frame's second segment reads "Archive". Nothing archives a
-                  review in this build and no endpoint serves one, so the
-                  segment carries the second list the queue API actually
-                  returns: reviews edited after their affiliate link was
-                  attached, which until now had no screen of their own. */}
+                  review in this build, so the segment carries the other work
+                  the queue holds: reviews edited after their affiliate link was
+                  attached. It is now a filter on the ONE canonical queue —
+                  the policy's own `edited_after_monetization` factor — rather
+                  than a second array with its own ordering. */}
               {([
-                ["in_review", "In review", pending.length],
-                ["edited", "Edited", edited.length],
-              ] as const).map(([key, label, count]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setList(key);
-                    setPage(1);
-                  }}
-                  aria-pressed={list === key}
-                  className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-[13px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
-                    list === key
-                      ? "text-[var(--accent-primary)]"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  {label}
-                  {count > 0 ? <span className="ml-1.5 text-[11px] opacity-70">{count}</span> : null}
-                </button>
-              ))}
+                ["in_review", "In review", ""],
+                ["edited", "Edited", EDITED_FACTOR],
+              ] as const).map(([key, label, factor]) => {
+                const active = showingEdited === (factor === EDITED_FACTOR);
+                return (
+                  <Link
+                    key={key}
+                    href={queueHref(filters, { factor })}
+                    scroll={false}
+                    aria-current={active ? "true" : undefined}
+                    className={`rounded-[var(--radius-sm)] px-3 py-1.5 text-[13px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
+                      active
+                        ? "text-[var(--accent-primary)]"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
 
             <label className="ml-auto inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)]">
               <Sliders size={16} />
-              <span className="sr-only">Filter by priority</span>
+              <span className="sr-only">Filter by priority band</span>
               <select
-                value={priority}
-                onChange={(e) => {
-                  setPriority(e.target.value as Priority | "");
-                  setPage(1);
-                }}
+                value={filters.band}
+                onChange={(e) => router.push(queueHref(filters, { band: e.target.value as Band | "" }))}
                 className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2 py-1 text-[13px] text-[var(--text-primary)]"
               >
-                <option value="">All filters</option>
-                <option value="High">High priority</option>
-                <option value="Normal">Normal</option>
-                <option value="Low">Low</option>
+                <option value="">All bands</option>
+                <option value="high">High priority</option>
+                <option value="normal">Normal</option>
+                <option value="low">Low</option>
               </select>
             </label>
 
-            <button
-              type="button"
-              onClick={() => setSortNewest((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-[13px] text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
-            >
-              <ArrowsDownUp size={16} />
-              {sortNewest ? "Newest first" : "Oldest first"}
-            </button>
+            <label className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)]">
+              <span className="sr-only">Filter by SLA state</span>
+              <select
+                value={filters.sla}
+                onChange={(e) => router.push(queueHref(filters, { sla: e.target.value as Sla | "" }))}
+                className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-2 py-1 text-[13px] text-[var(--text-primary)]"
+              >
+                <option value="">Any SLA state</option>
+                <option value="overdue">Overdue</option>
+                <option value="approaching">Approaching</option>
+                <option value="on_track">On track</option>
+              </select>
+            </label>
 
-            <div className="relative w-full max-w-[18rem]">
+            {/* A GET form, so the search survives without JavaScript and lands
+                in the URL where it can be shared. The other filters ride along
+                as hidden fields rather than being silently dropped. */}
+            <form action={QUEUE_ROUTE} method="get" className="relative w-full max-w-[18rem]">
+              <input type="hidden" name="tab" value="reviews" />
+              {filters.band ? <input type="hidden" name="band" value={filters.band} /> : null}
+              {filters.lane ? <input type="hidden" name="lane" value={filters.lane} /> : null}
+              {filters.sla ? <input type="hidden" name="sla" value={filters.sla} /> : null}
+              {filters.factor ? <input type="hidden" name="factor" value={filters.factor} /> : null}
+              {filters.limit !== DEFAULT_LIMIT ? (
+                <input type="hidden" name="limit" value={filters.limit} />
+              ) : null}
               <MagnifyingGlass
                 size={16}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
               />
               <input
                 type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search title, product or author"
+                name="q"
+                defaultValue={filters.q}
+                placeholder="Search title, product or review body"
                 aria-label="Search the queue"
                 className="h-9 w-full rounded-[var(--radius-pill)] border border-[var(--border-subtle)] bg-[var(--surface-card)] pl-9 pr-3 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
               />
-            </div>
+            </form>
           </div>
+
+          {/* Queue depth, counted over everything the current filter matches
+              rather than over this page. `counts` is computed server-side
+              before the page is cut, which is the only place it can be
+              computed truthfully. */}
+          {counts ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3 text-[12px] text-[var(--text-secondary)]">
+              <span className="text-[var(--text-muted)]">Matching this filter:</span>
+              {BAND_CHIPS.map(([band, label]) => (
+                <span
+                  key={band}
+                  className={`rounded-[var(--radius-pill)] px-2.5 py-1 ${bandTone(label)}`}
+                >
+                  {label} {counts.by_band?.[band] ?? 0}
+                </span>
+              ))}
+              <span className="rounded-[var(--radius-pill)] bg-[var(--line-hairline-10)] px-2.5 py-1">
+                Overdue {counts.by_sla?.overdue ?? 0}
+              </span>
+              <span className="rounded-[var(--radius-pill)] bg-[var(--line-hairline-10)] px-2.5 py-1">
+                Approaching {counts.by_sla?.approaching ?? 0}
+              </span>
+            </div>
+          ) : null}
 
           {/* Table + detail. Each scrolls in its own pane; the shell does not.
               The approved frame is 1280 wide and that is where the split earns
               its place; below it the table pane fell under the table's own
               minimum and clipped the Date column, so the panel stacks
               underneath instead and the table gets the full width. */}
-          {/* The frame splits its 1280 canvas almost evenly — a ~560px table
-              region and a ~600px detail column — so the detail panel has room
-              for the review beside its evidence. An earlier 2.2:1 split
-              starved that column and wrapped the evidence one word per line. */}
           <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
             <section
               aria-labelledby="queue-table-heading"
               className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]"
             >
               <h2 id="queue-table-heading" className="sr-only">
-                {list === "in_review"
-                  ? "Reviews awaiting moderation"
-                  : "Reviews edited since their affiliate link was attached"}
+                {showingEdited
+                  ? "Reviews edited since their affiliate link was attached"
+                  : "Reviews awaiting moderation, in policy order"}
               </h2>
 
               <div className="min-h-0 flex-1 overflow-auto">
@@ -308,25 +417,37 @@ export function ReviewQueueScreen({
                       <th className="px-4 py-3 font-medium">ID</th>
                       <th className="px-4 py-3 font-medium">Title</th>
                       <th className="px-4 py-3 font-medium">Author</th>
-                      <th className="px-4 py-3 font-medium">Score</th>
+                      <th className="px-4 py-3 font-medium" title="The review's own Wilson score. Context, not an input to priority.">
+                        Score
+                      </th>
                       <th className="px-4 py-3 font-medium">Priority</th>
                       <th className="px-4 py-3 font-medium">Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.length === 0 ? (
+                    {!queue.available ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-[13px]">
+                          <span role="alert" className="text-[var(--accent-danger)]">
+                            {queue.reason === "unauthenticated"
+                              ? "This session is not signed in as a moderator, so the queue was not requested."
+                              : "The review queue could not be loaded. This is not an empty queue — nothing is known about the backlog right now."}
+                          </span>
+                        </td>
+                      </tr>
+                    ) : items.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-12 text-center text-[13px] text-[var(--text-secondary)]">
-                          {source.length === 0
-                            ? list === "in_review"
-                              ? "Nothing is awaiting moderation."
-                              : "No review has been edited since its link was attached."
-                            : "No queued review matches this filter."}
+                          {hasFilters(filters)
+                            ? "No queued review matches this filter."
+                            : showingEdited
+                              ? "No review has been edited since its link was attached."
+                              : "Nothing is awaiting moderation."}
                         </td>
                       </tr>
                     ) : (
-                      visible.map((item) => {
-                        const p = priorityOf(item);
+                      items.map((item) => {
+                        const band = priorityOf(item);
                         const isSel = item.review.id === selected?.review.id;
                         const author = item.author?.display_name ?? "Unknown";
                         return (
@@ -365,9 +486,13 @@ export function ReviewQueueScreen({
                             </td>
                             <td className="px-4 py-3">
                               <span
-                                className={`inline-block rounded-[var(--radius-pill)] px-3 py-1 text-[12px] ${PRIORITY_TONE[p]}`}
+                                className={`inline-block rounded-[var(--radius-pill)] px-3 py-1 text-[12px] ${bandTone(band)}`}
+                                title={`Integrity score ${item.priority.score} of 100 — ${laneLabel(item)} lane`}
                               >
-                                {p}
+                                {band}
+                              </span>
+                              <span className="ml-1.5 text-[11px] text-[var(--text-muted)] [font-variant-numeric:tabular-nums]">
+                                {item.priority.score}
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-[var(--text-muted)]">
@@ -381,18 +506,19 @@ export function ReviewQueueScreen({
                 </table>
               </div>
 
-              {/* Pagination — the frame's footer row. */}
+              {/* Pagination — the frame's footer row. Every control is a link,
+                  because the page is a server-side slice of a server-side
+                  order, not a window onto rows the browser already holds. */}
               <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] px-4 py-3">
                 <nav aria-label="Queue pages" className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPage(Math.max(1, current - 1))}
+                  <PageLink
+                    filters={filters}
+                    offset={Math.max(0, filters.offset - filters.limit)}
                     disabled={current === 1}
-                    aria-label="Previous page"
-                    className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] disabled:opacity-35 enabled:hover:bg-[var(--line-hairline-10)]"
+                    label="Previous page"
                   >
                     <CaretLeft size={14} weight="bold" />
-                  </button>
+                  </PageLink>
                   {Array.from({ length: pageCount }, (_, i) => i + 1)
                     .filter((n) => n === 1 || n === pageCount || Math.abs(n - current) <= 1)
                     .map((n, idx, arr) => (
@@ -400,9 +526,9 @@ export function ReviewQueueScreen({
                         {idx > 0 && n - arr[idx - 1] > 1 ? (
                           <span className="px-1 text-[12px] text-[var(--text-muted)]">…</span>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => setPage(n)}
+                        <Link
+                          href={queueHref(filters, { offset: (n - 1) * filters.limit })}
+                          scroll={false}
                           aria-current={n === current ? "page" : undefined}
                           className={`grid h-7 min-w-7 place-items-center rounded-[var(--radius-sm)] px-2 text-[12px] ${
                             n === current
@@ -411,37 +537,33 @@ export function ReviewQueueScreen({
                           }`}
                         >
                           {n}
-                        </button>
+                        </Link>
                       </span>
                     ))}
-                  <button
-                    type="button"
-                    onClick={() => setPage(Math.min(pageCount, current + 1))}
-                    disabled={current === pageCount}
-                    aria-label="Next page"
-                    className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] disabled:opacity-35 enabled:hover:bg-[var(--line-hairline-10)]"
+                  <PageLink
+                    filters={filters}
+                    offset={filters.offset + filters.limit}
+                    disabled={current >= pageCount}
+                    label="Next page"
                   >
                     <CaretRight size={14} weight="bold" />
-                  </button>
+                  </PageLink>
                 </nav>
 
                 <p className="text-[12px] text-[var(--text-secondary)]">
-                  Showing {firstIndex}&ndash;{lastIndex} of {rows.length}
-                  {rows.length !== source.length ? ` (filtered from ${source.length})` : ""}
+                  Showing {firstIndex}&ndash;{lastIndex} of {total}
+                  {hasFilters(filters) ? " matching this filter" : ""}
                 </p>
 
                 <label className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
                   Show
                   <span className="relative">
                     <select
-                      value={pageSize}
-                      onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                        setPage(1);
-                      }}
+                      value={filters.limit}
+                      onChange={(e) => router.push(queueHref(filters, { limit: Number(e.target.value) }))}
                       className="appearance-none rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--surface-card)] py-1 pl-2 pr-6 text-[12px] text-[var(--text-primary)]"
                     >
-                      {PAGE_SIZES.map((n) => (
+                      {QUEUE_LIMITS.map((n) => (
                         <option key={n} value={n}>
                           {n}
                         </option>
@@ -456,7 +578,7 @@ export function ReviewQueueScreen({
               </div>
             </section>
 
-            <ReviewDetail item={selected} edited={edited} reports={reports} />
+            <ReviewDetail item={selected} reports={reports} now={now} />
           </div>
         </>
       ) : null}
@@ -545,12 +667,12 @@ function ReportsTab({ reports, now }: { reports: ReportItem[]; now: number }) {
 /** The frame's right-hand column: who wrote it, what it says, and the evidence. */
 function ReviewDetail({
   item,
-  edited,
   reports,
+  now,
 }: {
   item: QueueItem | null;
-  edited: QueueItem[];
   reports: ReportItem[];
+  now: number;
 }) {
   if (!item) {
     return (
@@ -563,14 +685,78 @@ function ReviewDetail({
   }
 
   const s = item.signals;
-  const wasEdited = edited.some((e) => e.review.id === item.review.id);
+  // Served per card now, rather than inferred by searching a second array for
+  // this review's id — which only worked while that array was on screen.
+  const wasEdited = Boolean(item.edited_since_monetized);
+  const sla = slaStat(item, now);
+  const factors = factorLines(item);
   const stats = authorTrustStats(item);
   const engagement = engagementFor(item, reports);
   const author = item.author?.display_name ?? "Unknown author";
 
   return (
     <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-card)]">
-      {/* 1. Author trust card (6606:971). */}
+      {/* 0. Why this review is where it is.
+          The policy's own answer, in the policy's own words. Nothing in this
+          panel is derived here: the band, the score, the lane, the SLA state
+          and every explanation are served by `evaluate_priority`. */}
+      <Panel>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span
+            className={`inline-block rounded-[var(--radius-pill)] px-3 py-1 text-[12px] ${bandTone(priorityOf(item))}`}
+          >
+            {priorityOf(item)}
+          </span>
+          <span className="text-[12px] text-[var(--text-secondary)] [font-variant-numeric:tabular-nums]">
+            Integrity score{" "}
+            <span className="text-[var(--text-primary)]">{item.priority.score}</span>
+            <span className="text-[var(--text-muted)]">/100</span>
+          </span>
+          <span className="text-[12px] text-[var(--text-secondary)]">
+            {laneLabel(item)} lane
+          </span>
+          {sla.available ? (
+            <span
+              className={`text-[12px] ${
+                sla.state === "overdue" ? "text-[var(--accent-danger)]" : "text-[var(--text-secondary)]"
+              }`}
+            >
+              {sla.value}
+            </span>
+          ) : null}
+          <span
+            className="text-[11px] text-[var(--text-muted)]"
+            title={QUEUE_TIME_APPROXIMATE}
+          >
+            Waiting {queueAgeLabel(item, now)} ({queueTimeBasisLabel(item)}, approximate)
+          </span>
+        </div>
+
+        {factors.length > 0 ? (
+          <ul className="mt-3 flex flex-col gap-1.5">
+            {factors.map((factor) => (
+              <li key={factor.code} className="flex items-start gap-2 text-[12px]">
+                <span className="mt-0.5 shrink-0 rounded-[var(--radius-sm)] bg-[var(--line-hairline-10)] px-1.5 py-0.5 text-[10px] [font-variant-numeric:tabular-nums] text-[var(--text-secondary)]">
+                  +{factor.contribution}
+                </span>
+                <span className="text-[var(--text-secondary)]">{factor.explanation}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-[12px] text-[var(--text-secondary)]">
+            No priority factor fired. This review is queued as routine work and
+            is ordered by how long it has been waiting.
+          </p>
+        )}
+
+        <p className="mt-3 text-[10px] font-light text-[var(--text-muted)]">
+          Policy {item.priority.policy_version}. Reading time, geography, star
+          rating, trust and the Wilson score contribute nothing to it.
+        </p>
+      </Panel>
+
+      {/* 1. Author trust card. */}
       <Panel>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <div className="flex items-center gap-2">
@@ -610,7 +796,7 @@ function ReviewDetail({
         </div>
       </Panel>
 
-      {/* 2. The review itself (6606:970) beside the evidence column. */}
+      {/* 2. The review itself, beside the evidence column. */}
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Panel>
           <p className="text-[10px] font-bold text-[var(--text-primary)]">
@@ -696,7 +882,7 @@ function ReviewDetail({
         </Panel>
       </div>
 
-      {/* 3. Engagement (6606:995). */}
+      {/* 3. Engagement. */}
       <Panel>
         <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
           <dl className="min-w-[7rem]">

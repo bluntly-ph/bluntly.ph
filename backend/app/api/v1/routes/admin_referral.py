@@ -28,7 +28,7 @@ router = APIRouter(prefix="/admin", tags=["admin: referral"],
 
 
 @router.get("/review-queue", response_model=ReviewQueueResponse,
-            summary="Moderator queue: policy-prioritized reviews (+ deprecated split views)")
+            summary="Moderator queue: one policy-prioritized, filtered page")
 def review_queue(
     db: Session = Depends(get_db),
     band: PriorityBand | None = Query(None, description="Filter to one priority band."),
@@ -45,15 +45,13 @@ def review_queue(
     query = referral_service.QueueQuery(
         band=band, lane=lane, sla=sla, factor=factor, q=q, limit=limit, offset=offset,
     )
-    snapshot = referral_service.get_prioritized_queue_snapshot(db, query)
+    page = referral_service.get_prioritized_queue(db, query)
 
     return ReviewQueueResponse(
-        items=snapshot.page.items,
-        total=snapshot.page.total,
-        next_cursor=snapshot.page.next_cursor,
-        counts=snapshot.page.counts,
-        pending=snapshot.pending,
-        edited_since_monetized=snapshot.edited_since_monetized,
+        items=page.items,
+        total=page.total,
+        next_cursor=page.next_cursor,
+        counts=page.counts,
     )
 
 

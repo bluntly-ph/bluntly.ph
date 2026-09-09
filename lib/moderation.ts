@@ -39,6 +39,8 @@ export type QueueItem = {
   } | null;
   suggested_platform: string | null;
   suggested_sub_id: string | null;
+  /** This monetized review was edited after its affiliate link was attached. */
+  edited_since_monetized?: boolean;
   signals: {
     velocity: boolean;
     collusion: boolean;
@@ -46,7 +48,58 @@ export type QueueItem = {
     author_account_age_days: number;
     author_review_count: number;
   };
+  /**
+   * The server's priority assessment for this card (policy `review-priority-v1`).
+   *
+   * A sibling of `signals`, never a field inside it: the six advisory signals
+   * are frozen by the backend's telemetry-isolation gate. The signals are
+   * evidence a moderator reads; this is the policy's decision about where the
+   * card sits, and the console renders it rather than deriving its own.
+   */
+  priority: {
+    policy_version: string;
+    lane: string;
+    score: number;
+    band: string;
+    sla_state: string;
+    due_at: string;
+    factors: {
+      code: string;
+      observed: boolean | number | string;
+      contribution: number;
+      explanation: string;
+    }[];
+  };
+  /** Which review timestamp stood in for the queue-entry time (no column yet). */
+  queue_time_basis?: string;
 };
+
+/** Totals over the whole filtered queue, computed before the page was cut. */
+export type QueueCounts = {
+  total: number;
+  by_lane: Record<string, number>;
+  by_band: Record<string, number>;
+  by_sla: Record<string, number>;
+};
+
+/**
+ * What the queue screen received.
+ *
+ * A discriminated result, because "the API failed" and "there is nothing in
+ * the queue" must not render the same. They used to: `getQueue` caught every
+ * error and returned empty arrays, so an outage drew an empty table under the
+ * words "nothing waiting" — the single most reassuring thing a moderation
+ * console can say, and in that moment the least true.
+ */
+export type QueueResult =
+  | {
+      available: true;
+      items: QueueItem[];
+      total: number;
+      counts: QueueCounts;
+      fetchedAt: number;
+    }
+  | { available: false; reason: "unauthenticated" | "unavailable"; fetchedAt: number };
 
 /** One filed report in the moderator queue (GET /admin/reports). */
 export type ReportItem = {
@@ -104,35 +157,40 @@ export async function getReports(): Promise<ReportItem[]> {
   }
 }
 
-export async function getQueue(): Promise<{
-  pending: QueueItem[];
-  edited: QueueItem[];
-  /**
-   * When this queue was read, as epoch milliseconds.
-   *
-   * The screen writes every timestamp as "3s ago", and it renders on the
-   * server before it hydrates on the client. Reading the clock inside the
-   * component would give those two renders different answers and tear the
-   * table's hydration; reading it once here, where the data is fetched, gives
-   * the whole page one consistent "as of". It also belongs to the data rather
-   * than to the render — these ages are relative to the fetch, not to now.
-   */
-  fetchedAt: number;
-}> {
+/**
+ * One page of the policy-ordered review queue.
+ *
+ * `query` is the already-validated canonical filter string from
+ * `review-queue-model.queueApiQuery` — band, lane, sla, factor, q, limit and
+ * offset. Ordering and filtering happen server-side across the whole backlog,
+ * so a High-priority review submitted after the first fifty is on page one.
+ *
+ * `fetchedAt` is when the queue was read, as epoch milliseconds. The screen
+ * writes every timestamp as "3s ago" and renders on the server before it
+ * hydrates on the client; reading the clock inside the component would give
+ * those two renders different answers and tear the table's hydration. Reading
+ * it once here also makes it true — these ages are relative to the fetch.
+ */
+export async function getQueue(query = `limit=${50}`): Promise<QueueResult> {
+  const fetchedAt = Date.now();
   const token = await getSessionToken();
-  if (!token) return { pending: [], edited: [], fetchedAt: Date.now() };
+  if (!token) return { available: false, reason: "unauthenticated", fetchedAt };
   try {
     const res = await apiFetch<{
-      pending: QueueItem[];
-      edited_since_monetized: QueueItem[];
-    }>("/api/v1/admin/review-queue?limit=50", { token });
+      items: QueueItem[];
+      total: number;
+      counts: QueueCounts;
+    }>(`/api/v1/admin/review-queue?${query}`, { token });
     return {
-      pending: res.pending,
-      edited: res.edited_since_monetized,
-      fetchedAt: Date.now(),
+      available: true,
+      items: res.items ?? [],
+      total: res.total ?? 0,
+      counts: res.counts ?? { total: 0, by_lane: {}, by_band: {}, by_sla: {} },
+      fetchedAt,
     };
   } catch {
-    return { pending: [], edited: [], fetchedAt: Date.now() };
+    // Deliberately NOT an empty queue. The caller renders the difference.
+    return { available: false, reason: "unavailable", fetchedAt };
   }
 }
 
@@ -145,6 +203,9 @@ export type AdminOverviewData = {
   honesty_fund_pool: string;
   honesty_fund_month: string;
   urgent: number;
+  /** Queue depth against the policy's SLA targets. `urgent` is the overdue one. */
+  approaching_sla?: number;
+  overdue_sla?: number;
   breakdown: { label: string; count: number }[];
   affiliate: {
     lifecycle: { label: string; count: number }[];

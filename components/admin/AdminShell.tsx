@@ -52,7 +52,10 @@ export function AdminShell({
 
           {urgent > 0 ? (
             <Link
-              href="/moderate/review-queue?priority=high"
+              // Overdue work, which is what `urgent` counts. `?priority=` was
+              // the old client-side filter's parameter name and no longer
+              // exists — the canonical filters are band / lane / sla / factor.
+              href="/moderate/review-queue?sla=overdue"
               className="ml-auto inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-4 py-2.5 shadow-[var(--shadow-card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
             >
               <Warning size={18} weight="regular" className="text-[var(--accent-danger)]" />

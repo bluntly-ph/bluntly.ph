@@ -201,8 +201,14 @@ def test_edited_since_monetized_flag(client):
     # Author edits after monetization → version bumps past the link's snapshot.
     client.patch(f"/api/v1/reviews/{rid}", headers=ah,
                  json={"title": "Great (revised)", "change_note": "typo"})
-    queue = client.get("/api/v1/admin/review-queue", headers=mh).json()
-    assert rid in [item["review"]["id"] for item in queue["edited_since_monetized"]]
+    # "Edited since monetized" is a filter on the one canonical queue now —
+    # the policy's own factor code — rather than a second response array.
+    queue = client.get(
+        "/api/v1/admin/review-queue?limit=100&factor=edited_after_monetization",
+        headers=mh,
+    ).json()
+    assert rid in [item["review"]["id"] for item in queue["items"]]
+    assert all(item["edited_since_monetized"] for item in queue["items"])
 
 
 @requires_db
@@ -387,7 +393,17 @@ def test_paginate_cards_orders_by_policy_then_review_id_filters_and_counts():
     assert second_item.total == 3 and second_item.counts.total == 3
 
 
-def test_review_queue_reuses_one_assessment_for_compatibility_views(monkeypatch):
+def test_review_queue_serves_one_page_from_one_assessment(monkeypatch):
+    """The route evaluates the backlog once and returns exactly that page.
+
+    This test replaces one that asserted the deprecated `pending` /
+    `edited_since_monetized` arrays were built from the same assessment as
+    `items`. Those arrays are gone: they duplicated the page under a split the
+    policy does not use, and two orderings of one backlog is how the console
+    came to rank the queue differently from the server. What survives is the
+    property that mattered — the unprioritized `get_queue` path is never used
+    to answer this endpoint.
+    """
     import uuid
 
     from app.api.v1.routes import admin_referral
@@ -402,23 +418,19 @@ def test_review_queue_reuses_one_assessment_for_compatibility_views(monkeypatch)
         sla=SlaState.on_track,
     )
     page = rs._paginate_cards([card], rs.QueueQuery())
-    snapshot = rs.PrioritizedQueueSnapshot(
-        page=page,
-        pending=[card.item],
-        edited_since_monetized=[],
-    )
 
-    monkeypatch.setattr(
-        rs,
-        "get_prioritized_queue_snapshot",
-        lambda db, query: snapshot,
-    )
+    calls: list[rs.QueueQuery] = []
 
-    def duplicate_evaluation_is_a_bug(*args, **kwargs):
-        raise AssertionError("compatibility arrays must reuse the prioritized assessment")
+    def one_assessment(db, query, *, now=None):
+        calls.append(query)
+        return page
 
-    monkeypatch.setattr(rs, "get_queue", duplicate_evaluation_is_a_bug)
-    monkeypatch.setattr(rs, "build_queue_items", duplicate_evaluation_is_a_bug)
+    monkeypatch.setattr(rs, "get_prioritized_queue", one_assessment)
+
+    def unprioritized_is_a_bug(*args, **kwargs):
+        raise AssertionError("the queue endpoint must not fall back to get_queue")
+
+    monkeypatch.setattr(rs, "get_queue", unprioritized_is_a_bug)
 
     response = admin_referral.review_queue(
         db=object(),
@@ -430,8 +442,14 @@ def test_review_queue_reuses_one_assessment_for_compatibility_views(monkeypatch)
         limit=50,
         offset=0,
     )
-    assert response.pending == response.items
-    assert response.edited_since_monetized == []
+
+    assert len(calls) == 1, "one evaluation per request"
+    assert response.items == page.items
+    assert response.total == page.total
+    assert response.counts == page.counts
+    # The split views are gone from the contract, not merely emptied.
+    assert not hasattr(response, "pending")
+    assert not hasattr(response, "edited_since_monetized")
 
 
 def _make_pending(client, headers, token, *, verdict="it_depends", stars=3):

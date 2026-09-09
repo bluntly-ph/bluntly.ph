@@ -111,21 +111,23 @@ requires_db = pytest.mark.skipif(
 
 
 def find_pending_queue_item(client, mod_headers: dict, review_id: str):
-    """Locate a review's card in the moderator queue's `pending` list.
+    """Locate a review's card in the moderator queue.
 
-    The queue is a work queue: oldest-first, and a long-lived dev DB accumulates
-    thousands of never-published pending reviews, so a fresh review sits on the
-    LAST page. Scanning from the front is O(n) pages and each page computes fraud
-    signals for every card — far too slow. Instead ask the DB for this review's
-    position and fetch exactly that page. We are testing that the endpoint returns
-    the card, not that we can scan the whole backlog.
+    A long-lived dev DB accumulates thousands of never-published pending
+    reviews, so scanning pages is O(n) requests and each page assesses every
+    card it returns. This used to compute the review's offset from a created_at
+    ordering; the queue is ordered by POLICY now — lane, then SLA, then score —
+    so position in time says nothing about which page a card is on.
+
+    The server's own `q` filter replaces that arithmetic: scoping the queue to
+    the review's title narrows it to a handful of rows however deep the backlog
+    is. We are testing that the endpoint returns the card, not that we can scan
+    the whole backlog.
     """
     import uuid as _uuid
-
-    from sqlalchemy import func, select
+    from urllib.parse import quote
 
     from app.db.session import SessionLocal
-    from app.models.enums import EarnEligibleStatus
     from app.models.review import Review
 
     db = SessionLocal()
@@ -133,22 +135,17 @@ def find_pending_queue_item(client, mod_headers: dict, review_id: str):
         target = db.get(Review, _uuid.UUID(review_id))
         if target is None:
             return None
-        pending = (Review.earn_eligible_status == EarnEligibleStatus.pending,
-                   Review.published_at.is_(None), Review.is_removed.is_(False))
-        # get_queue orders by created_at ASC, so the offset is how many pending
-        # reviews were created before this one.
-        position = db.scalar(select(func.count(Review.id)).where(
-            *pending, Review.created_at < target.created_at)) or 0
+        title = target.title
     finally:
         db.close()
 
-    for offset in (max(0, position - 2), max(0, position - 25)):
-        page = client.get(f"/api/v1/admin/review-queue?limit=50&offset={offset}",
-                          headers=mod_headers).json()
-        item = next((i for i in page["pending"] if i["review"]["id"] == review_id), None)
-        if item is not None:
-            return item
-    return None
+    page = client.get(
+        f"/api/v1/admin/review-queue?limit=100&q={quote(title)}",
+        headers=mod_headers,
+    ).json()
+    return next(
+        (i for i in page.get("items", []) if i["review"]["id"] == review_id), None
+    )
 
 
 def register_and_token(client, role: str = "user") -> tuple[str, str, str]:

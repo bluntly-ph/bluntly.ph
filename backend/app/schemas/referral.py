@@ -162,7 +162,9 @@ class ReviewQueueResponse(BaseModel):
     # lands with the queue-entry migration.
     next_cursor: str | None = None
     counts: QueueCounts = Field(default_factory=QueueCounts)
-    # --- Deprecated duplicate views (removed once the Next caller in Task 4
-    # consumes `items`). Kept so no public endpoint shape changes mid-release. ---
-    pending: list[QueueItem] = Field(default_factory=list)
-    edited_since_monetized: list[QueueItem] = Field(default_factory=list)
+    # The deprecated `pending` / `edited_since_monetized` arrays are gone. They
+    # duplicated `items` under a split the policy does not use — two orderings
+    # of one backlog, which is what let the console rank the queue differently
+    # from the server. The console reads `items`; "edited" is now a filter on
+    # the `edited_after_monetization` factor, and the per-card boolean of the
+    # same name stays on `QueueItem`.

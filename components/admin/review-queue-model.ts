@@ -8,14 +8,77 @@
  * structural input types and no imports.
  *
  * The rule this module exists to enforce: a moderation console must never
- * print a number it cannot source. Every metric frame 5017:3758 draws is
- * either read from the queue card the API actually returned, or returned as an
+ * print a number it cannot source. Every metric the console draws is either
+ * read from the queue card the API actually returned, or returned as an
  * unavailable `Stat` carrying the reason. There is no third case, and in
  * particular there is no "0" standing in for "we do not measure this" — on a
  * fraud-review screen those two read identically and mean opposite things.
+ *
+ * Priority obeys a second rule, added with the server-owned contract: this
+ * module RENDERS the assessment and never computes one. Ordering, filtering
+ * and banding are the policy's, decided over the whole backlog before the page
+ * was cut. A helper here that re-sorted or re-filtered a page would be making
+ * a whole-queue claim from the fifty rows it happens to hold.
+ *
+ * The design frames this screen was built to (5017:1738 / 5017:3758 / 6532:278)
+ * were deleted from the Figma file on 2026-09-09 and replaced by a single
+ * 1280x1943 "Admin Page - Review Queue" (6922:837). The layout below is still
+ * the old frame's; the re-layout is its own piece of work.
  */
 
 export type Priority = "High" | "Normal" | "Low";
+
+/** The policy's own vocabulary, as the API serializes it. */
+export type Band = "high" | "normal" | "low";
+export type Lane = "escalated" | "reported" | "integrity" | "routine" | "quality_audit";
+export type Sla = "on_track" | "approaching" | "overdue";
+
+const BANDS: Band[] = ["high", "normal", "low"];
+const LANES: Lane[] = ["escalated", "reported", "integrity", "routine", "quality_audit"];
+const SLAS: Sla[] = ["on_track", "approaching", "overdue"];
+
+/**
+ * One reason a review sits where it does, written by the policy.
+ *
+ * `explanation` is prose the server composed; nothing here translates a code
+ * into wording of its own. A code this build has never seen therefore still
+ * renders correctly the day the server starts sending it, which is the point —
+ * a console that silently drops unfamiliar reasons hides exactly the new signal
+ * a moderator most needs to see.
+ */
+export type PriorityFactor = {
+  code: string;
+  observed: boolean | number | string;
+  contribution: number;
+  explanation: string;
+};
+
+/** The server's assessment of one card. Rendered, never recomputed. */
+export type QueuePriority = {
+  policy_version: string;
+  lane: string;
+  score: number;
+  band: string;
+  sla_state: string;
+  due_at: string;
+  factors?: PriorityFactor[];
+};
+
+/** The canonical server-side filters, exactly as the URL carries them. */
+export type QueueFilters = {
+  band: Band | "";
+  lane: Lane | "";
+  sla: Sla | "";
+  factor: string;
+  q: string;
+  limit: number;
+  offset: number;
+};
+
+export const DEFAULT_LIMIT = 50;
+
+/** The page sizes the console offers, and the only ones a URL may ask for. */
+export const QUEUE_LIMITS = [10, 25, 50, 100];
 
 /** A queue card, narrowed to the fields this module reads. */
 export type QueueCard = {
@@ -38,6 +101,15 @@ export type QueueCard = {
     author_account_age_days: number;
     author_review_count: number;
   };
+  /** The canonical assessment (design section 5). A sibling of `signals`. */
+  priority: QueuePriority;
+  /**
+   * Which review timestamp stood in for the queue-entry time the schema does
+   * not have yet: `created_at` for an initial pending review, `updated_at` for
+   * a monetized-but-edited one. The UI must not present either as precise
+   * lifecycle timing, which is what `QUEUE_TIME_APPROXIMATE` is for.
+   */
+  queue_time_basis?: string;
 };
 
 /** A filed report, narrowed to the fields this module reads. */
@@ -71,20 +143,49 @@ const unavailable = (label: string, reason: string): Stat => ({
 /* -------------------------------------------------------------- priority */
 
 /**
- * Priority is DERIVED from the advisory fraud signals the queue already
- * returns. The backend carries no priority or score column — confirmed against
- * `QueueSignals`, whose six fields are frozen by `test_telemetry_isolation.py`
- * — so inventing a ranking here would be inventing a moderation policy.
+ * The band the server assessed, as a label.
  *
- *   High    any signal fired — duplicate content, collusion, or velocity
- *   Normal  no signal, but the proof of purchase is unverified
- *   Low     verified, and nothing flagged
+ * This used to derive a band here from the advisory fraud signals: High if any
+ * signal fired, else Normal if the receipt was unverified, else Low. That was a
+ * moderation policy written in the browser, and it disagreed with both the
+ * Overview's headline and the order the queue itself arrived in. The policy now
+ * lives in `moderation_priority.py`, is applied to the whole backlog before the
+ * page is cut, and this function's entire job is to title-case its answer.
+ *
+ * An unfamiliar band — a server ahead of this deploy — is title-cased and shown
+ * as-is. Substituting a band we recognise would misreport the queue; showing
+ * nothing would hide a row's standing altogether.
  */
-export function priorityOf(item: QueueCard): Priority {
-  const s = item.signals;
-  if (s.duplicate_content || s.collusion || s.velocity) return "High";
-  if (item.review.verification_status !== "verified") return "Normal";
-  return "Low";
+export function priorityOf(item: QueueCard): string {
+  return titleCase(item.priority?.band ?? "");
+}
+
+function titleCase(value: string): string {
+  if (!value) return "";
+  return value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/** The lane and SLA state as labels, on the same terms as the band. */
+export function laneLabel(item: QueueCard): string {
+  return titleCase(item.priority?.lane ?? "");
+}
+
+/**
+ * The reasons behind the score, in the policy's own words.
+ *
+ * A missing explanation falls back to the code rather than rendering an empty
+ * row: a factor that contributed to a review's placement must be legible even
+ * when the wording is missing.
+ */
+export function factorLines(item: QueueCard): PriorityFactor[] {
+  const factors = item.priority?.factors ?? [];
+  return factors.map((factor) => ({
+    ...factor,
+    explanation: factor.explanation?.trim() ? factor.explanation : factor.code,
+  }));
 }
 
 /* ------------------------------------------------------------------ time */
@@ -115,47 +216,156 @@ export function accountAgeLabel(days: number): string {
 
 /* ------------------------------------------------------------ table rows */
 
-export function queueRows<T extends QueueCard>(
-  items: T[],
-  options: { query: string; priority: Priority | ""; newestFirst: boolean },
-): T[] {
-  const needle = options.query.trim().toLowerCase();
+/*
+ * `queueRows` and `paginate` used to live here. Both are gone, and their
+ * absence is the contract.
+ *
+ * `queueRows` filtered by a band this module derived and re-sorted by
+ * `created_at`. `paginate` then cut that re-ordered list. Every one of those is
+ * a claim about the WHOLE backlog, and the browser holds one page of it — so
+ * filtering to High hid the High rows that were on page two, and sorting by
+ * date overruled a policy order that had already weighed lane, SLA and score.
+ *
+ * The server does all three now, over every candidate, before it cuts the page
+ * (`referral_service.get_prioritized_queue`). The screen renders `items` in the
+ * order they arrived and changes the URL to ask a different question.
+ */
 
-  const matched = items.filter((item) => {
-    if (options.priority && priorityOf(item) !== options.priority) return false;
-    if (!needle) return true;
-    return (
-      item.review.title.toLowerCase().includes(needle) ||
-      (item.product.canonical_name ?? "").toLowerCase().includes(needle) ||
-      (item.author?.display_name ?? "").toLowerCase().includes(needle)
-    );
-  });
+/* --------------------------------------------------------- SLA and timing */
 
-  // Sorted on the copy `filter` produced, never on the caller's array: the
-  // screen passes React props straight in.
-  matched.sort((a, b) => {
-    const delta =
-      new Date(b.review.created_at).getTime() - new Date(a.review.created_at).getTime();
-    return options.newestFirst ? delta : -delta;
-  });
+/**
+ * Why every age on this screen is an approximation, stated once.
+ *
+ * There is no queue-entry column yet. Priority is evaluated against the
+ * review's `created_at` (or `updated_at`, for a monetized review edited since
+ * its link was attached), which is when the review was WRITTEN, not when it
+ * reached the queue. For an initial submission those are the same moment; for
+ * anything requeued they are not. Saying so is the difference between an
+ * approximate age and a wrong one.
+ */
+export const QUEUE_TIME_APPROXIMATE =
+  "Queue age is approximate: it is measured from the review's created_at " +
+  "(updated_at for an edited one), because no queue-entry timestamp is " +
+  "recorded yet. Treat it as an age, not as lifecycle timing.";
 
-  return matched;
+/** Which timestamp this card's age came from, in words. */
+export function queueTimeBasisLabel(item: QueueCard): string {
+  return item.queue_time_basis === "review_updated_at"
+    ? "measured from the last edit"
+    : "measured from submission";
 }
 
-export function paginate<T>(rows: T[], pageSize: number, page: number) {
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const current = Math.min(Math.max(1, page), pageCount);
-  const start = (current - 1) * pageSize;
-  const visible = rows.slice(start, start + pageSize);
+/** How long this card has been waiting, on its own declared basis. */
+export function queueAgeLabel(item: QueueCard, now: number = Date.now()): string {
+  return relativeAge(item.review.created_at, now);
+}
+
+/**
+ * Where this card stands against its lane's SLA target.
+ *
+ * The state is the server's; only the wording is ours. `due_at` is what the
+ * policy computed from the lane target, so the remaining or elapsed time is
+ * arithmetic on a served value rather than a second SLA implementation.
+ */
+export function slaStat(
+  item: QueueCard,
+  now: number = Date.now(),
+): { state: string; label: string; available: boolean; value: string } {
+  const state = item.priority?.sla_state ?? "";
+  const due = Date.parse(item.priority?.due_at ?? "");
+
+  if (!state || Number.isNaN(due)) {
+    return { state, label: "SLA", available: false, value: "" };
+  }
+
+  const deltaSeconds = Math.abs(now - due) / 1000;
+  const span = durationLabel(deltaSeconds);
+  const value =
+    state === "overdue"
+      ? `Overdue by ${span}`
+      : state === "approaching"
+        ? `Due in ${span}`
+        : `On track — ${span} left`;
+
+  return { state, label: titleCase(state), available: true, value };
+}
+
+/** "3h" / "47m" / "2d" — a span, not a point in time. */
+function durationLabel(seconds: number): string {
+  if (seconds < MINUTE) return `${Math.floor(seconds)}s`;
+  if (seconds < HOUR) return `${Math.floor(seconds / MINUTE)}m`;
+  if (seconds < DAY) return `${Math.floor(seconds / HOUR)}h`;
+  return `${Math.floor(seconds / DAY)}d`;
+}
+
+/* ----------------------------------------------------------- URL filters */
+
+/**
+ * Read the canonical filters out of a URL.
+ *
+ * Anything the policy does not define is dropped rather than forwarded: a
+ * hand-edited `?band=critical` narrows to "no band filter" instead of putting a
+ * 422 on the moderator's screen, and nothing unvalidated is ever passed through
+ * to the API.
+ */
+export function parseQueueFilters(params: URLSearchParams): QueueFilters {
+  const oneOf = <T extends string>(allowed: T[], value: string | null): T | "" =>
+    allowed.includes((value ?? "") as T) ? ((value ?? "") as T) : "";
+
+  const limit = Number.parseInt(params.get("limit") ?? "", 10);
+  const offset = Number.parseInt(params.get("offset") ?? "", 10);
 
   return {
-    visible,
-    pageCount,
-    current,
-    /** 1-based inclusive range, or 0–0 when there is nothing to show. */
-    firstIndex: visible.length === 0 ? 0 : start + 1,
-    lastIndex: start + visible.length,
+    band: oneOf(BANDS, params.get("band")),
+    lane: oneOf(LANES, params.get("lane")),
+    sla: oneOf(SLAS, params.get("sla")),
+    factor: (params.get("factor") ?? "").trim(),
+    q: (params.get("q") ?? "").trim(),
+    limit: QUEUE_LIMITS.includes(limit) ? limit : DEFAULT_LIMIT,
+    offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
   };
+}
+
+/** The query string for the API call. Only what is actually set is sent. */
+export function queueApiQuery(filters: QueueFilters): string {
+  const params = new URLSearchParams();
+  if (filters.band) params.set("band", filters.band);
+  if (filters.lane) params.set("lane", filters.lane);
+  if (filters.sla) params.set("sla", filters.sla);
+  if (filters.factor) params.set("factor", filters.factor);
+  if (filters.q) params.set("q", filters.q);
+  params.set("limit", String(filters.limit));
+  if (filters.offset) params.set("offset", String(filters.offset));
+  return params.toString();
+}
+
+/**
+ * A link to the same queue with one thing changed.
+ *
+ * Changing a filter resets the page, because an offset counted into one
+ * filtered list means nothing in another; passing `offset` explicitly is how
+ * pagination keeps it.
+ */
+export function queueHref(
+  filters: QueueFilters,
+  changes: Partial<QueueFilters> & { tab?: Tab } = {},
+): string {
+  const next: QueueFilters = {
+    ...filters,
+    ...changes,
+    offset: "offset" in changes ? (changes.offset ?? 0) : 0,
+  };
+  const params = new URLSearchParams();
+  if (changes.tab) params.set("tab", changes.tab);
+  if (next.band) params.set("band", next.band);
+  if (next.lane) params.set("lane", next.lane);
+  if (next.sla) params.set("sla", next.sla);
+  if (next.factor) params.set("factor", next.factor);
+  if (next.q) params.set("q", next.q);
+  if (next.limit !== DEFAULT_LIMIT) params.set("limit", String(next.limit));
+  if (next.offset) params.set("offset", String(next.offset));
+  const query = params.toString();
+  return query ? `${QUEUE_ROUTE}?${query}` : QUEUE_ROUTE;
 }
 
 /**
@@ -308,7 +518,7 @@ export const REVERSE_IMAGE_SEARCH_UNAVAILABLE =
 
 /* ------------------------------------------------- selection and tab links */
 
-/** The console's four tabs, in the order frame 5017:3758 draws them. */
+/** The console's four tabs, in the order the console draws them. */
 export type Tab = "reviews" | "answers" | "report" | "support";
 
 const TAB_KEYS: Tab[] = ["reviews", "answers", "report", "support"];
@@ -345,13 +555,14 @@ export function selectVisibleQueueItem<T extends QueueCard>(
  * a different tab than the one on screen — and made the view unshareable.
  * The URL is the single source of truth; these hrefs are how it changes.
  *
- * The active priority filter rides along so switching tabs and coming back
- * does not silently widen what the moderator is looking at.
+ * EVERY canonical filter rides along, not just the band: coming back to a tab
+ * that had quietly dropped the lane or the search would show a moderator a
+ * wider queue than the one they left, with nothing on screen saying so. The
+ * offset does not ride along — a page number counted into the list being left
+ * behind means nothing in the one being opened.
  */
-export function tabHref(tab: Tab, priority: Priority | ""): string {
-  const params = new URLSearchParams({ tab });
-  if (priority) params.set("priority", priority.toLowerCase());
-  return `${QUEUE_ROUTE}?${params.toString()}`;
+export function tabHref(tab: Tab, filters: QueueFilters): string {
+  return queueHref(filters, { tab });
 }
 
 /**

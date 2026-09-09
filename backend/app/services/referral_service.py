@@ -399,15 +399,6 @@ class _AssessedCard:
     report_count: int
 
 
-@dataclass(frozen=True)
-class PrioritizedQueueSnapshot:
-    """One evaluation pass shared by the canonical and compatibility views."""
-
-    page: QueuePage
-    pending: list[QueueItem]
-    edited_since_monetized: list[QueueItem]
-
-
 _QUERY_CHUNK_SIZE = 500
 
 
@@ -656,26 +647,8 @@ def get_prioritized_queue(
     Ordering correctness never depends on ``offset``; ``next_cursor`` is ``None``
     in this compatibility slice.
     """
-    return get_prioritized_queue_snapshot(db, query, now=now).page
-
-
-def get_prioritized_queue_snapshot(
-    db: Session, query: QueueQuery, *, now: datetime | None = None
-) -> PrioritizedQueueSnapshot:
-    """Evaluate once, then derive the canonical page and deprecated split views.
-
-    Candidate loading preserves the old pending/edited ordering. Building the
-    compatibility arrays from the same assessed cards avoids recomputing every
-    signal and priority merely to serialize the legacy response fields.
-    """
     cards = _build_assessed_cards(db, _all_queue_candidates(db), now=now)
-    pending = [card.item for card in cards if card.kind == "pending"]
-    edited = [card.item for card in cards if card.kind == "edited"]
-    return PrioritizedQueueSnapshot(
-        page=_paginate_cards(cards, query),
-        pending=pending[query.offset : query.offset + query.limit],
-        edited_since_monetized=edited,
-    )
+    return _paginate_cards(cards, query)
 
 
 @dataclass(frozen=True)
@@ -730,20 +703,6 @@ def assess_open_queue(
             card.review_id for card in cards if card.report_count > 0
         ),
     )
-
-
-def build_queue_items(
-    db: Session,
-    reviews: list[tuple[Review, _QueueKind]],
-    *,
-    now: datetime | None = None,
-) -> dict[uuid.UUID, QueueItem]:
-    """Queue cards (priority included) keyed by review id, for callers that keep
-    their own ordering — i.e. the deprecated pending/edited response arrays."""
-    return {
-        card.review_id: card.item
-        for card in _build_assessed_cards(db, reviews, now=now)
-    }
 
 
 def suggested_platform_from(product: Product | None,

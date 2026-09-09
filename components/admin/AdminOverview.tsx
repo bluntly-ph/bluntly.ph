@@ -18,7 +18,11 @@ export type AdminOverviewData = {
   pending_affiliate: number;
   honesty_fund_pool: string;
   honesty_fund_month: string;
+  /** Overdue queue work. Not a synonym for High — see `overdue_sla`. */
   urgent: number;
+  /** Queue depth against the policy's SLA targets, at 75% of target and past it. */
+  approaching_sla?: number;
+  overdue_sla?: number;
   breakdown: { label: string; count: number }[];
   affiliate: {
     lifecycle: { label: string; count: number }[];
@@ -137,13 +141,22 @@ export function AdminOverview({ data }: { data: AdminOverviewData | null }) {
           panel that vanished in production, and a check for them must not
           depend on the wording inside them. */}
       <div id="admin-kpis" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* High is the policy's band — escalated, past its lane's SLA, or 40+
+            on integrity factors. It is NOT "somebody reported this", which is
+            what this note used to say when it read "Nothing flagged": reported
+            work is the Flagged bar in the breakdown below, and the two answer
+            different questions. */}
         <Kpi
           label="Queue Total"
           value={String(data.queue_total)}
           note={
             data.high_priority > 0
-              ? `${data.high_priority} high priority`
-              : "Nothing flagged"
+              ? `${data.high_priority} high priority${
+                  data.overdue_sla ? `, ${data.overdue_sla} overdue` : ""
+                }`
+              : data.approaching_sla
+                ? `${data.approaching_sla} approaching SLA`
+                : "Nothing high priority"
           }
           tone={data.high_priority > 0 ? "danger" : "muted"}
         />

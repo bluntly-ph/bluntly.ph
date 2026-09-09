@@ -5,9 +5,7 @@ import {
   accountAgeLabel,
   authorTrustStats,
   engagementFor,
-  paginate,
   priorityOf,
-  queueRows,
   relativeAge,
   reportCountFor,
   reviewIdLabel,
@@ -63,6 +61,17 @@ const item = (overrides = {}) => ({
     author_review_count: 15,
     ...(overrides.signals ?? {}),
   },
+  priority: {
+    policy_version: "review-priority-v1",
+    lane: "routine",
+    score: 0,
+    band: "low",
+    sla_state: "on_track",
+    due_at: "2026-09-09T12:00:00.000Z",
+    factors: [],
+    ...(overrides.priority ?? {}),
+  },
+  queue_time_basis: overrides.queue_time_basis ?? "review_created_at",
   ...(overrides.author === null ? { author: null } : {}),
 });
 
@@ -98,31 +107,29 @@ const report = (overrides = {}) => ({
 
 /* ---------------------------------------------------------------- priority */
 
-test("priorityOf is High when any advisory fraud signal fired", () => {
-  assert.equal(priorityOf(item({ signals: { duplicate_content: true } })), "High");
-  assert.equal(priorityOf(item({ signals: { collusion: true } })), "High");
-  assert.equal(priorityOf(item({ signals: { velocity: true } })), "High");
-});
-
-test("priorityOf is High even when the proof of purchase is verified", () => {
-  // Verification must not outrank a fired signal: a verified receipt on a
-  // duplicated body is exactly the case a moderator must see first.
-  const flagged = item({
-    review: { verification_status: "verified" },
-    signals: { collusion: true },
-  });
-  assert.equal(priorityOf(flagged), "High");
-});
-
-test("priorityOf is Normal when nothing fired but the receipt is unverified", () => {
-  assert.equal(
-    priorityOf(item({ review: { verification_status: "unverified" } })),
-    "Normal",
-  );
-});
-
-test("priorityOf is Low only when verified and no signal fired", () => {
+test("priorityOf renders the band the server assessed", () => {
+  assert.equal(priorityOf(item({ priority: { band: "high" } })), "High");
+  assert.equal(priorityOf(item({ priority: { band: "normal" } })), "Normal");
   assert.equal(priorityOf(item()), "Low");
+});
+
+test("priorityOf does not consult the advisory signals", () => {
+  // This is the behaviour change. The signals below all fired, and under the
+  // old local rule that alone made the row High; the policy weighed them
+  // against everything else and returned Low. The console reports the policy.
+  const flagged = item({
+    signals: { velocity: true, collusion: true, duplicate_content: true },
+    priority: { band: "low" },
+  });
+  assert.equal(priorityOf(flagged), "Low");
+});
+
+test("priorityOf does not consult verification status", () => {
+  const unverified = item({
+    review: { verification_status: "unverified" },
+    priority: { band: "low" },
+  });
+  assert.equal(priorityOf(unverified), "Low");
 });
 
 /* ------------------------------------------------------------- relative age */
@@ -158,119 +165,16 @@ test("accountAgeLabel converts the queue's whole-day account age", () => {
   assert.equal(accountAgeLabel(730), "2y ago");
 });
 
-/* --------------------------------------------------------------- queue rows */
+/* ------------------------------------------ ordering, filtering, paging */
 
-test("queueRows matches the search against title, product and author", () => {
-  // Every searchable field is distinct across rows, so a match can only come
-  // from the field the assertion names.
-  const rows = [
-    item({
-      review: { id: "a", title: "Solid Powerbank" },
-      product: { canonical_name: "Alpha" },
-      author: { display_name: "alice" },
-    }),
-    item({
-      review: { id: "b", title: "Nothing alike" },
-      product: { canonical_name: "Jisulife Fan" },
-      author: { display_name: "bob" },
-    }),
-    item({
-      review: { id: "c", title: "Nothing alike" },
-      product: { canonical_name: "Gamma" },
-      author: { display_name: "yuceann" },
-    }),
-    item({
-      review: { id: "d", title: "Nothing alike" },
-      product: { canonical_name: "Delta" },
-      author: { display_name: "someone" },
-    }),
-  ];
-
-  const byTitle = queueRows(rows, { query: "powerbank", priority: "", newestFirst: true });
-  const byProduct = queueRows(rows, { query: "jisulife", priority: "", newestFirst: true });
-  const byAuthor = queueRows(rows, { query: "YUCEANN", priority: "", newestFirst: true });
-
-  assert.deepEqual(byTitle.map((r) => r.review.id), ["a"]);
-  assert.deepEqual(byProduct.map((r) => r.review.id), ["b"]);
-  assert.deepEqual(byAuthor.map((r) => r.review.id), ["c"]);
-});
-
-test("queueRows filters by derived priority", () => {
-  const rows = [
-    item({ review: { id: "high" }, signals: { velocity: true } }),
-    item({ review: { id: "normal", verification_status: "unverified" } }),
-    item({ review: { id: "low" } }),
-  ];
-
-  assert.deepEqual(
-    queueRows(rows, { query: "", priority: "High", newestFirst: true }).map((r) => r.review.id),
-    ["high"],
-  );
-  assert.deepEqual(
-    queueRows(rows, { query: "", priority: "Normal", newestFirst: true }).map((r) => r.review.id),
-    ["normal"],
-  );
-});
-
-test("queueRows orders by created_at and reverses on demand", () => {
-  const rows = [
-    item({ review: { id: "old", created_at: "2026-01-01T00:00:00.000Z" } }),
-    item({ review: { id: "new", created_at: "2026-09-01T00:00:00.000Z" } }),
-    item({ review: { id: "mid", created_at: "2026-05-01T00:00:00.000Z" } }),
-  ];
-
-  assert.deepEqual(
-    queueRows(rows, { query: "", priority: "", newestFirst: true }).map((r) => r.review.id),
-    ["new", "mid", "old"],
-  );
-  assert.deepEqual(
-    queueRows(rows, { query: "", priority: "", newestFirst: false }).map((r) => r.review.id),
-    ["old", "mid", "new"],
-  );
-});
-
-test("queueRows leaves the caller's array untouched", () => {
-  // The screen holds `pending` as a prop; sorting it in place would reorder
-  // React's own source of truth behind its back.
-  const rows = [
-    item({ review: { id: "old", created_at: "2026-01-01T00:00:00.000Z" } }),
-    item({ review: { id: "new", created_at: "2026-09-01T00:00:00.000Z" } }),
-  ];
-  queueRows(rows, { query: "", priority: "", newestFirst: true });
-  assert.deepEqual(rows.map((r) => r.review.id), ["old", "new"]);
-});
-
-/* ---------------------------------------------------------------- paginate */
-
-test("paginate returns the page slice and a 1-based inclusive range", () => {
-  const rows = Array.from({ length: 23 }, (_, i) => i);
-
-  const second = paginate(rows, 10, 2);
-  assert.deepEqual(second.visible, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
-  assert.equal(second.pageCount, 3);
-  assert.equal(second.current, 2);
-  assert.equal(second.firstIndex, 11);
-  assert.equal(second.lastIndex, 20);
-
-  const last = paginate(rows, 10, 3);
-  assert.deepEqual(last.visible, [20, 21, 22]);
-  assert.equal(last.firstIndex, 21);
-  assert.equal(last.lastIndex, 23);
-});
-
-test("paginate clamps a page number past the end back onto the last page", () => {
-  // Narrowing the filter while sitting on page 4 must not blank the table.
-  const result = paginate(Array.from({ length: 5 }, (_, i) => i), 10, 4);
-  assert.equal(result.current, 1);
-  assert.deepEqual(result.visible, [0, 1, 2, 3, 4]);
-});
-
-test("paginate reports an empty range for no rows rather than 1-0", () => {
-  const result = paginate([], 10, 1);
-  assert.equal(result.pageCount, 1);
-  assert.equal(result.firstIndex, 0);
-  assert.equal(result.lastIndex, 0);
-});
+/*
+ * The `queueRows` and `paginate` suites were removed with the functions they
+ * covered. They asserted that the browser could search, filter by a locally
+ * derived band, re-sort by date and cut its own page — four whole-queue claims
+ * made from one page of rows. The server does all of it now, over the whole
+ * backlog, before the page exists. `moderation-priority-contract.test.mjs`
+ * covers what replaced them: the URL filters, and the absence of these two.
+ */
 
 /* -------------------------------------------------------------- id + report */
 
@@ -341,9 +245,16 @@ test("selectVisibleQueueItem cannot retain a detail outside the visible page", (
   assert.equal(selectVisibleQueueItem([first, second], "second")?.review.id, "second");
 });
 
+const noFilters = {
+  band: "", lane: "", sla: "", factor: "", q: "", limit: 50, offset: 0,
+};
+
 test("tabHref makes the URL the shareable source of truth", () => {
-  assert.equal(tabHref("answers", "High"), "/moderate/review-queue?tab=answers&priority=high");
-  assert.equal(tabHref("reviews", ""), "/moderate/review-queue?tab=reviews");
+  assert.equal(
+    tabHref("answers", { ...noFilters, band: "high" }),
+    "/moderate/review-queue?tab=answers&band=high",
+  );
+  assert.equal(tabHref("reviews", noFilters), "/moderate/review-queue?tab=reviews");
 });
 
 test("engagementFor marks views, shares and comments unavailable rather than zero", () => {

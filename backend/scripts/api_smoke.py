@@ -19,6 +19,7 @@ import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 
 import httpx
 
@@ -178,32 +179,26 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
     print("\n== Referral flow ==")
 
     def find_pending(review_id: str):
-        # The queue is oldest-first, and a long-lived DB holds thousands of
-        # never-published pending reviews, so a fresh one sits on the LAST page.
-        # Scanning from the front is O(n) pages and every page computes fraud
-        # signals per card. Ask the DB for this review's position instead.
-        from sqlalchemy import func, select
-
-        from app.models.enums import EarnEligibleStatus
+        # A long-lived DB holds thousands of never-published pending reviews, so
+        # scanning pages is O(n) requests and every page assesses each card it
+        # returns. This used to compute the review's offset from a created_at
+        # ordering; the queue is ordered by POLICY now — lane, then SLA, then
+        # score — so a review's age says nothing about which page it is on.
+        # The server's own `q` filter narrows the queue to a handful of rows.
         from app.models.review import Review
         db = SessionLocal()
         try:
             target = db.get(Review, uuid.UUID(review_id))
             if target is None:
                 return None
-            position = db.scalar(select(func.count(Review.id)).where(
-                Review.earn_eligible_status == EarnEligibleStatus.pending,
-                Review.published_at.is_(None), Review.is_removed.is_(False),
-                Review.created_at < target.created_at)) or 0
+            title = target.title
         finally:
             db.close()
-        for offset in (max(0, position - 2), max(0, position - 25)):
-            page = c.get(f"/api/v1/admin/review-queue?limit=50&offset={offset}",
-                         headers=mh).json()
-            item = next((i for i in page["pending"] if i["review"]["id"] == review_id), None)
-            if item is not None:
-                return item
-        return None
+        page = c.get(
+            f"/api/v1/admin/review-queue?limit=100&q={quote(title)}",
+            headers=mh).json()
+        return next(
+            (i for i in page.get("items", []) if i["review"]["id"] == review_id), None)
 
     qitem = find_pending(rid)
     check("queue lists review + suggested_platform + source_url",
@@ -245,7 +240,9 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
     ced = c.patch(f"/api/v1/reviews/{rid}", headers=ah, json={"title": "T3", "change_note": "y"})
     check("edited-since-monetized appears in queue",
           ced.status_code == 200 and rid in
-          [i["review"]["id"] for i in c.get("/api/v1/admin/review-queue", headers=mh).json()["edited_since_monetized"]])
+          [i["review"]["id"] for i in c.get(
+              "/api/v1/admin/review-queue?limit=100&factor=edited_after_monetization",
+              headers=mh).json()["items"]])
 
     print("\n== No-link publish / reject / unpublish ==")
     pub = c.post(f"/api/v1/admin/reviews/{low}/publish", headers=mh)
@@ -325,7 +322,7 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
 
     print("\n== M2: fraud signals (queue only) ==")
     q2 = c.get("/api/v1/admin/review-queue", headers=mh).json()
-    pool = q2["pending"] + q2["edited_since_monetized"]
+    pool = q2["items"]
     check("queue items carry signals",
           bool(pool) and all("signals" in i and "collusion" in i["signals"] for i in pool))
     check("public review has no signals",
