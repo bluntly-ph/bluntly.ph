@@ -22,6 +22,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
+import { TextField } from "@/components/ui/TextField";
 import { prepareImageForUpload, usablePhoto } from "@/lib/image";
 
 type Product = {
@@ -542,8 +543,15 @@ function PhrasePicker({
         })}
       </ul>
 
-      <div className="mt-3 flex gap-2">
-        <input
+      {/* The shared design-system input rather than a bespoke one: it carries
+          the 48px height, 12px radius and hairline the onboarding frames
+          specify, and renders a real <label> even where the frame shows only
+          placeholder text — a placeholder is not an accessible name and
+          disappears on focus. */}
+      <div className="mt-3">
+        <TextField
+          label={addLabel}
+          labelHidden
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           onKeyDown={(e) => {
@@ -556,8 +564,6 @@ function PhrasePicker({
           }}
           onBlur={addCustom}
           placeholder={addLabel}
-          aria-label={addLabel}
-          className={`${inputCls} h-10`}
         />
       </div>
     </div>
