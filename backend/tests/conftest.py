@@ -139,13 +139,37 @@ def find_pending_queue_item(client, mod_headers: dict, review_id: str):
     finally:
         db.close()
 
-    page = client.get(
-        f"/api/v1/admin/review-queue?limit=100&q={quote(title)}",
-        headers=mod_headers,
-    ).json()
-    return next(
-        (i for i in page.get("items", []) if i["review"]["id"] == review_id), None
-    )
+    PAGE = 100
+
+    def fetch(offset: int):
+        return client.get(
+            f"/api/v1/admin/review-queue?limit={PAGE}&offset={offset}&q={quote(title)}",
+            headers=mod_headers,
+        ).json()
+
+    def match(page):
+        return next(
+            (i for i in page.get("items", []) if i["review"]["id"] == review_id), None
+        )
+
+    first = fetch(0)
+    hit = match(first)
+    if hit is not None:
+        return hit
+
+    # `q` narrows, but fixture titles are not unique — this suite creates
+    # hundreds of reviews titled "Great" — so one page is not a guarantee.
+    # Policy order sorts a freshly created routine card LAST among its peers
+    # (same lane, same SLA state, same score, newest queued_at), so walk
+    # backwards from the final page rather than forwards from the first.
+    total = int(first.get("total") or 0)
+    offset = ((total - 1) // PAGE) * PAGE if total else 0
+    while offset > 0:
+        hit = match(fetch(offset))
+        if hit is not None:
+            return hit
+        offset -= PAGE
+    return None
 
 
 def register_and_token(client, role: str = "user") -> tuple[str, str, str]:

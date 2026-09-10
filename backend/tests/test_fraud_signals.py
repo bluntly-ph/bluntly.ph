@@ -84,7 +84,13 @@ def test_signal_batch_preserves_values_with_constant_query_count(client):
     assert client.post(
         f"/api/v1/admin/reviews/{original_id}/publish", headers=mh
     ).status_code == 200
-    near_copy_id = make(body + " I would recommend it for small flats.")
+    # A near copy has to actually clear `duplicate_similarity_threshold` (0.85).
+    # The previous suffix here was 37 characters onto a 134-character body,
+    # which measures 0.82 — below the threshold, so the detector correctly did
+    # NOT flag it and this assertion had never run in CI to say so. Measured
+    # with pg_trgm on 2026-09-10: this suffix gives 0.909, " Would buy again."
+    # gives 0.909, and the distinct body below stays at 0.15.
+    near_copy_id = make(body + " Recommended.")
     distinct_id = make(
         "The motor failed on day two and support never replied, so I returned. "
         "This was a completely different ownership experience."

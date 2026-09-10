@@ -194,11 +194,29 @@ def functional(base_url: str) -> tuple[str, str]:  # noqa: C901 - a flat checkli
             title = target.title
         finally:
             db.close()
-        page = c.get(
-            f"/api/v1/admin/review-queue?limit=100&q={quote(title)}",
-            headers=mh).json()
-        return next(
-            (i for i in page.get("items", []) if i["review"]["id"] == review_id), None)
+        # Same caveat as tests/conftest: `q` narrows but fixture titles are not
+        # unique, and policy order sorts a freshly created routine card last.
+        def fetch(offset):
+            return c.get(
+                f"/api/v1/admin/review-queue?limit=100&offset={offset}&q={quote(title)}",
+                headers=mh).json()
+
+        def match(page):
+            return next(
+                (i for i in page.get("items", []) if i["review"]["id"] == review_id), None)
+
+        first = fetch(0)
+        hit = match(first)
+        if hit is not None:
+            return hit
+        total = int(first.get("total") or 0)
+        offset = ((total - 1) // 100) * 100 if total else 0
+        while offset > 0:
+            hit = match(fetch(offset))
+            if hit is not None:
+                return hit
+            offset -= 100
+        return None
 
     qitem = find_pending(rid)
     check("queue lists review + suggested_platform + source_url",
