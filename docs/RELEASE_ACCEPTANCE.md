@@ -833,7 +833,7 @@ need them, then the verdict.
 | 8 | Run the milestone verifier | `python -m scripts.verify_milestones` (Git Bash) | `58/58 verified` |
 | 9 | Run Ruff | `cd backend && python -m ruff check app/ scripts/ tests/` | `All checks passed!` |
 | 10 | Frontend verification | `npx tsc --noEmit && npm run lint && npm run build` | clean, every route emitted |
-| 11 | Data integrity | `python -m scripts.check_invariants --strict` | `All 15 invariants hold` |
+| 11 | Data integrity | `python -m scripts.check_invariants --strict` | `All 26 invariants hold` |
 | 12 | Production smoke | steps 3b and 5–6 below | as stated there |
 | 13 | PayPal sandbox acceptance | §C, scenarios 1–8 | no double debit or refund |
 | 14 | Security matrix | step 6 below | every row holds |
@@ -917,7 +917,7 @@ identity, no orphaned reviews or payouts, no review with two active referral
 links, no monetized-but-unverified review, no monetized review at two stars or
 below, commission shares summing to the gross, and none of them negative.
 
-**Pass:** `All 15 invariants hold.`
+**Pass:** `All 26 invariants hold.`
 
 **Two currently fail, and they are known residue.** The fixture cleanup deleted
 the synthetic users and reviews but left 132 rows in

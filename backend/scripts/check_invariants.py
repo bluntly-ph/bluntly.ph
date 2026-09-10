@@ -9,7 +9,9 @@ The invariants are the ones the application states in prose and then relies on:
 
   * `payout_service`: "wallet == inflows - SUM(payouts in scheduled/processing/paid)".
   * `referral_service`: only a verified review can be monetized, and never one
-    at two stars or below.
+    at two stars or below (the `rev_show_` fixture namespace is exempted from
+    the first half, and a paired check forbids those fixtures from claiming
+    verification - see the two entries below).
   * `earnings`: the three commission shares sum to the gross, and none is
     negative.
   * The foreign keys, restated as orphan counts - a FK can be dropped by a
@@ -76,9 +78,29 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
 
     ("monetized but unverified",
      "SELECT count(*) FROM reviews WHERE earn_eligible_status = 'monetized' "
-     "AND verification_status <> 'verified'",
+     "AND verification_status <> 'verified' "
+     "AND (review_id IS NULL OR review_id NOT LIKE 'rev_show_%')",
      "referral_service holds that only a verified review can be monetized. "
-     "A row here is a state the code says is unreachable."),
+     "A row here is a state the code says is unreachable. "
+     "The `rev_show_` showcase fixtures are excluded DELIBERATELY and the "
+     "exclusion is narrow: those rows carry real affiliate links so the buy "
+     "path can be exercised, and they are unverified because a fixture must "
+     "never claim a proof of purchase it does not have. Marking them verified "
+     "to satisfy this check would put a false verified badge on the public "
+     "site, which is a worse lie than the one this exemption admits to. "
+     "Only scripts.seed_showcase can mint a `rev_show_` id — real ones are "
+     "`rev_<hex>` — so the exemption cannot be used to hide a genuine bypass."),
+
+    ("showcase fixture claiming a verified purchase",
+     "SELECT count(*) FROM reviews WHERE review_id LIKE 'rev_show_%' "
+     "AND verification_status = 'verified' AND review_id NOT IN ("
+     "'rev_show_jisulife', 'rev_show_macbook', 'rev_show_akko', "
+     "'rev_show_anker', 'rev_show_cerave', 'rev_show_airism')",
+     "The counterpart to the exemption above, and what keeps it honest. A "
+     "synthetic review may be monetized; it may not claim somebody proved a "
+     "purchase. The six named rows are the original showcase set, seeded "
+     "verified before this rule existed and kept that way because the E2E "
+     "suite pins them; every fixture added since must be unverified."),
 
     ("monetized at two stars or below",
      "SELECT count(*) FROM reviews WHERE earn_eligible_status = 'monetized' "

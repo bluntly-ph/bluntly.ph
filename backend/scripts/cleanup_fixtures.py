@@ -11,8 +11,8 @@ generates exactly `t_{uuid}@example.com` and nothing else in the system does.
 Everything else is preserved, including:
 
   * @gmail.com          - real people who signed up
-  * @showcase.bluntly.ph - the curated demo accounts that author all 6 public
-                           reviews (seed_showcase.py); content, not fixtures
+  * @showcase.bluntly.ph - the curated demo accounts behind every show_* public
+                           review (seed_showcase.py); content, not fixtures
   * @bluntly.ph          - the platform admin
   * @example.ph          - one QA persona. NOT the test-suite pattern, so it is
                            UNCERTAIN and therefore kept. Age and inactivity are
