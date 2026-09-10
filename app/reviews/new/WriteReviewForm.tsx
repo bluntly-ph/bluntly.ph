@@ -246,6 +246,27 @@ function useHydrated(): boolean {
  * which is why a reviewer could reach the button with the verdict unset and no
  * idea which field was missing.
  */
+/**
+ * Display copy for a step whose Figma frame specifies its own heading.
+ *
+ * `STEPS` doubles as the back-link label ("< Star rating"), so it has to stay
+ * short. The frame for the Pros/Cons step gives that screen a title and a
+ * credibility line of its own, which is what a reviewer actually reads — so it
+ * is carried separately rather than by widening the navigation labels.
+ *
+ * Only this step could be compared against its frame: the Figma source is
+ * behind an exhausted account quota, and the frame for it was available as a
+ * capture. The other steps keep the existing pattern rather than being changed
+ * on a guess.
+ */
+const STEP_COPY: Record<number, { title: string; blurb: string }> = {
+  3: {
+    title: "The good, the bad",
+    blurb:
+      "Boost your review's credibility by adding key information people want to know",
+  },
+};
+
 const STEPS = [
   "Your experience",
   "Your verdict",
@@ -872,15 +893,36 @@ function StepsFlow({
         </div>
       </div>
 
-      <h1 className="mt-4 text-[22px] font-bold text-[var(--text-primary)]">
-        {STEPS[step]}
+      <h1
+        className={`mt-4 text-[22px] font-bold ${
+          STEP_COPY[step] ? "text-[var(--accent-primary)]" : "text-[var(--text-primary)]"
+        }`}
+      >
+        {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
-      <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-        Reviewing{" "}
-        <span className="font-medium text-[var(--accent-primary)]">
-          {product.canonical_name ?? "your product"}
-        </span>
-      </p>
+      {STEP_COPY[step] ? (
+        <>
+          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+            {STEP_COPY[step].blurb}
+          </p>
+          {/* The frame drops the product name on this step. It is kept, one
+              size down, because losing track of what you are reviewing
+              mid-flow is a usability cost the design was not weighing. */}
+          <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+            Reviewing{" "}
+            <span className="font-medium text-[var(--accent-primary)]">
+              {product.canonical_name ?? "your product"}
+            </span>
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          Reviewing{" "}
+          <span className="font-medium text-[var(--accent-primary)]">
+            {product.canonical_name ?? "your product"}
+          </span>
+        </p>
+      )}
 
       <div className="mt-6">
         {step === 0 ? (
@@ -1056,6 +1098,7 @@ function StepsFlow({
           type="button"
           onClick={isLast ? submit : () => patch({ step: step + 1 })}
           disabled={Boolean(blocker) || busy}
+          className="w-full sm:w-auto"
         >
           {busy ? "Submitting…" : isLast ? "Submit for review" : "Continue"}
         </Button>
