@@ -1027,3 +1027,180 @@ Status: ENGINEERING COMPLETE / DEPLOYED TO AUTHORIZED PRODUCTION DEV/QA
 ENVIRONMENT / READY FOR INDEPENDENT QA RETEST. Never QA PASSED — only the
 independent QA team can close that.
 
+
+---
+
+## Release ce2ffac — independent QA pass of 2026-09-08, engineering disposition
+
+Independent QA ran the core buyer/reviewer flows on 2026-09-08 and filed six
+issues in `Bluntly-QA-LOG.xlsx`. **Their log is unmodified** — their rows still
+read `Open`, because a QA status is theirs to set. What follows is the
+engineering disposition, recorded separately, as this document requires.
+
+**QA has not retested. Nothing below is a QA pass.**
+
+| QA ID | QA's observation (verbatim) | Engineering disposition |
+|---|---|---|
+| QA-001 | Product images are not loading in search results, and some search results are not closely related to the entered keyword. | **FIXED — PRODUCTION VERIFIED** |
+| QA-002 | The live site only allows users to type Pros and Cons, while the Figma design provides suggested phrases that users can select. | **FIXED — AUTH ACCEPTANCE PENDING** |
+| QA-003 | After creating an initial Tefal review draft, the previous draft could not be reopened. A second Tefal draft was created as a test, but only one draft appeared. | **FIXED — AUTH ACCEPTANCE PENDING** |
+| QA-004 | The live site shows that a submitted review must be checked by a moderator before going live, while the Figma design shows the review becoming live immediately. | **NOT A DEFECT — stale prototype expectation** |
+| QA-005 | The footer contains Reddit, Instagram, Facebook, and TikTok icons under 'Follow Us', but no official Bluntly accounts were found. | **FIXED — PRODUCTION VERIFIED** |
+| QA-006 | The 'Buy it here' button does not successfully open the corresponding Shopee product/store page and instead shows 'This shop failed to load.' | **FIXED — REAL AFFILIATE DATA ACTIVE — PRODUCTION VERIFIED** |
+
+### QA-001 — three causes
+
+1. **Images were never requested.** The composer's product picker drew a
+   hardcoded grey tile and its local `Product` type omitted `image_url`, a
+   field `ProductOut` had served all along.
+2. **The loader distorted every Supabase image on the site.**
+   `supabaseImageLoader` asked for a width and relied on Supabase's default
+   `resize=cover`; cover with a width and no height does not scale the height.
+   Measured on production: a 1801×1800 photo requested at width 240 returned
+   **240×1800**. That hit product photos, review photos and avatars alike, and
+   at thumbnail size a 1:7.5 sliver is indistinguishable from a broken image.
+   `resize=contain` returns 240×240.
+3. **Relevance was the ordering, not the matching.** `ilike %term%` is a wide
+   net sorted by `created_at DESC`, so the newest row won however badly it
+   matched. Now: exact → prefix → word-start → substring, shortest name breaking
+   ties, recency last.
+
+Production-verified: images decode, none squashed, requests carry
+`resize=contain`, and `q=iphone` returns iPhone listings first.
+
+### QA-004 — the site is right, the prototype is stale
+
+The publication gate is M2 slice 1 and explicitly supersedes FR-3's "publish
+immediately". It is what makes affiliate attachment and the verification claim
+possible: a review is hidden on submission and a moderator publishes it.
+Matching the prototype would delete the moderation step the product is built
+around. **Visual surface still matched to Figma; behaviour deliberately
+preserved.** Reopen only on newer authoritative product evidence.
+
+### QA-006 — what was wrong, and the proof it is fixed
+
+The redirect was never broken. It faithfully sent readers where the data
+pointed, and the data was fabricated: the showcase seeder built each affiliate
+URL by formatting a product's business id into a marketplace path
+(`shopee.ph/show_jisulife?af=bluntly`). Four were live.
+
+Twenty owner-supplied affiliate links were opened in a rendered browser and
+identified from the product page itself. **Nineteen resolved.** No
+cross-marketplace pairs exist in the set; Lazada 13 and 14 are the same shoe
+(New Balance MR530SG) from two sellers and collapse to one product. Result:
+**18 products, each with exactly one real link — 10 Shopee, 8 Lazada.**
+
+**Link 18 is unresolved and unassigned.** Lazada serves a "PDP web redirect
+app" / "spu page" shell from the affiliate link, from the canonical
+`products/i5373818312-s32146346196.html` URL, and from a mobile profile alike.
+It was left unmapped rather than attached to a plausible-looking product.
+
+Production seed, before → after:
+
+    products                19 -> 37   (+18, all show_*)
+    reviews                 20 -> 38   (+18, all rev_show_*)
+    showcase users           3 ->  6   (+3)
+    referral links           4 -> 22   (4 revoked with audit, 18 new active)
+    active by platform  shopee=4 -> shopee=10, lazada=8
+    FABRICATED URLS LIVE     4 ->  0
+    non-showcase reviews    14 -> 14   (untouched)
+    non-showcase products   13 -> 13   (untouched)
+    non-showcase referral    0 ->  0   (untouched)
+
+Run twice; the second run changed nothing — idempotent, no duplicate links.
+
+End-to-end in a real browser:
+
+    rev_show_iphone17    -> 302 https://s.shopee.ph/7AdQOJz8uS
+                         -> shopee.ph  "Apple iPhone 17"
+    rev_show_wh1000xm5   -> 302 https://s.lazada.com.ph/s.ZSIor7?c=t&t=…
+                            &sub_id1=rev_show_wh1000xm5&sub_id2=ref_…
+                         -> www.lazada.com.ph  "Sony WH-1000XM5 …"
+
+Lazada attribution survives `decorate_affiliate_url`, which re-encodes the
+query and appends the sub-ids; the `c` and `t` parameters are intact.
+
+### Showcase data is synthetic, and the system says so
+
+The 18 new reviews are **unverified**, carry **no receipt** and **no
+`price_paid`**, and read as product assessments rather than invented
+first-person testimony. They live in `show_*` / `rev_show_*` with reserved UUID
+ranges and the removal SQL in the seeder docstring.
+
+They are **monetized but unverified**, which `referral_service` refuses to
+create. `check_invariants` #9 now exempts the `rev_show_` namespace in its own
+text, and a **new paired invariant** forbids any fixture beyond the original six
+from claiming verification. Only the seeder can mint a `rev_show_` id — real
+ones are `rev_<hex>` — so the exemption cannot hide a genuine bypass. Invariant
+count moved 25 → 26; `RELEASE_ACCEPTANCE.md` step 11 updated to match.
+
+**Owner decision outstanding:** the original six showcase reviews remain
+`verified` with a `price_paid` and an `example.com` photo. They predate this
+rule and the E2E suite pins them. Whether to relabel or retire them before
+public launch is a product call, not an engineering one.
+
+Showcase reviews also carry hand-set `helpful_votes` / `wilson_score` with no
+underlying vote rows — synthetic engagement inside a removable namespace. The
+first genuine vote recomputes both.
+
+### Figma — what was actually compared, and what could not be
+
+**The Figma source could not be opened.** The account (`whoami`: handle
+`Bluntly`, plan "Bluntly's team", seat **View**, tier **starter**) is on a
+**monthly** MCP quota — 20 calls on Starter, 6 on Professional per Figma's own
+rate-limit doc — and it is exhausted. `get_design_context`, `get_metadata` and
+`get_screenshot` all refuse. **Unblocking requires a Dev or Full seat**
+(200/day), which is an owner action.
+
+Compared against an authentic Figma capture (the frame screenshot embedded in
+the QA log):
+
+    Pros/Cons step   heading "The good, the bad" in the frame's orange,
+                     credibility line, Pros/Cons cards with coloured label and
+                     prompt, one-tap chips pairing two per row with the orange
+                     selected state, ghost "Add a pro…" input, full-width
+                     primary action. Captured at 393 (frame is 390) and 1440.
+
+    Deliberate deviation: the frame drops the product name on that step; the
+    implementation keeps it one size down. Losing track of what you are
+    reviewing mid-flow is a usability cost the frame was not weighing.
+
+    Scope: only this step had a frame available. Other composer steps were NOT
+    changed, because guessing at a frame nobody can open is worse than leaving
+    a known-good screen alone.
+
+Design system used where it *is* readable — the project's own: `app/globals.css`
+tokens (surface/text/accent/radius/shadow/font) throughout, and the chip
+picker's free-text input moved from a local class string to
+`components/ui/TextField`, the shared 48px / 12px-radius / hairline input that
+also renders a real `<label>` where the frame shows only placeholder text.
+
+**No claim of "Figma 1:1 verified" is made here**, because that would require
+opening the source.
+
+### Evidence
+
+    Commit              ce2ffaced00c234ac80ec700ab0f601e727d1503
+    CI run              34436559802
+    Prior run           34428291349 (5f5570e) — 3 failed, both causes fixed in
+                        ce2ffac: a paging assumption I introduced in
+                        `find_pending_queue_item`, and a fraud-signal fixture
+                        that had never run in CI and whose "near copy" measured
+                        0.82 against a 0.85 threshold.
+    Local gates         backend 1151 passed / 334 skipped; ruff clean;
+                        tsc 0; eslint 0; frontend 120 tests / 119 pass
+                        (pre-existing CRLF source-grep in telemetry-route)
+    Production          32/32 acceptance checks, desktop 1440 and mobile 393
+    Independent review  One reviewer over the seeder diff: 2 CRITICAL and
+                        8 IMPORTANT findings, all addressed before commit.
+
+### Still needing a human
+
+    HUMAN_AUTH_REQUIRED     QA-002 and QA-003 live behind /reviews/new, which
+                            proxy.ts gates. No stored session exists. Accepting
+                            them on production needs an OTP sign-in via
+                            .auth-capture.mjs — owner's keyboard.
+    MISSING_PLATFORM_PERM   Figma MCP monthly quota exhausted on a View seat.
+    MISSING_PRODUCT_IDENTITY Lazada link 18.
+
+**Independent QA status: NOT YET RETESTED.**
