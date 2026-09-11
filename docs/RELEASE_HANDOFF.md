@@ -1204,3 +1204,159 @@ opening the source.
     MISSING_PRODUCT_IDENTITY Lazada link 18.
 
 **Independent QA status: NOT YET RETESTED.**
+
+---
+
+## Release dbb8863 — QA-007 to QA-012, and navigation consolidated
+
+Second independent QA pass. **The tester's log is untouched** — this is the
+engineering disposition, recorded separately as this document requires.
+
+**QA has not retested. Nothing below is a QA pass.**
+
+A note on provenance: `BLUNTLY_QA - QA Issues.csv` could not be located — not on
+disk, and not in the Drive account (which holds only the August
+"Bluntly-Design-QA-Kit"). This disposition is written against the owner's
+summary of QA-007..012, which carries each ID, severity and description. If the
+tester's exact steps / expected / actual differ, the fixes below should be
+re-read against the original.
+
+| QA ID | Severity | Engineering disposition |
+|---|---|---|
+| QA-007 | Medium | **FIXED — PRODUCTION VERIFIED** on all four pages |
+| QA-008 | Low | **FIXED — PRODUCTION VERIFIED** |
+| QA-009 | Low | **FIXED — PRODUCTION VERIFIED** |
+| QA-010 | Low | **FIXED — PRODUCTION VERIFIED** |
+| QA-011 | High | **FIXED — PRODUCTION VERIFIED** (code + data) |
+| QA-012 | Low | **FIXED — PRODUCTION VERIFIED** |
+
+### QA-007 — one bug, not four
+
+`.prose a { color: var(--accent-primary) }` is specificity (0,0,1,1); Tailwind's
+`.text-white` is (0,0,1,0). The informational CTAs are `<Link>`s inside
+`<Article className="prose">`, so the prose rule repainted every one of them
+orange-on-orange — invisible until hover tinted the background. Reproduced on
+production before any change: computed `color` and `background` were both
+`rgb(239,88,33)` on /about, /how-it-works, /faqs and /articles.
+
+Fixed once, at the shared level: a new `components/ui/CtaLink` carrying
+`data-cta`, with the prose rule narrowed to `:not([data-cta])`. That holds
+wherever a CTA lands inside prose, not only on the four pages QA opened.
+
+### QA-008 / QA-009 / QA-010 — there was nothing to fix, so it was built
+
+No autocomplete existed anywhere in the application; `/search` and the header
+were plain GET forms, and the "suggestions" QA saw were the search results
+themselves, rendered even for an empty query.
+
+`components/search/SearchAutocomplete` is a real combobox: nothing is requested
+below two non-whitespace characters (QA-010), options are selectable by pointer
+**and** keyboard with `aria-activedescendant` and visible hover/highlight
+(QA-009), and selecting one runs the search for that product instead of leaving
+the reader to retype it (QA-008). It remains a genuine `<form action="/search">`,
+so search still works with JavaScript unavailable.
+
+### QA-011 — the fabrication collapsing, not the counter resetting
+
+Showcase reviews carried hand-written `helpful_votes` — 97, 88, 81 — with **zero**
+`review_votes` rows behind them. `vote_service.recompute_review_vote_aggregates`
+derives the count from those rows and nothing else, so the first genuine upvote
+replaced the fabrication with the truth and a review showing "97" dropped to
+"1". The counter was never broken; the number it started from was.
+
+This was predicted in the previous cycle's independent review (finding M5) and
+documented rather than fixed. QA then found it. The repair now delegates to the
+same service the vote path uses, so a fixture nobody has voted on reads 0 —
+making 0 → 1 exactly what one vote means — while a review people *have* voted on
+keeps the total its voters produced. Author trust is recomputed for every
+touched author, rather than left derived from deleted fabrications until the
+nightly sweep.
+
+Production after the repair: **0** showcase reviews carry votes without vote
+rows; the highest showcase total is **2**, and those are real votes cast during
+testing. Non-showcase rows untouched (14 reviews, sum of helpful_votes 0).
+
+### QA-012 — the same mistake, inverted
+
+`<Link className="contents">` wrapped around `<Button>` nests a button inside an
+anchor (invalid), and a `<button>` renders with `cursor: default`. Both CTAs are
+`CtaLink`s now, and the `Button` primitive gained `cursor-pointer` —
+with `disabled:cursor-not-allowed`, because this project has no tailwind-merge
+and plain `cursor-not-allowed` loses to it on stylesheet order.
+
+### Navigation
+
+The mobile bottom bar is removed, its 68px spacer with it — verified on
+production at 393px: zero fixed bottom elements, no leftover gap. The header
+avatar opens `ProfileNavPanel`.
+
+**Deliberate deviations from the design reference, and why:**
+
+- **"Bookmarks" and "Recent reads" are omitted.** Neither has a route. Pointing
+  them at `#` or a "coming soon" page would be a menu that misrepresents what
+  the product does.
+- **Dark mode IS included** — `setTheme` and the `data-theme` cookie already
+  existed, so the control is real rather than decorative.
+- **Signed-out visitors get the same panel** behind a menu button. This was not
+  in the reference, but every header link is `md:inline-flex` and the bar that
+  carried them on mobile is gone; without it a signed-out visitor on a phone
+  could not reach the feed, categories, Q&A or the bounty board from anywhere.
+
+### Independent review — what it caught
+
+One review, all findings reproduced before fixing:
+
+- **CRITICAL.** The panel rendered as an unusable 64px strip. The header is
+  `backdrop-blur-md`, and a non-`none` `backdrop-filter` makes an element the
+  containing block for its `fixed` descendants — so `inset-y-0` resolved against
+  the header box, not the viewport. Measured 64px against 844px. It is portalled
+  to `<body>` now and verified full-height in both states. This mattered
+  precisely because the bar it replaces was deleted in the same change.
+- Signed-out mobile had no navigation at all (above).
+- `className` size overrides on the new CTAs were silently dropped — no
+  tailwind-merge — so they rendered as 44px pills where a 31px chip was
+  intended. `CtaLink` has a real `size` prop.
+- `cursor-pointer` beat `cursor-not-allowed` on every disabled button in the app.
+- The `/search` clear button reset only local state, leaving an empty field above
+  a full result list.
+- Suggestion options were focusable `<button>`s with only `onMouseDown` —
+  unreachable by keyboard and contradicting `aria-activedescendant`.
+
+Also fixed: the moderator FAB still offset 84px to clear a tab bar that no
+longer exists, and the last hand-rolled pill CTAs on /membership.
+
+### Figma
+
+**FIGMA_SOURCE_ACCESS_BLOCKED.** One attempt at the start of the design pass
+(`get_design_context`, Mobile Landing frame 1902:1504) returned the same
+View-seat monthly quota refusal as the previous cycle; not retried. Work is
+therefore **matched to owner-provided references**, and **no claim of
+source-verified fidelity is made**. Unblocking needs a Dev or Full seat
+(200 calls/day) — an owner action on the Figma account.
+
+Design-system work used what *is* readable: `app/globals.css` tokens throughout,
+the shared `components/ui/TextField` and `Button`, and a new shared `CtaLink`
+that replaced eight hand-rolled CTA class strings across five pages.
+
+### Evidence
+
+    Commit              dbb886308a4d18535b973113588726a096f5f5a9
+    CI run              34624504223
+    Local gates         tsc 0 · eslint 0 · frontend 120 tests / 119 pass
+                        (pre-existing CRLF source-grep in telemetry-route)
+                        next build green, 44 routes
+                        backend 1152 passed / 337 skipped · ruff clean
+    Production          24/24 acceptance, desktop 1440 and mobile 393
+    Showcase repair     idempotent, namespaced; non-showcase rows unchanged
+
+### Still needing a human
+
+    HUMAN_AUTH_REQUIRED       QA-002 / QA-003 production acceptance. Both sit
+                              behind /reviews/new, which proxy.ts gates, and no
+                              stored session exists. Needs an OTP sign-in via
+                              .auth-capture.mjs — the owner's keyboard; the code
+                              is otherwise unchanged and still verified locally.
+    FIGMA_SOURCE_ACCESS_BLOCKED   View-seat monthly quota.
+    QA LOG NOT FOUND          the QA-007..012 CSV was not on disk or in Drive.
+
+**Independent QA status: NOT YET RETESTED.**
