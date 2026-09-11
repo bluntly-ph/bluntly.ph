@@ -323,11 +323,10 @@ export function AdminNav({
         type="button"
         onClick={() => setDrawerOpen(true)}
         aria-label="Open admin navigation"
-        /* Clears the site's mobile tab bar, which is fixed to the bottom at the
-           same z-index. At bottom-4 this sat underneath it, so on a phone a
-           moderator had no way to reach any console screen but the one they
-           were already on. */
-        className="fixed bottom-[84px] left-4 z-50 grid h-11 w-11 place-items-center rounded-full bg-[var(--accent-primary)] text-[var(--text-on-brand)] shadow-[var(--shadow-fab)] lg:hidden"
+        /* Was bottom-[84px] to clear the site's mobile tab bar, which sat at
+           the same z-index. That bar was removed on 2026-09-12, so the offset
+           now just floats the button 84px off the bottom for no reason. */
+        className="fixed bottom-4 left-4 z-50 grid h-11 w-11 place-items-center rounded-full bg-[var(--accent-primary)] text-[var(--text-on-brand)] shadow-[var(--shadow-fab)] lg:hidden"
       >
         <List size={22} weight="bold" />
       </button>

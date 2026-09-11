@@ -6,7 +6,7 @@ import { RequestUpvote } from "@/components/requests/RequestUpvote";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
-import { Button } from "@/components/ui/Button";
+import { CtaLink } from "@/components/ui/CtaLink";
 import { getUser } from "@/lib/dal";
 import { getRequests } from "@/lib/requests";
 import { getSessionToken } from "@/lib/session";
@@ -44,11 +44,16 @@ export default async function RequestsPage() {
               wanted questions to the top.
             </p>
           </div>
-          <Link href="/requests/new" className="contents">
-            <Button size="sm" icon={<PlusCircle size={16} weight="fill" />}>
-              Post a request
-            </Button>
-          </Link>
+          {/* A link, not a <Link> wrapped around a <Button> (QA-012). That
+              nested a button inside an anchor — invalid — and a <button>
+              renders with cursor:default, so nothing said it was clickable. */}
+          <CtaLink
+            href="/requests/new"
+            size="sm"
+            icon={<PlusCircle size={16} weight="fill" />}
+          >
+            Post a request
+          </CtaLink>
         </div>
 
         {requests === null ? (

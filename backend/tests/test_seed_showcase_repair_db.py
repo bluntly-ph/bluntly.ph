@@ -223,3 +223,64 @@ def test_clearing_a_link_leaves_the_affiliate_relationship_alone(db):
         product_id=product.id, platform=Platform.shopee).one()
     assert row.platform_url is None
     assert row.is_monetizable is True
+
+
+@requires_db
+def test_repair_strips_fabricated_votes_from_a_showcase_review(db):
+    """QA-011, against real rows: a showcase review with a count and no votes
+    behind it is zeroed, so 0 -> 1 on the next real upvote is correct."""
+    marker = uuid.uuid4().hex[:8]
+    author = make_user(db)
+    product = _product(db, f"show_votes_{marker}")
+    review = _showcase_review(db, f"rev_show_votes_{marker}",
+                              author=author, product=product)
+    review.helpful_votes = 97
+    review.unhelpful_votes = 2
+    db.flush()
+
+    seed._repair_engagement(db, review)
+    db.flush()
+
+    assert review.helpful_votes == 0
+    assert review.unhelpful_votes == 0
+
+
+@requires_db
+def test_repair_uses_the_total_real_voters_produced(db):
+    """A showcase review that HAS been voted on ends up with the voters'
+    number, not the seeded claim."""
+    from app.models.enums import VoteDirection
+    from app.models.vote import ReviewVote
+
+    marker = uuid.uuid4().hex[:8]
+    author = make_user(db)
+    product = _product(db, f"show_votes_{marker}")
+    review = _showcase_review(db, f"rev_show_votes_{marker}",
+                              author=author, product=product)
+    # Three claimed, one real. The repair must land on the REAL number — not
+    # keep the claim, which is what an earlier version of this test asserted.
+    review.helpful_votes = 3
+    db.add(ReviewVote(review_id=review.id, voter_id=make_user(db).id,
+                      vote=VoteDirection.up))
+    db.flush()
+
+    seed._repair_engagement(db, review)
+    db.flush()
+
+    assert review.helpful_votes == 1, "the total must come from the vote rows"
+
+
+@requires_db
+def test_repair_never_touches_engagement_outside_the_namespace(db):
+    marker = uuid.uuid4().hex[:8]
+    author = make_user(db)
+    product = _product(db, f"prd_real_{marker}")
+    review = _showcase_review(db, f"rev_{uuid.uuid4().hex[:10]}",
+                              author=author, product=product)
+    review.helpful_votes = 42
+    db.flush()
+
+    seed._repair_engagement(db, review)
+    db.flush()
+
+    assert review.helpful_votes == 42

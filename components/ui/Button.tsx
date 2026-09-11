@@ -56,7 +56,15 @@ export function Button({
     <button
       disabled={disabled}
       className={[
-        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-pill)]",
+        // `cursor-pointer` (QA-012): a <button> renders with cursor:default,
+        // so nothing about it said "clickable" until it was pressed.
+        // `disabled:` is not decoration — this project has no tailwind-merge,
+        // so conflicting utilities are settled by stylesheet order, and plain
+        // `cursor-not-allowed` is emitted BEFORE `cursor-pointer` and loses.
+        // The pseudo-class raises specificity to (0,0,2,0) and wins regardless.
+        "inline-flex cursor-pointer items-center justify-center gap-2",
+        "disabled:cursor-not-allowed",
+        "rounded-[var(--radius-pill)]",
         "font-[family-name:var(--font-body)] font-semibold leading-none",
         "transition-[background-color,transform,border-color]",
         "duration-[var(--duration-fast)] ease-[var(--ease-standard)]",

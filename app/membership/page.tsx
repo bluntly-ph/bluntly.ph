@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle, Coins, Lightning } from "@phosphor-icons/react/dist/ssr";
 
+import { CtaLink } from "@/components/ui/CtaLink";
 import { PageShell } from "@/components/site/PageShell";
 import { getUser } from "@/lib/dal";
 import { benefitLines, bpsToPercent, getTiers, priorityLabel } from "@/lib/membership";
@@ -133,18 +134,13 @@ export default async function MembershipPage() {
           moderated.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard"
-            className="inline-flex h-11 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-6 text-[14px] font-semibold text-white shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--accent-primary-strong)]"
-          >
-            See your earnings
-          </Link>
-          <Link
-            href="/how-it-works"
-            className="inline-flex h-11 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--surface-app)] px-6 text-[14px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] transition-colors hover:text-[var(--accent-primary)]"
-          >
+          {/* The last hand-rolled pair. Not inside `.prose` today, which is
+              exactly how it would have regressed the day someone wrapped it in
+              an <Article>. */}
+          <CtaLink href="/dashboard">See your earnings</CtaLink>
+          <CtaLink href="/how-it-works" variant="secondary">
             How bluntly works
-          </Link>
+          </CtaLink>
         </div>
       </section>
     </PageShell>

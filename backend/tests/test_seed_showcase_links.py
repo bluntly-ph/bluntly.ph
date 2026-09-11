@@ -16,6 +16,8 @@ one, and its review is approved rather than monetized — no button at all.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from scripts.seed_showcase import _real_marketplace_url
@@ -423,3 +425,53 @@ def test_the_guard_rejects_a_host_the_redirect_would_refuse():
     # And the real ones still pass.
     assert seed._real_marketplace_url(SHOPEE, what="x") == SHOPEE
     assert seed._real_marketplace_url(LAZADA, what="x") == LAZADA
+
+
+def test_repair_engagement_derives_the_total_from_the_vote_rows():
+    """QA-011, without a database.
+
+    The seed wrote helpful_votes straight onto the row — 97, 88, 81 — with no
+    `review_votes` behind them, and `vote_service` derives the count from those
+    rows alone. The first genuine upvote recomputed the aggregate from the real
+    data and "97" became "1". QA read that as the counter resetting; it was the
+    fabrication collapsing.
+
+    `_repair_engagement` now delegates to the same service the vote path uses,
+    so this drives it with a session that reports the votes and checks what
+    lands on the row — rather than grepping the source, which would pass on a
+    comment and break on a rename.
+    """
+    class _Result:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def __iter__(self):
+            return iter(self._rows)
+
+    class _Db:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def execute(self, *_a, **_k):
+            return _Result(self.rows)
+
+    class _Row:
+        def __init__(self, review_id):
+            self.id = "rid"
+            self.review_id = review_id
+            self.helpful_votes = 97
+            self.unhelpful_votes = 2
+            self.wilson_score = Decimal("0.96")
+
+    # No vote rows behind it: the honest total is zero, and 0 -> 1 on the next
+    # real upvote is then exactly what one vote means.
+    row = _Row("rev_show_iphone17")
+    seed._repair_engagement(_Db([]), row)
+    assert row.helpful_votes == 0
+    assert row.unhelpful_votes == 0
+    assert Decimal(row.wilson_score) == Decimal("0")
+
+    # Outside the namespace nothing is touched, whatever the votes say.
+    real = _Row("rev_a1b2c3d4e5")
+    seed._repair_engagement(_Db([]), real)
+    assert real.helpful_votes == 97

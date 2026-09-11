@@ -5,7 +5,7 @@ import { ChatCircle, PlusCircle, SealCheck } from "@phosphor-icons/react/dist/ss
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
-import { Button } from "@/components/ui/Button";
+import { CtaLink } from "@/components/ui/CtaLink";
 import { getUser } from "@/lib/dal";
 import { getQuestions } from "@/lib/qa";
 
@@ -36,11 +36,16 @@ export default async function QuestionsPage() {
               Real answers from people who actually bought it — before you do.
             </p>
           </div>
-          <Link href="/questions/new" className="contents">
-            <Button size="sm" icon={<PlusCircle size={16} weight="fill" />}>
-              Ask a question
-            </Button>
-          </Link>
+          {/* A link, not a <Link> wrapped around a <Button> (QA-012). That
+              nested a button inside an anchor — invalid — and a <button>
+              renders with cursor:default, so nothing said it was clickable. */}
+          <CtaLink
+            href="/questions/new"
+            size="sm"
+            icon={<PlusCircle size={16} weight="fill" />}
+          >
+            Ask a question
+          </CtaLink>
         </div>
 
         {questions === null ? (

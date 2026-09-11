@@ -53,6 +53,8 @@ from app.models.enums import (
 from app.models.product import ProductPlatform
 from app.models.review import ReferralLink, Review
 from app.services.review_service import recompute_product_aggregates
+from app.services.trust_service import recompute_user_trust
+from app.services.vote_service import recompute_review_vote_aggregates
 
 NOW = datetime.now(UTC)
 
@@ -731,6 +733,30 @@ def _sub_id_visible(url: str, sub_id: str | None) -> bool:
     return bool(sub_id) and sub_id in url
 
 
+def _repair_engagement(db, review) -> None:
+    """Strip fabricated vote counts from a showcase review (QA-011).
+
+    The first seed wrote `helpful_votes` straight onto the row — 97, 88, 81 —
+    with no `review_votes` rows behind them. `vote_service` derives the counts
+    from those rows and nothing else, so the first genuine upvote recomputed the
+    aggregate from the real data and a review showing "97" dropped to "1". QA
+    reported it as the count resetting; it was the fabrication collapsing.
+
+    Zero is the honest figure for a fixture nobody has voted on, and it makes
+    the increment correct: 0 -> 1 is exactly what one vote means. Only rows with
+    no real votes are touched, so a showcase review that has since been voted on
+    keeps the aggregate its voters actually produced.
+    """
+    if not review.review_id or not review.review_id.startswith("rev_show_"):
+        return
+    # The service, not three hand-set columns: it derives helpful, unhelpful AND
+    # the time-decayed wilson score from the vote rows, which gives 0 for a
+    # fixture nobody has voted on and the true total for one people have. That
+    # makes the "don't clobber real votes" guard structural rather than a
+    # count() precheck, and it cannot go stale if a fourth aggregate is added.
+    recompute_review_vote_aggregates(db, review)
+
+
 def _repair_review_link(db, review, platform, affiliate_url, author_id) -> None:
     """Bring an already-seeded showcase review in line with its real link.
 
@@ -820,8 +846,10 @@ def seed() -> None:
             _upsert_product(db, *p)
         db.flush()
 
+        touched_authors: set = set()
         for i, (rid, review_id, pidx, aidx, title, verdict, stars, monetized,
-                pros, cons, target, anti, discussion, price, helpful, wilson) in enumerate(REVIEWS):
+                pros, cons, target, anti, discussion, price,
+                _helpful, _wilson) in enumerate(REVIEWS):
             pid = PRODUCTS[pidx][0]
             aid = AUTHORS[aidx][0]
             # Monetized means "there is somewhere real to send the reader".
@@ -833,6 +861,11 @@ def seed() -> None:
             existing = db.query(Review).filter_by(review_id=review_id).first()
             if existing is not None:
                 _repair_review_link(db, existing, platform, affiliate_url, aid)
+                _repair_engagement(db, existing)
+                # `recompute_user_trust` sums Review.helpful_votes per author,
+                # so leaving it would keep a reputation derived from the
+                # fabrications just removed until the nightly sweep caught up.
+                touched_authors.add(aid)
                 continue
 
             status = (EarnEligibleStatus.monetized if monetized
@@ -852,8 +885,11 @@ def seed() -> None:
                 verification_status=(VerificationStatus.verified
                                      if review_id in LEGACY_VERIFIED
                                      else VerificationStatus.unverified),
-                helpful_votes=helpful, unhelpful_votes=max(1, helpful // 40),
-                wilson_score=wilson, published_at=published,
+                # Zero, deliberately — see `_repair_engagement` below. The
+                # `helpful` and `wilson` columns in the table above are kept
+                # only so the tuple shape does not churn; they are not written.
+                helpful_votes=0, unhelpful_votes=0,
+                wilson_score=Decimal("0"), published_at=published,
                 earn_eligible_status=status, current_version=1,
                 affiliate_link=affiliate_url if monetized else None,
             )
@@ -875,6 +911,9 @@ def seed() -> None:
             # sweep happens to touch the row.
             db.flush()
             recompute_product_aggregates(db, pid)
+
+        for author_id in touched_authors:
+            recompute_user_trust(db, author_id)
 
         db.commit()
         print(f"Showcase seed complete: {len(AUTHORS)} authors, {len(PRODUCTS)} products, "

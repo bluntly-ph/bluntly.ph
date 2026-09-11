@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { Article, type Block } from "@/components/site/Article";
+import { CtaLink } from "@/components/ui/CtaLink";
 import { PageShell } from "@/components/site/PageShell";
 
 export const metadata: Metadata = {
@@ -65,18 +65,12 @@ export default function HowItWorksPage() {
     <PageShell>
       <Article title="How bluntly works" blocks={BLOCKS}>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href="/reviews/new"
-            className="inline-flex h-11 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-6 text-[14px] font-semibold text-white shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--accent-primary-strong)]"
-          >
+          <CtaLink href="/reviews/new">
             Write your first review
-          </Link>
-          <Link
-            href="/search"
-            className="inline-flex h-11 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-6 text-[14px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] transition-colors hover:text-[var(--accent-primary)]"
-          >
+          </CtaLink>
+          <CtaLink href="/search" variant="secondary">
             Browse reviews
-          </Link>
+          </CtaLink>
         </div>
       </Article>
     </PageShell>

@@ -159,12 +159,17 @@ a {
   font-size: 17px;
   line-height: 1.6;
 }
-.prose a {
+/* `:not([data-cta])` is load-bearing (QA-007). This rule is specificity
+   (0,0,1,1); Tailwind's `.text-white` is (0,0,1,0), so a CTA placed inside an
+   article had its label repainted accent-orange on an accent-orange fill and
+   was invisible until hover tinted the background. `components/ui/CtaLink`
+   sets the attribute. */
+.prose a:not([data-cta]) {
   color: var(--accent-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.prose a:hover {
+.prose a:not([data-cta]):hover {
   color: var(--accent-primary-strong);
 }
 .prose strong {

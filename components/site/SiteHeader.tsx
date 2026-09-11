@@ -1,8 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
 import { MagnifyingGlass, PencilSimpleLine } from "@phosphor-icons/react/dist/ssr";
 
+import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
 import { Logo } from "@/components/ui/Logo";
+import { ProfileNavPanel } from "@/components/site/ProfileNavPanel";
 
 export type HeaderUser = {
   username: string | null;
@@ -24,24 +25,11 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
         </Link>
 
         {/* Desktop inline search */}
-        <form
-          action="/search"
-          role="search"
-          className="ml-4 hidden flex-1 items-center md:flex"
-        >
-          <div className="relative w-full max-w-[32rem]">
-            <MagnifyingGlass
-              size={18}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-            />
-            <input
-              type="search"
-              name="q"
-              placeholder="Search or ask anything"
-              className="h-10 w-full rounded-[var(--radius-pill)] bg-[var(--surface-card)] pl-11 pr-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent-primary)]"
-            />
-          </div>
-        </form>
+        <div className="ml-4 hidden w-full max-w-[32rem] flex-1 md:block">
+          <SearchAutocomplete
+            inputClassName="h-10 w-full rounded-[var(--radius-pill)] bg-[var(--surface-card)] pl-11 pr-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent-primary)]"
+          />
+        </div>
 
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           <Link
@@ -90,28 +78,7 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
             Write a review
           </Link>
 
-          {user ? (
-            <Link
-              href="/profile"
-              aria-label="Your profile"
-              className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--base-gray-200)] ring-1 ring-[var(--line-hairline-10)]"
-            >
-              {user.avatarUrl ? (
-                <Image src={user.avatarUrl} alt="" fill sizes="40px" className="object-cover" />
-              ) : (
-                <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-                  {(user.username ?? "?").slice(0, 1).toUpperCase()}
-                </span>
-              )}
-            </Link>
-          ) : (
-            <Link
-              href="/login"
-              className="rounded-[var(--radius-pill)] px-4 py-2 text-[13px] font-semibold text-[var(--text-primary)] shadow-[inset_0_0_0_1px_var(--base-ink-800)] hover:bg-[var(--line-hairline-10)]"
-            >
-              Log in
-            </Link>
-          )}
+          <ProfileNavPanel user={user} />
         </div>
       </div>
     </header>
