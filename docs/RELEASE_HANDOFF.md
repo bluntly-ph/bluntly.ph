@@ -1527,3 +1527,218 @@ Full seat — an owner action on the Figma account.
 
     FIGMA_SOURCE_ACCESS_BLOCKED   View-seat monthly quota.
     QA LOG NOT FOUND              the QA-007..012 CSV (see provenance, above).
+
+---
+
+## Release 9a9bd63 — the search Escape defect, found by production QA
+
+Engineering disposition. The tester's own findings and status are untouched.
+
+**Independent QA status: NOT YET RETESTED.** Nothing here is a QA pass.
+
+### Why there is a new application candidate
+
+`dbb8863` is **superseded**. It was the validated application SHA through the
+previous cycle, but the final production QA matrix found a real defect in it, so
+application code changed. The candidate is now:
+
+    9a9bd636614a9d1d49967f3eb5d27fd69191c2dc
+
+`3fa6ce2` and `c4eb541`, the two commits between them, are documentation only.
+
+### Session continuity
+
+This work spans a Claude account switch — the previous subscription reached its
+spend limit mid-fix. Same machine, repository, worktree and branch; only the
+Claude account changed. Local tooling all survived (git, `gh`, Node, Playwright,
+the backend venv, `backend/.env.test`, the repo scripts). The one integration
+that needed reconnecting was the Figma MCP OAuth. Nothing was reinstalled or
+reconfigured, and no uncommitted work was lost.
+
+### The defect
+
+A reader types a query, sees suggestions, and presses Escape to dismiss them.
+The query vanished too.
+
+`<input type="search">` clears itself when Escape is pressed — a browser default,
+not anything the component did. The handler dismissed the suggestion list but
+never suppressed that default, so the text went with it, and because the query
+was gone there was nothing left for ArrowDown to reopen. Four assertions failed
+on one cause.
+
+Three things could not have caught this:
+
+- **TypeScript and ESLint.** A missing `preventDefault()` is not a type error.
+- **A synthetic event.** `dispatchEvent(new KeyboardEvent("keydown"))` does not
+  reproduce it, because synthetic events carry no native default action. This was
+  verified directly: a real Escape emptied the field while a synthetic one did not.
+- **The previous production QA.** It checked that Escape *dismissed* the list,
+  which it always did. It never checked that the query survived.
+
+### The fix
+
+The first Escape now closes the list and keeps the query, which is what the ARIA
+combobox pattern specifies. A second Escape still falls through to the browser's
+clear — that affordance is useful, it simply should not fire while a reader is
+only dismissing suggestions.
+
+The same pass fixed a second deviation from the pattern found by the new test:
+reopening with ArrowDown left **no option highlighted**, so `aria-activedescendant`
+was empty on a visible list — a screen reader was told nothing was current — and
+entering the list took two presses. It now highlights the first option, as the
+pattern specifies.
+
+Key handling moved into `components/search/search-combobox-model.ts` so the
+decision is testable: this project has no DOM test environment, and the bug was
+invisible to every gate that existed. Behaviour is otherwise unchanged — each
+original branch maps one to one.
+
+### Regression coverage
+
+Two layers, because one alone would not hold:
+
+- `tests/frontend/search-combobox-model.test.mjs` — 12 tests pinning the decision
+  logic, in the repository's existing model-test style.
+- `.search-combobox-regression.mjs` — a real browser, driving the built app.
+  **This is the layer that matters**, and it was proven to detect the defect
+  before it was trusted to confirm the fix:
+
+```
+against the OLD production code    30/40  — the Escape cascade FAILS
+against the fix, built, local      59/59
+against the fix, on production     59/59
+```
+
+It covers, at 1440 and 393, on the header and `/search`: the two-character
+threshold issuing no request, empty and whitespace input, suggestions appearing,
+Escape dismissing **and retaining the query**, ArrowDown reopening and
+highlighting, ArrowUp round-tripping, a second Escape still clearing, Enter and
+pointer selection both searching, the clear control resetting field *and* URL,
+and the `<form action="/search">` no-JS fallback surviving.
+
+### Final production QA — public matrix
+
+    225 / 225   on the deployed candidate, at 393, 768 and 1440
+
+Covering QA-001 through QA-012, navigation, the search combobox as a system, the
+profile panel and dark mode, and nine representative public surfaces. No console
+errors, no 4xx/5xx, and no product-data writes — the only POST observed was the
+Next server action the dark-mode toggle uses to write its theme cookie, which was
+set and restored.
+
+Two results worth recording because they look like problems and are not:
+
+- **`/categories` has no `<img>` elements.** It is icon-based: 18 inline SVGs,
+  zero raster images, zero background images. The assertion was corrected, not
+  the page.
+- **The public feed contains no non-showcase reviews.** There are 14 in the
+  database; they are unpublished. That is the QA-004 moderation gate doing its
+  job, so it corroborates QA-004 rather than contradicting anything.
+
+### QA harness defects corrected during this run
+
+Every failure resolved to a product defect or a harness defect. One was a product
+defect — the Escape bug above. The rest were mine, and the product was left alone:
+
+| # | Harness defect | Reality |
+|---|---|---|
+| A | Required `<img>` on `/categories` | Icon-based by design |
+| B | Expected `/questions/new` to load for an anonymous visitor | Correctly 307s to `/login?next=…` |
+| C | Counted `POST /` as a product-data write | A Next server action writing the theme cookie |
+| D | `a[href^="/reviews/"]` picked `/reviews/new` as the representative review | Real reviews are `/reviews/<uuid>`; the profile route is `/profile` |
+| E | `input[type="search"]` drove the header's hidden field, and the plain hero field | `input[role="combobox"]` is exactly the set that mounts the component |
+| F | Excluded `/api/bff/api/v1/telemetry`, a path that does not exist | The read beacon is `/api/telemetry` |
+
+### Finding held for the Search States work
+
+The **landing hero search carries no autocomplete at all** — it is a plain
+`<input type="search">` in a GET form, with no `role="combobox"` and no
+suggestions. On a phone it is the only visible search field on `/`, so a mobile
+visitor gets no suggestions from the landing page while desktop header and
+`/search` do.
+
+This is not a regression and was not in the QA scope, so it is recorded rather
+than quietly changed. It belongs with the updated Figma Search States, which will
+dictate how the hero behaves.
+
+### Figma — the September 15 deliverable is blocked
+
+**FIGMA_SOURCE_ACCESS_BLOCKED.**
+
+The OAuth reconnect succeeded, so this is not an authentication problem. The
+account is `Bluntly`, seat **View**, tier **starter**. The first and only call
+made — `get_metadata` on the file — returned, verbatim:
+
+> You've reached the Figma MCP tool call limit for your View seat on the
+> Professional plan. Upgrade your seat or plan for more tool calls.
+
+Not retried. **Owner action required: a Dev or Full Figma seat.**
+
+Everything in the September 15 scope that depends on reading the updated source
+is therefore NOT STARTED: button states, search states, the
+Reviews / Questions / Sellers tabs, the updated review cards, and the component
+state inventory. No implementation was attempted from memory or screenshots.
+
+The truthful visual status is unchanged: **MATCHED TO OWNER-PROVIDED FIGMA
+REFERENCES — SOURCE VERIFICATION NOT COMPLETED.** No 1:1 claim is made anywhere.
+
+### Final production QA — authenticated, and the QA-011 vote exercise
+
+Measured against the deployed candidate with a real signed-in session. The owner
+completed the OTP in a browser window; no code was read, requested in chat, or
+stored, and the session file was deleted after the run. **Historical numbers from
+the previous cycle were not reused — these were re-measured.**
+
+    QA-002 pros / cons chips              24 / 24
+    QA-003 two drafts, two products       17 / 17
+    targeted regression                   19 / 19
+    health                                 3 / 3
+    auth + cleanup                         2 / 2
+    ------------------------------------------------
+    authenticated total                   65 / 65
+
+Nothing was published — zero POSTs to reviews or products. Drafts live in the
+browser, so every draft assertion was client-side, and the account's pre-existing
+draft state was snapshotted and restored.
+
+**QA-011 exercised live, which the earlier invariant check could not do** (7/7).
+On `rev_show_macbook`, which already carried real votes:
+
+    total 2  ->  upvote  ->  3  ->  remove vote  ->  2
+
+The aggregate **incremented rather than collapsing to 1**, the rendered page
+matched the server's number, and production was left exactly as found (total 2,
+no vote by this account). This was the one deliberate, reversible write in the
+entire matrix.
+
+### Complete final QA tally for 9a9bd63
+
+    real-browser combobox regression      59 / 59     (1440 + 393)
+    public matrix                        225 / 225    (393 + 768 + 1440)
+    authenticated                         65 / 65
+    QA-011 live vote exercise               7 / 7
+    --------------------------------------------------
+    TOTAL                                356 / 356    0 failures
+
+    local gates   tsc 0 · eslint 0 errors 0 warnings · frontend 132/131 ·
+                  next build green, 44 routes
+    CI            run 34690431055 on 9a9bd63
+
+The single frontend test failure is pre-existing and not from this work:
+`telemetry-route.test.mjs` greps its own source as LF while the file is CRLF on
+Windows. It passes on CI's Linux checkout.
+
+### Every failure seen during this run, classified
+
+Nothing was left unexplained. One product defect; the rest were defects in the
+acceptance tooling, where the harness was corrected and the product left alone.
+
+    PRODUCT DEFECT (1)   the search Escape clear, above — fixed in 9a9bd63
+    HARNESS DEFECTS (7)  A-F in the table above, plus the vote payload: the
+                         exercise sent {vote:"helpful"} and got HTTP 422, because
+                         the VoteDirection enum is "up"/"down". Corrected; the
+                         endpoint was never at fault.
+    EXTERNAL BLOCKERS    Figma seat (above). Vercel deployment listing stays 403,
+                         so deployment convergence is proven behaviourally: the
+                         combobox regression scores 30/40 against the old code and
+                         59/59 against production, which only the new code passes.
