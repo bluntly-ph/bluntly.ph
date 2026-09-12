@@ -479,12 +479,21 @@ def test_a_reported_queued_review_is_flagged_but_not_yet_high(db):
 def test_a_report_against_an_unrelated_uuid_flags_nothing(db):
     """A report whose target matches no review must not raise the count, or the
     pill would measure report volume rather than the queue."""
-    before = svc.overview(db)
+    # Both snapshots are taken against the SAME instant. `high_priority`
+    # counts overdue work, and `_band_for` promotes a review the moment
+    # `elapsed >= target`, so with real clocks a pre-existing review can cross
+    # its SLA between the two calls and move approaching -> overdue -> High on
+    # its own. That is what failed CI here: queue_total +1 as expected, but
+    # high_priority +1, approaching -1 and overdue +1 — a review ageing, not
+    # anything this test did. Pinning `now` is the convention already used
+    # above, and it removes the clock without weakening the claim.
+    now = datetime.now(UTC)
+    before = svc.overview(db, now=now)
 
     _queued_review(db, author=make_user(db), product=_product(db))
     _report(db, _uuid.uuid4(), reporter=make_user(db))
 
-    after = svc.overview(db)
+    after = svc.overview(db, now=now)
 
     assert after.queue_total == before.queue_total + 1, "the review still queues"
     assert after.high_priority == before.high_priority
@@ -494,13 +503,15 @@ def test_a_report_against_an_unrelated_uuid_flags_nothing(db):
 @requires_db
 def test_duplicate_reports_do_not_multiply_a_flagged_review(db):
     """Three reporters, one review. The bar counts reviews, not reports."""
-    before = svc.overview(db)
+    # Same instant for both snapshots — see the note above.
+    now = datetime.now(UTC)
+    before = svc.overview(db, now=now)
 
     review = _queued_review(db, author=make_user(db), product=_product(db))
     for _ in range(3):
         _report(db, review.id, reporter=make_user(db))
 
-    after = svc.overview(db)
+    after = svc.overview(db, now=now)
 
     assert _flagged(after) == _flagged(before) + 1
     # Three reports raise the score (bracket 2-3, not 3 x bracket 1) but the
@@ -512,18 +523,20 @@ def test_duplicate_reports_do_not_multiply_a_flagged_review(db):
 def test_a_reported_review_outside_the_queue_is_not_urgent(db):
     """Urgency is a property of what is waiting. A published review someone
     reported is moderation work, but it is not queue work."""
-    before = svc.overview(db)
+    # Same instant for both snapshots — see the note above.
+    now = datetime.now(UTC)
+    before = svc.overview(db, now=now)
 
     published = _queued_review(
         db,
         author=make_user(db),
         product=_product(db),
-        published_at=datetime.now(UTC),
+        published_at=now,
         earn_eligible_status=EarnEligibleStatus.approved,
     )
     _report(db, published.id, reporter=make_user(db))
 
-    after = svc.overview(db)
+    after = svc.overview(db, now=now)
 
     assert after.queue_total == before.queue_total, "it is not awaiting moderation"
     assert after.high_priority == before.high_priority
