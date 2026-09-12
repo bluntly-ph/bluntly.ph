@@ -13,14 +13,18 @@ import {
 import {
   ArrowRight,
   CaretLeft,
+  Check,
   CheckCircle,
+  Equals,
   Image as ImageIcon,
   MagnifyingGlass,
   Link as LinkIcon,
   Plus,
   Star,
   Trash,
+  X,
 } from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
 
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { Button } from "@/components/ui/Button";
@@ -43,24 +47,33 @@ type Product = {
 };
 type Verdict = "yes_absolutely" | "it_depends" | "hard_pass";
 
-const VERDICTS: { value: Verdict; label: string; hint: string; ring: string }[] = [
+const VERDICTS: {
+  value: Verdict;
+  label: string;
+  hint: string;
+  ring: string;
+  Icon: Icon;
+}[] = [
   {
     value: "yes_absolutely",
     label: "Yes, absolutely",
     hint: "You'd tell a friend to buy it.",
     ring: "var(--accent-success)",
+    Icon: Check,
   },
   {
     value: "it_depends",
     label: "It depends",
     hint: "Right for some people, wrong for others.",
     ring: "var(--accent-star)",
+    Icon: Equals,
   },
   {
     value: "hard_pass",
     label: "Hard pass",
     hint: "You'd tell a friend to save their money.",
     ring: "var(--accent-danger)",
+    Icon: X,
   },
 ];
 
@@ -279,6 +292,10 @@ function useHydrated(): boolean {
  * rather than smuggled into a copy change.
  */
 const STEP_COPY: Record<number, { title: string; blurb: string }> = {
+  1: {
+    title: "Your verdict",
+    blurb: "Your unfiltered words. Make it count.",
+  },
   2: {
     title: "Rating time",
     blurb: "Who doesn't love rating things they bought?",
@@ -998,24 +1015,40 @@ function StepsFlow({
                 type="button"
                 onClick={() => patch({ verdict: v.value })}
                 aria-pressed={draft.verdict === v.value}
-                className="rounded-[var(--radius-sm)] p-4 text-left transition-shadow"
+                className="flex items-start gap-3 rounded-[var(--radius-sm)] p-4 text-left transition-shadow"
                 style={
                   draft.verdict === v.value
                     ? { boxShadow: `inset 0 0 0 2px ${v.ring}` }
                     : { boxShadow: "inset 0 0 0 1px var(--line-hairline-30)" }
                 }
               >
-                <span
-                  className="block text-[15px] font-semibold"
-                  style={{
-                    color:
-                      draft.verdict === v.value ? v.ring : "var(--text-primary)",
-                  }}
-                >
-                  {v.label}
-                </span>
-                <span className="mt-0.5 block text-[13px] text-[var(--text-secondary)]">
-                  {v.hint}
+                {/* The reference marks each choice with its own glyph, always in
+                    that choice's colour rather than only once selected — it is
+                    what makes the three readable at a glance. Decorative: the
+                    label already names the verdict. */}
+                <v.Icon
+                  size={20}
+                  weight="bold"
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0"
+                  style={{ color: v.ring }}
+                />
+                <span className="min-w-0">
+                  <span
+                    className="block text-[15px] font-semibold"
+                    style={{
+                      color:
+                        draft.verdict === v.value ? v.ring : "var(--text-primary)",
+                    }}
+                  >
+                    {v.label}
+                  </span>
+                  {/* Kept, though the frame shows the label alone: it is the line
+                      that stops "It depends" being guessed at, and dropping
+                      guidance to match a still frame is a poor trade. */}
+                  <span className="mt-0.5 block text-[13px] text-[var(--text-secondary)]">
+                    {v.hint}
+                  </span>
                 </span>
               </button>
             ))}
