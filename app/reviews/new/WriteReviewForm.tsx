@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
+  ArrowRight,
   CaretLeft,
   CheckCircle,
   Image as ImageIcon,
@@ -21,6 +22,7 @@ import {
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { prepareImageForUpload, usablePhoto } from "@/lib/image";
@@ -260,11 +262,45 @@ function useHydrated(): boolean {
  * capture. The other steps keep the existing pattern rather than being changed
  * on a guess.
  */
+/**
+ * Per-step heading and credibility line, transcribed from the owner's reference
+ * pack (the "Reviewer Page - Step N" exports, which are the review composer
+ * rather than any reviewer page).
+ *
+ * Indices 2..6 are here because those steps correspond exactly: the reference's
+ * "Step 3 out of 7" is this form's index 2, and so on through step 7.
+ *
+ * Indices 0 and 1 are deliberately absent. The reference's step 1 is product
+ * selection and its step 2 carries the verdict AND the written reason together,
+ * where this form has the reason at index 0 and the verdict at index 1, with
+ * product selection as an unnumbered phase before them. Giving those two steps
+ * reference copy would attach the wrong words to the wrong screen; merging them
+ * is a structural change that moves stored draft step numbers, so it is recorded
+ * rather than smuggled into a copy change.
+ */
 const STEP_COPY: Record<number, { title: string; blurb: string }> = {
+  2: {
+    title: "Rating time",
+    blurb: "Who doesn't love rating things they bought?",
+  },
   3: {
     title: "The good, the bad",
     blurb:
       "Boost your review's credibility by adding key information people want to know",
+  },
+  4: {
+    title: "No product is for everybody",
+    blurb:
+      "At bluntly, we believe that there's no such thing as a perfect product",
+  },
+  5: {
+    title: "Show, don't tell",
+    blurb:
+      "A photo of the actual product verifies your review and is required for earning eligibility.",
+  },
+  6: {
+    title: "Final touch",
+    blurb: "This is what people see first. Make it stand out!",
   },
 };
 
@@ -459,6 +495,10 @@ const PRO_SUGGESTIONS = [
 const CON_SUGGESTIONS = [
   "Not worth it",
   "Too expensive",
+  // "Too heavy" and "Feels cheap" are in the reference's con list and were
+  // missing here, so two of the seven drawn chips could not be tapped.
+  "Too heavy",
+  "Feels cheap",
   "Flimsy",
   "Not as advertised",
   "Looks better in the photos",
@@ -882,7 +922,7 @@ function StepsFlow({
 
       <div className="mt-4 flex items-center gap-3">
         <span className="text-[12px] font-medium text-[var(--text-muted)]">
-          Step {step + 1} of {STEPS.length}
+          Step {step + 1} out of {STEPS.length}
         </span>
         <div
           className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--base-gray-200)]"
@@ -900,9 +940,9 @@ function StepsFlow({
       </div>
 
       <h1
-        className={`mt-4 text-[22px] font-bold ${
-          STEP_COPY[step] ? "text-[var(--accent-primary)]" : "text-[var(--text-primary)]"
-        }`}
+        // Orange on every step: the reference draws each heading in the accent,
+        // not just the ones with their own line underneath.
+        className="mt-4 text-[22px] font-bold text-[var(--accent-primary)]"
       >
         {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
@@ -949,6 +989,9 @@ function StepsFlow({
 
         {step === 1 ? (
           <div className="flex flex-col gap-3">
+            <MascotPrompt className="mb-2">
+              Would you recommend this to a friend?
+            </MascotPrompt>
             {VERDICTS.map((v) => (
               <button
                 key={v.value}
@@ -1028,6 +1071,11 @@ function StepsFlow({
 
         {step === 4 ? (
           <div className="flex flex-col gap-5">
+            {/* The reference emphasises "not" here — this is the step that asks
+                the reviewer to be specific about who the product is wrong for. */}
+            <MascotPrompt>
+              Who should <strong className="font-bold underline">not</strong> buy this?
+            </MascotPrompt>
             <Field label="Who should skip this?">
               <input
                 value={draft.anti}
@@ -1107,6 +1155,7 @@ function StepsFlow({
           className="w-full sm:w-auto"
         >
           {busy ? "Submitting…" : isLast ? "Submit for review" : "Continue"}
+          {busy || isLast ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </Button>
         {blocker ? (
           <p role="status" className="text-[12px] text-[var(--text-secondary)]">
