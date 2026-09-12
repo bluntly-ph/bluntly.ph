@@ -6,11 +6,18 @@ import { useState } from "react";
 import {
   ArrowFatDown,
   ArrowFatUp,
+  ArrowsDownUp,
   ChatCircle,
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 
 import type { Comment } from "@/lib/comments";
+import {
+  DEFAULT_COMMENT_SORT,
+  sortComments,
+  type CommentSort,
+} from "@/components/review/comment-sort-model";
+import { SortCommentsSheet } from "@/components/review/SortCommentsSheet";
 import { markInteraction } from "@/lib/reading-telemetry-events";
 
 /** Local copies — lib/reviews is server-only, so it can't be imported here. */
@@ -65,15 +72,44 @@ export function CommentThread({
 }) {
   const [comments, setComments] = useState<Comment[]>(initial);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<CommentSort>(DEFAULT_COMMENT_SORT);
+  const [sortOpen, setSortOpen] = useState(false);
 
   const total = comments.reduce((n, c) => n + 1 + c.replies.length, 0);
+  // Derived, not stored: sorting state would have to be kept in step with every
+  // post, reply and vote that mutates `comments`. No useMemo — the React
+  // Compiler memoizes this itself, and a manual one it cannot preserve makes it
+  // bail out of optimizing the whole component.
+  const ordered = sortComments(comments, sort);
 
   return (
     <section className="mt-10 border-t border-[var(--border-subtle)] pt-8">
-      <h2 className="flex items-center gap-2 text-[16px] font-semibold text-[var(--text-primary)]">
-        <ChatCircle size={20} weight="fill" className="text-[var(--text-muted)]" />
-        {total === 0 ? "Comments" : `${compact(total)} ${total === 1 ? "comment" : "comments"}`}
-      </h2>
+      <div className="flex items-center gap-3">
+        <h2 className="flex flex-1 items-center gap-2 text-[16px] font-semibold text-[var(--text-primary)]">
+          <ChatCircle size={20} weight="fill" className="text-[var(--text-muted)]" />
+          {total === 0 ? "Comments" : `${compact(total)} ${total === 1 ? "comment" : "comments"}`}
+        </h2>
+        {total > 1 ? (
+          <button
+            type="button"
+            onClick={() => setSortOpen(true)}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+          >
+            <ArrowsDownUp size={16} weight="bold" />
+            Sort
+          </button>
+        ) : null}
+      </div>
+
+      <SortCommentsSheet
+        open={sortOpen}
+        value={sort}
+        onApply={(next) => {
+          setSort(next);
+          setSortOpen(false);
+        }}
+        onClose={() => setSortOpen(false)}
+      />
 
       <CommentComposer
         reviewId={reviewId}
@@ -94,7 +130,7 @@ export function CommentThread({
         </p>
       ) : (
         <ul className="mt-6 flex flex-col gap-6">
-          {comments.map((c) => (
+          {ordered.map((c) => (
             <li key={c.id}>
               <CommentRow
                 comment={c}
