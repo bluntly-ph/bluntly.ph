@@ -1,18 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="bluntly">
-  <!--
-    The bluntly mark: the wave-form "n" from the wordmark (public/bluntly-logo.png),
-    lifted out of the lockup and set in the brand ring. Drawn as a stroked path rather
-    than text so it stays crisp at 16px and needs no webfont; SVG app icons are served
-    with sizes="any".
-  -->
-  <circle cx="32" cy="32" r="28" fill="#ffffff" />
-  <circle cx="32" cy="32" r="28" fill="none" stroke="#ef5821" stroke-width="6" />
-  <path
-    d="M20 18 V32 c0 7 8 9 12 3 l4 -6.5 c3 -5 12 -3.5 12 3.5 V42"
-    fill="none"
-    stroke="#ef5821"
-    stroke-width="10"
-    stroke-linecap="butt"
-    stroke-linejoin="round"
-  />
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!--
+  The bluntly mark — the owner's authorized favicon (FAVICON1-SOLID.svg from the
+  canonical asset pack), used verbatim.
+
+  It replaces a hand-drawn approximation: the previous icon traced the wave-form
+  "n" as a stroked path set in a ring, which was a recreation of artwork that
+  exists as a real asset. Paths here are the owner's own.
+
+  Of the four supplied favicons, this is the one that survives a 16px tab.
+  GMAILSTYLE1/2 embed base64 rasters and weigh 1.5MB and 1.4MB — unusable at any
+  size. GRADIENT is 3x these bytes and its gradient is indistinguishable from
+  flat below about 32px.
+
+  Trade-off worth knowing: the mark is 1.64:1 inside a square artboard, so at
+  16px it sits smaller in the tab than the old ringed version did, which filled
+  the square. That is how the asset is drawn, and it is not edited here.
+-->
+<svg width="100%" height="100%" viewBox="0 0 14174 14174" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(-1,-0,0,-1,25541.655575,16310.941582)">
+        <path d="M15193.097,12860.431C14124.124,12834.989 13208.555,12185.311 12797.254,11262.262C12511.907,10621.882 12474.292,10126.702 12475.865,9725.383C12479.351,8836.281 12475.865,5587.613 12475.865,5587.613L14721.888,5587.613C14721.888,5587.613 14723.56,9021.548 14721.888,9823.83C14721.432,10042.183 14868.335,10290.737 15093.996,10386.91C15292.568,10471.539 15604.516,10417.247 15757.885,10265.356C16566.674,9464.362 19700.627,6360.306 20291.763,5956.386C20680.116,5691.026 21075.617,5587.373 21714.58,5587.373C22785.945,5587.373 23703.328,6261.832 24114.96,7186.557C24407.812,7844.447 24432.82,8174.291 24433.583,8641.483C24435.113,9577.891 24433.583,12861.206 24433.583,12861.206L22187.561,12861.206C22187.561,12861.206 22187.561,9323.312 22187.561,8510.762C22187.561,8322.725 22079.69,8070.883 21786.484,7991.702C21553.615,7928.814 21316.52,8016.271 21151.564,8181.228C20338.64,8994.151 17200.844,12093.188 16610.1,12497.328C16224.954,12760.814 15691.025,12872.282 15193.097,12860.431Z" style="fill:rgb(239,88,33);"/>
+    </g>
 </svg>
