@@ -1360,3 +1360,170 @@ that replaced eight hand-rolled CTA class strings across five pages.
     QA LOG NOT FOUND          the QA-007..012 CSV was not on disk or in Drive.
 
 **Independent QA status: NOT YET RETESTED.**
+
+---
+
+## Retest pack — QA-001 to QA-012, for the independent tester
+
+Everything below is the **engineering** position. The tester's own findings,
+wording, severities and status are untouched and live in their log.
+
+**Independent QA status: NOT YET RETESTED.** Nothing here is a QA pass.
+
+### What to test against
+
+    Validated application SHA   dbb886308a4d18535b973113588726a096f5f5a9
+    Authoritative CI run        34624504223 — all four jobs green, including
+                                the Backend (isolated PostgreSQL) gate
+    Where                       https://www.bluntly.ph (production)
+
+Later commits on `main` are **documentation only** and change no application
+behaviour. The accepted behaviour is the `dbb8863` code.
+
+Two fix commits carry these twelve findings, and both are inside that SHA:
+
+    0dc4e661b1faf0f8c8a8647c6bdadb1ad2848642   QA-001 … QA-006
+    dbb886308a4d18535b973113588726a096f5f5a9   QA-007 … QA-012
+
+### Provenance caveat
+
+The QA-007..012 source file (`BLUNTLY_QA - QA Issues.csv`) could not be located
+on this machine or in the Drive account. Those six dispositions were written
+from the owner's summary, which carried each ID, severity and description. If
+the original steps / expected / actual differ, please read them against yours.
+
+---
+
+### The four worth testing first
+
+#### QA-002 — Pros and cons chips in the review composer
+
+*Disposition: FIXED — PRODUCTION VERIFIED — READY FOR QA RETEST*
+
+**What was wrong:** the step offered no approved phrases to pick from, so every
+reviewer had to compose pros and cons from scratch.
+
+**How to retest, as a reviewer:**
+
+1. Sign in and start a review: avatar menu → **Write a review**.
+2. Search for a product and choose it.
+3. Write a couple of sentences, pick a verdict, give it a star rating.
+4. You are now on **"The good, the bad"**.
+
+**What you should see:** six suggested Pros and five suggested Cons as tappable
+chips. Tapping one turns it orange and keeps it selected; you can have several
+selected at once in both columns. The "Add a pro…" / "Add a con…" field below
+still works, and a phrase you type becomes an identical orange chip you can tap
+off again — a typed phrase and a tapped phrase behave the same way. Adding the
+same phrase twice does not duplicate it. Going forward a step and back again
+keeps your selections. On a phone the Continue button runs the full width.
+
+#### QA-003 — two drafts, two products, both kept
+
+*Disposition: FIXED — PRODUCTION VERIFIED — READY FOR QA RETEST*
+
+**What was wrong:** all unfinished reviews shared one storage slot, so starting
+a review of a second product overwrote the first, and only one was ever offered
+back to you.
+
+**How to retest, as a reviewer:**
+
+1. Start a review of **product A**, write the experience step, and leave it.
+2. Go back to **Write a review** and start a review of a different **product B**.
+   Write its experience step.
+3. Reload the page.
+
+**What you should see:** **two** "Unfinished review of …" cards, one naming
+product A and one naming product B. Tap **Pick up** on A and it opens A's own
+content — and B's card is still there afterwards, on purpose, so you can switch
+between them. Editing A changes nothing in B. Nothing you do to one product's
+draft leaks into the other.
+
+#### QA-011 — an existing upvote total must not collapse to 1
+
+*Disposition: FIXED — PRODUCTION VERIFIED (code and data)*
+
+**What was wrong:** showcase reviews displayed hand-written totals (97, 88, 81)
+with no actual votes behind them. The counter derives the total from real votes,
+so the first genuine upvote replaced the invented number with the true one and
+"97" became "1". The counter was right; the number it started from was invented.
+
+**How to retest:** open any review and upvote it. The total should step up by
+one from whatever it already showed, and stepping your vote back should return
+it. A review nobody has voted on reads **0**, so 0 → 1 is what one vote means.
+
+**Production state after the repair:** no showcase review carries a total
+without real votes behind it; the highest showcase total is 2, and those are
+genuine votes cast during testing.
+
+#### QA-006 — "Buy it here" must reach a real listing
+
+*Disposition: FIXED — REAL AFFILIATE DATA ACTIVE — PRODUCTION VERIFIED*
+
+**How to retest:** open a showcase review and tap **Buy it here**. You should
+land on a real Shopee or Lazada product page. No URL should contain `show_` or
+`example.com`. (A `sub_id1=rev_show_…` parameter in the affiliate link is
+correct — that is the attribution tag identifying which review earned the click,
+not a placeholder.)
+
+---
+
+### The rest
+
+| QA ID | Engineering disposition | Root cause, in one line | How to retest | Expected |
+|---|---|---|---|---|
+| QA-001 | FIXED — PRODUCTION VERIFIED | Three separate causes in review ranking | Open the feed and a category listing | Reviews ordered sensibly, best-evidenced first |
+| QA-004 | **NOT A DEFECT** — behaviour preserved | The prototype compared against is stale; the live publication gate is correct | Submit a review and look for it publicly | It is held for moderation before it appears — this is intended |
+| QA-005 | FIXED — PRODUCTION VERIFIED | — | As in the original steps | As originally expected |
+| QA-007 | FIXED — PRODUCTION VERIFIED | Article styling repainted button labels the same orange as the button, so they read as blank | Open /about, /how-it-works, /faqs, /articles | Every orange button has a readable white label, without hovering |
+| QA-008 | FIXED — PRODUCTION VERIFIED | No suggestion mechanism existed at all | Type two or more characters in the search box | A list of matching products appears, and tapping one searches for it |
+| QA-009 | FIXED — PRODUCTION VERIFIED | Same — there were no options to style | Hover and arrow-key through that list | The row under the pointer or arrow key is clearly highlighted; Enter picks it |
+| QA-010 | FIXED — PRODUCTION VERIFIED | /search rendered results for an empty query, which read as suggestions | Focus the empty search box; clear a typed query | Nothing is suggested until two characters are typed; clearing drops the list at once |
+| QA-012 | FIXED — PRODUCTION VERIFIED | A link wrapped around a button — invalid, and buttons show no hand cursor | Hover "Ask a question" and "Post a request" | Both show the hand cursor and navigate |
+
+### Navigation change to check alongside
+
+The **mobile bottom navigation bar is gone**, and the **avatar (top right) is now
+the way into navigation** — it opens a panel with profile, dashboard, writing a
+review, requesting one, the bounty board, categories, and a dark-mode switch.
+Signed out, the same button opens the public destinations and a Log in action.
+
+On a phone, confirm there is no bar pinned to the bottom of the screen and no
+leftover gap where it used to be. **"Bookmarks" and "Recent reads" are
+deliberately absent** — those features have no pages yet, and pointing a menu
+item at a dead end would misrepresent what the product does.
+
+### Authenticated production acceptance — QA-002 and QA-003
+
+Run on the deployed `dbb8863` code with a real signed-in session (the account
+holder completed the OTP in a browser; no credential was read or stored by the
+tooling).
+
+    65 / 65 checks passed     desktop 1440 and mobile 393
+    no console errors · no 4xx/5xx from bluntly.ph
+    NOTHING WAS PUBLISHED — zero POSTs to reviews or products. Drafts are stored
+    in the browser, so every draft assertion was client-side only. The account's
+    pre-existing draft state was snapshotted and restored afterwards.
+
+Two observations, neither a regression in this release, both recorded rather than
+changed:
+
+- **A draft carried over from the old single-slot storage is offered once.** The
+  migration lists it so it can be picked up, and clears the old slot. If it is
+  not resumed during that visit it is not carried forward again. Current
+  per-product drafts are never corrupted by this — verified explicitly.
+- The draft ceiling (10) is applied when a draft is saved, not when the list is
+  read, so an artificially over-filled store can briefly offer more cards than
+  it will keep. Not reachable through normal use, since saving enforces the cap.
+
+### Figma
+
+**MATCHED TO OWNER-PROVIDED FIGMA REFERENCES.** Actual Figma source access
+remains blocked by the View-seat monthly quota, so **no 1:1 or source-verified
+fidelity claim is made** anywhere in this document. Unblocking needs a Dev or
+Full seat — an owner action on the Figma account.
+
+### Still needing a human
+
+    FIGMA_SOURCE_ACCESS_BLOCKED   View-seat monthly quota.
+    QA LOG NOT FOUND              the QA-007..012 CSV (see provenance, above).
