@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, ChatCircle, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
+import { QuestionResultRow } from "@/components/search/QuestionResultRow";
 import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
+import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
 import { ReviewListRow } from "@/components/review/ReviewListRow";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { CATEGORIES } from "@/lib/landing-data";
 import { getUser } from "@/lib/dal";
+import { getQuestions } from "@/lib/qa";
 import { searchReviews } from "@/lib/reviews";
 
 export const metadata: Metadata = {
@@ -18,9 +21,10 @@ export const metadata: Metadata = {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; from?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; from?: string; tab?: string }>;
 }) {
-  const { q = "", category, from } = await searchParams;
+  const { q = "", category, from, tab } = await searchParams;
+  const activeTab: SearchTab = tab === "questions" ? "questions" : "reviews";
   const activeCategory = CATEGORIES.find((c) => c.slug === category);
   const searching = Boolean(q.trim() || category);
   // Arrived by tapping a tile on /categories. That makes /categories the
@@ -30,9 +34,16 @@ export default async function SearchPage({
   const categoryQuery = fromCategories ? "&from=categories" : "";
 
   // Parallel: the viewer and the results are independent (see app/page.tsx).
-  const [me, results] = await Promise.all([
+  // Only the active tab's results are fetched — the other tab is a separate URL
+  // and will fetch its own when it is visited.
+  const [me, results, questions] = await Promise.all([
     getUser().catch(() => null),
-    searchReviews({ q, category, limit: 24 }),
+    activeTab === "reviews"
+      ? searchReviews({ q, category, limit: 24 })
+      : Promise.resolve(null),
+    activeTab === "questions"
+      ? getQuestions(undefined, { q, limit: 24 })
+      : Promise.resolve(null),
   ]);
   const user: HeaderUser = me
     ? { username: me.username, avatarUrl: me.avatar_url }
@@ -42,7 +53,9 @@ export default async function SearchPage({
     ? `Results for “${q}”`
     : activeCategory
       ? activeCategory.label
-      : "Trending reviews";
+      : activeTab === "questions"
+        ? "Recent questions"
+        : "Trending reviews";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
@@ -76,6 +89,8 @@ export default async function SearchPage({
           />
         </div>
 
+        <SearchTabs active={activeTab} q={q} category={category} from={from} />
+
         {/* Category chips.
             A horizontal scroller is right on a phone, where the row is wider
             than the screen and swiping is natural. On desktop it was the wrong
@@ -84,6 +99,9 @@ export default async function SearchPage({
             only a hidden scrollbar to reach them — fourteen categories, four of
             them unreachable without knowing to drag. There is room to wrap at
             `lg`, so it wraps. */}
+        {/* Categories narrow reviews. They have no meaning for questions, so
+            the row is not rendered on that tab rather than shown inert. */}
+        {activeTab === "reviews" ? (
         <div className="-mx-6 mt-5 overflow-x-auto px-6 [scrollbar-width:none] lg:mx-0 lg:overflow-x-visible lg:px-0">
           <ul className="flex w-max gap-2 lg:w-auto lg:flex-wrap lg:gap-y-2.5">
             <li>
@@ -106,12 +124,33 @@ export default async function SearchPage({
             ))}
           </ul>
         </div>
+        ) : null}
 
         <h1 className="mt-8 text-[20px] font-bold text-[var(--text-primary)]">
           {heading}
         </h1>
 
-        {results === null ? (
+        {activeTab === "questions" ? (
+          questions === null ? (
+            <Unavailable what="questions" />
+          ) : questions.length > 0 ? (
+            <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
+              {questions.map((question) => (
+                <QuestionResultRow key={question.id} question={question} />
+              ))}
+            </ul>
+          ) : (
+            <EmptyResults
+              icon={<ChatCircle size={40} className="text-[var(--text-muted)]" />}
+              title={searching ? "No questions found" : "Ask about a product"}
+              body={
+                searching
+                  ? "Try a different product name or wording."
+                  : "Search for a product to see what buyers are asking about it."
+              }
+            />
+          )
+        ) : results === null ? (
           <Unavailable what="reviews" />
         ) : results.length > 0 ? (
           // A list, not a grid — see ReviewListRow. Each row's title is an h2,
@@ -122,17 +161,15 @@ export default async function SearchPage({
             ))}
           </ul>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-            <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
-            <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
-              {searching ? "No reviews found" : "Find the product you bought"}
-            </p>
-            <p className="mt-1 max-w-[22rem] text-[14px] text-[var(--text-secondary)]">
-              {searching
+          <EmptyResults
+            icon={<MagnifyingGlass size={40} className="text-[var(--text-muted)]" />}
+            title={searching ? "No reviews found" : "Find the product you bought"}
+            body={
+              searching
                 ? "Try a different product name, brand, or category."
-                : "No need for the exact model. Just type what you know."}
-            </p>
-          </div>
+                : "No need for the exact model. Just type what you know."
+            }
+          />
         )}
       </main>
       <SiteFooter />
@@ -147,4 +184,26 @@ function chip(active: boolean): string {
       ? "bg-[var(--accent-primary)] text-white"
       : "bg-[var(--surface-card)] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)] hover:text-[var(--text-primary)]",
   ].join(" ");
+}
+
+/**
+ * The shared empty state for both tabs — one component so "no reviews" and "no
+ * questions" cannot drift apart in spacing or voice.
+ */
+function EmptyResults({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+      {icon}
+      <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">{title}</p>
+      <p className="mt-1 max-w-[22rem] text-[14px] text-[var(--text-secondary)]">{body}</p>
+    </div>
+  );
 }

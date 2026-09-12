@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ForbiddenError, NotFoundError
@@ -88,11 +88,29 @@ def create_question(db: Session, asker_id: uuid.UUID, payload: QuestionCreate) -
 
 
 def list_questions(
-    db: Session, *, product_id: uuid.UUID | None = None, limit: int = 30,
+    db: Session, *, product_id: uuid.UUID | None = None, q: str | None = None,
+    limit: int = 30,
 ) -> list[QuestionOut]:
     stmt = select(Question).where(Question.is_removed.is_(False))
     if product_id is not None:
         stmt = stmt.where(Question.product_id == product_id)
+    # Free-text search, for the Questions tab on /search.
+    #
+    # Both the wording and the product are matched: someone searching "jisulife"
+    # means the product at least as often as the phrasing of a question, and the
+    # design surfaces the product name as the card's headline. Matching only the
+    # body would return nothing for the most common kind of query.
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle}%"
+        stmt = stmt.where(
+            or_(
+                Question.body.ilike(like),
+                Question.product_id.in_(
+                    select(Product.id).where(Product.canonical_name.ilike(like)),
+                ),
+            ),
+        )
     questions = list(db.scalars(stmt.order_by(Question.created_at.desc()).limit(limit)))
     if not questions:
         return []

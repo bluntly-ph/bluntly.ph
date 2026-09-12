@@ -32,8 +32,16 @@ def ask_question(payload: QuestionCreate, db: Session = Depends(get_db),
 @router.get("", response_model=list[QuestionOut], summary="List questions")
 def list_questions(db: Session = Depends(get_db),
                    product_id: uuid.UUID | None = None,
+                   q: str | None = Query(None, max_length=200),
                    limit: int = Query(30, ge=1, le=100)) -> list[QuestionOut]:
-    return qa_service.list_questions(db, product_id=product_id, limit=min(limit, 100))
+    """List questions, optionally filtered by product or by free text.
+
+    `q` matches the question wording or the product's name, which is what the
+    Questions tab on /search needs.
+    """
+    return qa_service.list_questions(
+        db, product_id=product_id, q=q, limit=min(limit, 100),
+    )
 
 
 @router.get("/{question_id}", response_model=QuestionDetailOut,

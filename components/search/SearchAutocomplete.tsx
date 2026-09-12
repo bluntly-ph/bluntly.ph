@@ -58,7 +58,14 @@ export function SearchAutocomplete({
     items: [],
   });
   const [highlight, setHighlight] = useState<{ q: string; i: number }>({ q: "", i: -1 });
-  const [dismissed, setDismissed] = useState(false);
+  // Start dismissed when the field arrives pre-filled from `?q=`.
+  //
+  // Otherwise /search?q=jisulife mounts with an eligible query, fetches, and
+  // drops a suggestion list over the results the reader just asked for —
+  // covering the tabs and the first rows before they have touched anything.
+  // Suggestions are for a query being typed; a query that came from the URL has
+  // already been submitted. Typing, or ArrowDown, opens the list as usual.
+  const [dismissed, setDismissed] = useState(defaultValue.trim().length > 0);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const trimmed = query.trim();

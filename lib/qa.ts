@@ -37,10 +37,21 @@ export type Question = {
 export type QuestionDetail = Question & { answers: Answer[] };
 
 /** Open community questions. Public — no token needed. */
-export async function getQuestions(productId?: string): Promise<Question[] | null> {
+export async function getQuestions(
+  productId?: string,
+  options: { q?: string; limit?: number } = {},
+): Promise<Question[] | null> {
   try {
-    const qs = productId ? `?product_id=${productId}&limit=30` : "?limit=30";
-    return await apiFetch<Question[]>(`/api/v1/questions${qs}`, { revalidate: 60 });
+    const params = new URLSearchParams({ limit: String(options.limit ?? 30) });
+    if (productId) params.set("product_id", productId);
+    // Free text, for the Questions tab on /search. The API matches the question
+    // wording and the product name; a blank string is not a query, so it is
+    // omitted rather than sent as an empty filter.
+    const needle = options.q?.trim();
+    if (needle) params.set("q", needle);
+    return await apiFetch<Question[]>(`/api/v1/questions?${params}`, {
+      revalidate: 60,
+    });
   } catch {
     // See lib/requests.ts: null distinguishes "unreachable" from "none".
     return null;
