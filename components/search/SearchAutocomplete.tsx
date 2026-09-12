@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 
+import { comboKeyAction } from "./search-combobox-model";
+
 /**
  * The search field, with product suggestions.
  *
@@ -112,31 +114,36 @@ export function SearchAutocomplete({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Escape") {
-      setDismissed(true);
-      return;
-    }
-    if (!open) {
-      // Escape dismisses without clearing the query; ArrowDown is the standard
-      // way back in, so it must not be swallowed by the closed guard.
-      if (e.key === "ArrowDown" && items.length === 0 && eligible) setDismissed(false);
-      else if (e.key === "ArrowDown" && dismissed) {
-        e.preventDefault();
+    // The decision lives in `comboKeyAction` so it can be tested without a DOM.
+    // In particular `preventDefault` on Escape is load-bearing: `type="search"`
+    // clears itself otherwise, which wiped the query the dismissal was meant to
+    // keep. See that module for why.
+    const action = comboKeyAction(e.key, {
+      open,
+      dismissed,
+      eligible,
+      itemCount: items.length,
+      active,
+    });
+    if (action.preventDefault) e.preventDefault();
+    switch (action.type) {
+      case "dismiss":
+        setDismissed(true);
+        break;
+      case "reopen":
         setDismissed(false);
-      }
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActive(active < 0 ? 0 : (active + 1) % items.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive(active <= 0 ? items.length - 1 : active - 1);
-    } else if (e.key === "Enter" && active >= 0) {
-      // Only intercept when a suggestion is highlighted; otherwise the form
-      // submits and searches exactly what was typed.
-      e.preventDefault();
-      choose(items[active]);
+        // Highlight the first option as the list comes back, per the ARIA
+        // combobox pattern — otherwise the list is visible with nothing current.
+        if (action.to !== null) setActive(action.to);
+        break;
+      case "move":
+        setActive(action.to);
+        break;
+      case "choose":
+        choose(items[action.index]);
+        break;
+      default:
+        break;
     }
   }
 

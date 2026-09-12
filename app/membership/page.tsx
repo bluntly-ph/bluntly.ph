@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { CheckCircle, Coins, Lightning } from "@phosphor-icons/react/dist/ssr";
 
 import { CtaLink } from "@/components/ui/CtaLink";
