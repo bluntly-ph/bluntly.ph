@@ -65,6 +65,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A button that can be pressed shows the hand. QA-012 twice: the primitive in
+   components/ui/Button carries `cursor-pointer`, but a hand-rolled <button>
+   renders with `cursor: default` and reads as inert — twelve of them did,
+   including the landing hero's own search submit.
+
+   In @layer base on purpose. Tailwind's utilities sit in a later layer, so any
+   button that genuinely wants something else — the full-screen scrims behind
+   the sheets, which are dismiss targets rather than controls, and the disabled
+   Rate a Seller — keeps its `cursor-default` / `cursor-not-allowed` without
+   needing to out-specify this. `:not(:disabled)` leaves disabled controls to
+   `disabled:cursor-not-allowed`. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 /* Links ease their colour on hover/focus so navigation feels alive. */
 a {
   transition: color var(--duration-fast) var(--ease-standard);
