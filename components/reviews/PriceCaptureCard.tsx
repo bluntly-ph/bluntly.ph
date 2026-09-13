@@ -93,7 +93,7 @@ export function PriceCaptureCard({
           well-informed purchase decision.
         </p>
 
-        <MascotPrompt variant="simple" className="mt-5">
+        <MascotPrompt variant="simple" markInset={29} className="mt-5">
           Help users know more about the price!
         </MascotPrompt>
 

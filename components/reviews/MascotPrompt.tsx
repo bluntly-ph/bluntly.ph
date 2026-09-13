@@ -33,11 +33,18 @@ export type MascotVariant = "simple" | "detailed";
 export function MascotPrompt({
   children,
   variant = "simple",
+  markInset = 49,
   className = "",
 }: {
   children: React.ReactNode;
   /** Which treatment the corresponding reference frame draws. */
   variant?: MascotVariant;
+  /**
+   * How far the mark sits in from the content edge. 49 in the composer steps;
+   * "Let's talk money.png" is a narrower card and draws it at 29. The bubble
+   * is always 43px further in than the mark, in both.
+   */
+  markInset?: number;
   className?: string;
 }) {
   return (
@@ -51,8 +58,13 @@ export function MascotPrompt({
             duck    x65..127, y385..444 — the mark's own 63x60, unscaled
 
           so the bubble is inset 92px from the content edge and the duck 49px,
-          and the duck's head overlaps the tail rather than sitting beside it. */}
-      <div className="ml-[92px] max-w-[216px]">
+          and the duck's head overlaps the tail rather than sitting beside it.
+
+          "Let's talk money.png" draws the same arrangement in a narrower card
+          — duck x53..115 (the same 63x60), bubble x97..310 (214 wide) — so the
+          insets are 29 and 72 there. The gap between them is 43 either way,
+          which is why only the mark's inset is a prop. */}
+      <div className="max-w-[216px]" style={{ marginLeft: markInset + 43 }}>
         <div className="relative rounded-[var(--radius-md)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
           <p className="text-[15px] leading-[22px] text-[var(--text-primary)]">
             {children}
@@ -64,7 +76,7 @@ export function MascotPrompt({
         </div>
       </div>
 
-      <div className="ml-[49px] mt-4">
+      <div className="mt-4" style={{ marginLeft: markInset }}>
         {variant === "simple" ? (
           // 63x60 native; the reference draws it unscaled.
           <SimpleBunbunMark />
