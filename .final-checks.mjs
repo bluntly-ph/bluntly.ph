@@ -13,7 +13,10 @@ await p.goto(`${BASE}/moderate/review-queue`, { waitUntil: "domcontentloaded" })
 await p.waitForTimeout(2500);
 
 const snapshot = () => p.evaluate(() => ({
-  text: document.body.innerText.replace(/\s+/g, " ").slice(0, 400),
+  // 4000, not 400: the first 400 characters are the sidebar, the header and
+  // the tab labels, which are identical on every tab. A tab that swapped the
+  // whole table underneath them still looked unchanged.
+  text: document.body.innerText.replace(/\s+/g, " ").slice(0, 4000),
   rows: document.querySelectorAll("tbody tr").length,
   active: [...document.querySelectorAll('[aria-current="page"]')].map(e => e.textContent.trim().slice(0,12)).join(","),
 }));
@@ -21,15 +24,25 @@ const snapshot = () => p.evaluate(() => ({
 const reviews = await snapshot();
 ok("Reviews tab shows the table", reviews.rows > 0, `${reviews.rows} rows`);
 
-for (const [label, expect] of [["Answers", /not wired into this console/i], ["Report", /reported|nothing has been reported/i], ["Support", /no support-ticket system/i]]) {
-  await p.getByRole("button", { name: new RegExp("^" + label) }).click();
+// Answers used to be a placeholder reading "not wired into this console". It
+// is a real tab now (QaAnswersTab, frame 6532:278), so the honest-state check
+// is that it renders the Q&A surface rather than that it admits to being
+// unbuilt. Report and Support are still honest placeholders.
+for (const [label, expect] of [
+  ["Answers", /request by:|no questions/i],
+  ["Report", /reported|nothing has been reported/i],
+  ["Support", /no support-ticket system/i],
+]) {
+  // The queue tabs are links, not buttons: they carry a `tab=` href and
+  // change the URL, which is what makes a tab shareable and back-able.
+  await p.getByRole("link", { name: new RegExp("^" + label) }).click();
   await p.waitForTimeout(800);
   const s = await snapshot();
   ok(`${label} tab changes the view`, s.text !== reviews.text, `rows ${reviews.rows}→${s.rows}`);
   ok(`${label} tab shows an honest state`, expect.test(await p.evaluate(() => document.body.innerText)));
   ok(`${label} tab marks itself active`, s.active.includes(label));
 }
-await p.getByRole("button", { name: /^Reviews/ }).click();
+await p.getByRole("link", { name: /^Reviews/ }).click();
 await p.waitForTimeout(700);
 ok("returning to Reviews restores the table", (await snapshot()).rows > 0);
 
@@ -73,10 +86,12 @@ ok("drawer trigger is not covered by the site tab bar", covered?.onTop, covered?
 await trigger.click();
 await p.waitForTimeout(700);
 ok("drawer opens", await p.locator("aside nav").count() > 0);
-const navCount = await p.locator("aside nav a").count();
+// `:visible` matters: the desktop sidebar is the same markup and stays in the
+// DOM at 393, so an unscoped `aside nav a` matches both it and the drawer.
+const navCount = await p.locator("aside nav a:visible").count();
 ok("all admin routes reachable from the drawer", navCount >= 8, `${navCount} links`);
 
-await p.locator('aside nav a[href="/moderate/analytics"]').click();
+await p.locator('aside nav a[href="/moderate/analytics"]:visible').first().click();
 await p.waitForTimeout(2500);
 ok("selecting a route navigates", new URL(p.url()).pathname === "/moderate/analytics", p.url().replace(BASE, ""));
 ok("drawer closes after selection", await p.locator('button[aria-label="Close admin navigation"]').count() === 0);
