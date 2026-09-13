@@ -740,14 +740,14 @@ function ProductPhotoCard({
  * back over the page colour it reproduces the frame's clouds exactly.
  *
  * Frame coordinates, so MOBILE ONLY, like ProductStepDecor: the artwork spans
- * y247..702 and x15..387 of a 390-wide frame, which is 205px below the header
- * rule. There is no desktop frame for this step to place it against.
+ * y247..757 of a 390-wide frame — down to the row above the Continue pill,
+ * which starts at y759 — putting its top 205px below the header rule. There is no desktop frame for this step to place it against.
  */
 function RatingStepDecor() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[456px] select-none bg-[length:390px_456px] bg-top bg-no-repeat max-sm:block"
+      className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[511px] select-none bg-[length:390px_511px] bg-top bg-no-repeat max-sm:block"
       style={{
         // The artwork starts 205px below the header rule in the frame. Measured
         // on the deployed page, the layer landed 92px lower than that; the
