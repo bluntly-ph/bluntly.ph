@@ -57,7 +57,7 @@ const VERDICTS: {
 }[] = [
   {
     value: "yes_absolutely",
-    label: "Yes, absolutely",
+    label: "Yes, absolutely!",
     hint: "You'd tell a friend to buy it.",
     ring: "var(--accent-success)",
     Icon: Check,
@@ -77,6 +77,13 @@ const VERDICTS: {
     Icon: X,
   },
 ];
+
+/**
+ * The rating row is drawn as an arc: same-size stars whose vertical offset dips
+ * away from the middle. Measured from "Reviewer Page - Step 3.1.png", where the
+ * five 45x44 stars sit at y 373, 362, 357, 362, 373.
+ */
+const STAR_ARC = [16, 5, 0, 5, 16] as const;
 
 /** Enforced in the API too (MAX_DISCUSSION_CHARS) — BUG-022. */
 const MAX_DISCUSSION = 5000;
@@ -943,24 +950,14 @@ function StepsFlow({
         <CaretLeft size={16} /> {step === 0 ? "Change product" : STEPS[step - 1]}
       </button>
 
-      <div className="mt-4 flex items-center gap-3">
-        <span className="text-[12px] font-medium text-[var(--text-muted)]">
-          Step {step + 1} out of {STEPS.length}
-        </span>
-        <div
-          className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--base-gray-200)]"
-          role="progressbar"
-          aria-valuenow={step + 1}
-          aria-valuemin={1}
-          aria-valuemax={STEPS.length}
-          aria-label="Review progress"
-        >
-          <div
-            className="h-full rounded-full bg-[var(--accent-primary)] transition-[width]"
-            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-          />
-        </div>
-      </div>
+      {/* No progress bar: the reference draws the step count as plain text and
+          nothing else. Measured across steps 2, 3.1, 5 and 7 — zero wide orange
+          horizontal runs anywhere in the header band. The count itself still
+          tells a screen reader where they are, so nothing is lost by removing a
+          decoration the design does not have. */}
+      <p className="mt-4 text-[12px] font-medium text-[var(--text-muted)]">
+        Step {step + 1} out of {STEPS.length}
+      </p>
 
       <h1
         // Orange on every step: the reference draws each heading in the accent,
@@ -1030,11 +1027,14 @@ function StepsFlow({
                 type="button"
                 onClick={() => patch({ verdict: v.value })}
                 aria-pressed={draft.verdict === v.value}
-                className="flex items-start gap-3 rounded-[var(--radius-sm)] p-4 text-left transition-shadow"
+                // As drawn: a white card with a soft drop shadow and no outline
+                // at rest; the chosen one takes the verdict's own colour as a
+                // ring, which is how step 2.2 shows the selection.
+                className="flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-4 py-4 text-left shadow-[var(--shadow-card)] transition-shadow"
                 style={
                   draft.verdict === v.value
                     ? { boxShadow: `inset 0 0 0 2px ${v.ring}` }
-                    : { boxShadow: "inset 0 0 0 1px var(--line-hairline-30)" }
+                    : undefined
                 }
               >
                 {/* The reference marks each choice with its own glyph, always in
@@ -1042,36 +1042,35 @@ function StepsFlow({
                     what makes the three readable at a glance. Decorative: the
                     label already names the verdict. */}
                 <v.Icon
-                  size={20}
-                  weight="bold"
+                  size={22}
                   aria-hidden="true"
-                  className="mt-0.5 shrink-0"
+                  className="shrink-0"
                   style={{ color: v.ring }}
                 />
-                <span className="min-w-0">
-                  <span
-                    className="block text-[15px] font-semibold"
-                    style={{
-                      color:
-                        draft.verdict === v.value ? v.ring : "var(--text-primary)",
-                    }}
-                  >
-                    {v.label}
-                  </span>
-                  {/* Kept, though the frame shows the label alone: it is the line
-                      that stops "It depends" being guessed at, and dropping
-                      guidance to match a still frame is a poor trade. */}
-                  <span className="mt-0.5 block text-[13px] text-[var(--text-secondary)]">
-                    {v.hint}
-                  </span>
+                {/* One line, as drawn. The hint that used to sit under each label
+                    is gone: the reference shows the label alone, and the design
+                    is the visual contract rather than an engineering preference.
+                    `v.hint` still describes the option to assistive tech, so the
+                    guidance is kept where it costs nothing visually. */}
+                <span
+                  className="text-[16px] font-medium"
+                  style={{
+                    color: draft.verdict === v.value ? v.ring : "var(--text-primary)",
+                  }}
+                >
+                  {v.label}
                 </span>
+                <span className="sr-only">{v.hint}</span>
               </button>
             ))}
           </div>
         ) : null}
 
         {step === 2 ? (
-          <div className="flex items-center gap-2">
+          // An arc, not a flat row. Measured from the reference: five stars of
+          // the SAME size, 45x44, at a 60px pitch, with the middle one highest
+          // and the outer pair dropped 16px — 16, 5, 0, 5, 16.
+          <div className="flex items-start justify-center gap-[15px]">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
@@ -1079,10 +1078,12 @@ function StepsFlow({
                 onClick={() => patch({ rating: n })}
                 aria-label={`${n} star${n > 1 ? "s" : ""}`}
                 aria-pressed={draft.rating === n}
+                className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+                style={{ marginTop: STAR_ARC[n - 1] }}
               >
                 <Star
-                  size={40}
-                  weight={n <= draft.rating ? "fill" : "regular"}
+                  size={45}
+                  weight={n <= draft.rating ? "fill" : "fill"}
                   className={
                     n <= draft.rating
                       ? "text-[var(--accent-star)]"
