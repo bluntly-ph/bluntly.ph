@@ -30,7 +30,7 @@ export function Hero({ featured }: { featured: FeaturedData }) {
         }}
       />
 
-      <div className="relative mx-auto grid w-full max-w-[72rem] gap-12 px-6 py-14 md:grid-cols-2 md:items-center md:gap-8 md:px-8 lg:min-h-[86vh] lg:gap-16 lg:px-10 lg:py-20">
+      <div className="relative mx-auto grid w-full max-w-[72rem] gap-12 px-4 py-14 sm:px-6 md:grid-cols-2 md:items-center md:gap-8 md:px-8 lg:min-h-[86vh] lg:gap-16 lg:px-10 lg:py-20">
         <div className="animate-fade-up">
           {/* 32px SemiBold with the period in brand orange, per the Page 1
               frame. It was 34px bold — a heavier, larger voice than drawn.

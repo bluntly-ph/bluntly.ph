@@ -13,7 +13,7 @@ import { CATEGORIES, type ReviewCardData } from "@/lib/landing-data";
 export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
   return (
     <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
-      <div className="mx-auto w-full max-w-[72rem] px-6 py-16 lg:px-10 lg:py-24">
+      <div className="mx-auto w-full max-w-[72rem] px-4 py-16 sm:px-6 lg:px-10 lg:py-24">
         {/* Blue here is --accent-trust, the existing token behind the trust
             shield and verified badge (BUG-006) — not a new colour. Reusing it
             keeps "this is navigation you can rely on" reading as the same blue
@@ -39,7 +39,7 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
         </h2>
 
         {/* Category tabs — horizontal scroll on any width. */}
-        <div className="-mx-6 mt-6 overflow-x-auto px-6 [scrollbar-width:none] lg:mx-0 lg:px-0">
+        <div className="-mx-4 mt-6 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
           <ul className="flex w-max gap-6">
             {CATEGORIES.map((c, i) => {
               const Icon = c.icon;
@@ -69,7 +69,7 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
         </div>
 
         {/* Cards: scroll-snap strip on mobile, grid from md up. */}
-        <div className="-mx-6 mt-8 flex snap-x gap-4 overflow-x-auto px-6 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-5">
+        <div className="-mx-4 mt-8 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:-mx-6 sm:px-6 md:mx-0 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-5">
           {reviews.map((r) => (
             <ReviewCard
               key={r.id}

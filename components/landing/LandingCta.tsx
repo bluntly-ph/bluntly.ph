@@ -12,7 +12,7 @@ import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 export function LandingCta() {
   return (
     <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
-      <div className="mx-auto flex w-full max-w-[72rem] items-center px-6 py-16 lg:min-h-[60vh] lg:px-10 lg:py-24">
+      <div className="mx-auto flex w-full max-w-[72rem] items-center px-4 py-16 sm:px-6 lg:min-h-[60vh] lg:px-10 lg:py-24">
         <div className="relative w-full overflow-hidden rounded-[var(--radius-md)] bg-[var(--accent-primary)] px-6 py-10 text-white lg:px-14 lg:py-16">
           {/* Decorative soft circles, echoing the frame. */}
           <div
