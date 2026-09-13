@@ -43,6 +43,26 @@ def test_exported_spec_is_in_sync_with_the_app():
         "docs/openapi.json is stale — re-run `python -m scripts.export_openapi`")
 
 
+def test_exported_spec_matches_the_app_field_for_field():
+    """The path-set check above cannot see a route whose *contents* changed.
+
+    That is not hypothetical. The moderator review queue gained band, lane and
+    sla filters and a new summary across several commits, none re-exported,
+    and docs/openapi.json kept the old parameters for a week while the check
+    above passed — it only compares path names. `npm run gen:api` builds the
+    frontend's types from this file, so a stale parameter list is a wrong
+    generated client, not a cosmetic difference.
+
+    Round-tripped through JSON so the comparison is between the same plain
+    types the export writes.
+    """
+    exported = json.loads(SPEC.read_text(encoding="utf-8"))
+    live = json.loads(json.dumps(_live_spec()))
+    assert exported == live, (
+        "docs/openapi.json does not match the app — re-run "
+        "`python -m scripts.export_openapi`, then `npm run gen:api`")
+
+
 def test_generated_types_exist_and_cover_m3():
     assert TYPES.exists(), "lib/api-types.d.ts missing — run `npm run gen:api`"
     text = TYPES.read_text(encoding="utf-8", errors="replace")

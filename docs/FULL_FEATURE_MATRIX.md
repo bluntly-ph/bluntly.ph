@@ -94,25 +94,27 @@ last fully CI-green application SHA.
 Built as M2 slice 4, then **withdrawn from contract on 2026-07-28** (migration
 0024 dropped `users.seller_aggregates` / `seller_trust_score`; see
 `docs/DEVIATIONS.md` §37–38 and the note in `models/user.py`). The owner's
-completion contract §5–§6 **reinstates it**. Git history holds the original
-implementation and should be the starting point rather than a fresh design.
+completion contract §5–§6 **reinstates it**. Schema and API have landed
+(`ef34e72`, `cb0ed79`, `94d4fd3`), with one deliberate change of shape: sellers
+are their own rows rather than users, so unclaimed stores can exist. Frontend,
+moderator console screen and deployment are still to come.
 
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| 4.1 | Seller entity / profile | MISSING | MISSING | MISSING | MISSING | MISSING | — | `seller` exists only as a role enum, a report category and a postback string |
-| 4.2 | Seller registration | MISSING | MISSING | MISSING | MISSING | MISSING | — | — |
-| 4.3 | Claimed / unclaimed profiles + claim workflow | MISSING | MISSING | MISSING | MISSING | MISSING | — | contract §6 requires moderator-approved claim requests |
-| 4.4 | Seller review — accuracy (binary) | MISSING | MISSING | MISSING | MISSING | MISSING | — | dropped with slice 4 |
-| 4.5 | Seller review — order completeness (binary) | MISSING | MISSING | MISSING | MISSING | MISSING | — | dropped with slice 4 |
-| 4.6 | Seller review — service responsiveness (1–5) | MISSING | MISSING | MISSING | MISSING | MISSING | — | dropped with slice 4 |
-| 4.7 | Seller review — packaging quality (1–5) | MISSING | MISSING | MISSING | MISSING | MISSING | — | dropped with slice 4 |
-| 4.8 | Seller review — overall rating + would-recommend | MISSING | MISSING | MISSING | MISSING | MISSING | — | dropped with slice 4 |
-| 4.9 | One seller review per (seller, reviewer) | MISSING | — | — | MISSING | MISSING | — | `uq_seller_review_once` existed pre-0024 |
+| 4.1 | Seller entity / profile | COMPLETE | MISSING | — | PARTIAL | MISSING | — | `models/seller.py`, migration 0042, `GET /sellers/{id}`. Sellers are their own rows, so an unclaimed store exists before anyone signs up. DB tests run in CI; no page yet; not deployed |
+| 4.2 | Seller registration | PARTIAL | MISSING | — | PARTIAL | MISSING | — | `POST /sellers` adds a store (find-or-create, deduplicated by normalised name). A seller *account* is reached through an approved claim, not a separate signup |
+| 4.3 | Claimed / unclaimed profiles + claim workflow | COMPLETE | MISSING | PARTIAL | PARTIAL | MISSING | — | `POST /sellers/{id}/claims`; `/admin/seller-claims` queue and decision. Pending until a moderator decides; self-decision refused (422). Moderator API exists, no console screen yet |
+| 4.4 | Seller review — accuracy (binary) | COMPLETE | MISSING | — | COMPLETE | MISSING | **Verified-buyer link not representable** | `SellerReviewCreate`, `test_seller_rules`. FR-4 says seller reviews are "linked to verified transactions"; nothing links a seller to a purchase yet, so any signed-in account can rate a store |
+| 4.5 | Seller review — order completeness (binary) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | `SellerReviewCreate`, `test_seller_rules` |
+| 4.6 | Seller review — service responsiveness (1–5) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | CHECK constraint in 0042 and Field(ge=1, le=5) |
+| 4.7 | Seller review — packaging quality (1–5) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | CHECK constraint in 0042 and Field(ge=1, le=5) |
+| 4.8 | Seller review — overall rating + would-recommend | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | `SellerReviewCreate`, `test_seller_rules` |
+| 4.9 | One seller review per (seller, reviewer) | COMPLETE | — | — | PARTIAL | MISSING | — | `uq_seller_review_once` plus a service check (409 `seller_review_exists`); the constraint wins the race. DB test runs in CI |
 | 4.10 | Seller dashboard (aggregates, trends, volume, Q&A) | MISSING | MISSING | MISSING | MISSING | MISSING | — | — |
 | 4.11 | Seller responds to seller-directed Q&A | MISSING | MISSING | MISSING | MISSING | MISSING | — | — |
-| 4.12 | Public seller rating summary | MISSING | MISSING | — | MISSING | MISSING | — | — |
+| 4.12 | Public seller rating summary | COMPLETE | MISSING | — | COMPLETE | MISSING | — | `summarize_reviews` on `GET /sellers/{id}` — null figures for an unrated store, not zeroes |
 | 4.13 | Action Menu "Rate a Seller" state | N/A | PARTIAL | — | COMPLETE | N/A | Deliberately disabled until 4.4–4.8 ship | `action-menu-model.ts`, tested as visible-and-disabled |
-| 4.14 | Seller verification by store-name cross-check | MISSING | MISSING | MISSING | MISSING | MISSING | — | PRD limits verification to this; nothing implemented |
+| 4.14 | Seller verification by store-name cross-check | MISSING | — | PARTIAL | — | MISSING | — | The moderator decision is the check FR-4 describes; nothing yet shows the claimant's proof beside the public listing |
 
 ## FR-5 Community Q&A
 
@@ -291,7 +293,8 @@ re-checked by reading the relevant service, not by counting matches.
 
 - **Rows: 96. Unclassified: 0.**
 - Largest genuine gaps, in contract priority order: seller reviews and seller
-  accounts (FR-4 — schema landed in `ef34e72`, service/API/UI still to come),
+  accounts (FR-4 — schema and API landed; frontend, console screen and deployment
+  still to come, and no verified-buyer link yet),
   notifications and messaging (1.6, 1.7), price-history frontend (2.5),
   duplicate detection (2.8), disclosure (X.1), plagiarism and reverse-image
   layers (8.2, 8.3), 3D/360 (X.3).
