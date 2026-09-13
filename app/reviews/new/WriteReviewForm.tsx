@@ -27,6 +27,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
+import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { prepareImageForUpload, usablePhoto } from "@/lib/image";
@@ -856,6 +857,9 @@ function StepsFlow({
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // "Let's talk money" — the reference asks for the price on the way to
+  // submitting rather than as a field on the title step.
+  const [askingPrice, setAskingPrice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const step = Math.min(draft.step, STEPS.length - 1);
 
@@ -917,8 +921,10 @@ function StepsFlow({
       if (!res.ok) {
         const p = (await res.json().catch(() => ({}))) as { detail?: string };
         setError(p.detail ?? "Something went wrong submitting your review.");
+        // The card stays open so the error is read where the action was taken.
         return;
       }
+      setAskingPrice(false);
       onDone();
     } catch {
       setError("Couldn't reach the server. Try again.");
@@ -1167,17 +1173,6 @@ function StepsFlow({
               />
               <Counter value={draft.title.length} max={MAX_TITLE} />
             </Field>
-            <Field label="What did you pay? (optional, ₱)">
-              <input
-                value={draft.price}
-                onChange={(e) =>
-                  patch({ price: e.target.value.replace(/[^0-9.]/g, "") })
-                }
-                inputMode="decimal"
-                className={`${inputCls} max-w-[12rem]`}
-                placeholder="899"
-              />
-            </Field>
           </div>
         ) : null}
       </div>
@@ -1191,10 +1186,20 @@ function StepsFlow({
         </p>
       ) : null}
 
+      <PriceCaptureCard
+        open={askingPrice}
+        price={draft.price}
+        busy={busy}
+        error={error}
+        onPriceChange={(price) => patch({ price })}
+        onSubmit={submit}
+        onCancel={() => setAskingPrice(false)}
+      />
+
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <Button
           type="button"
-          onClick={isLast ? submit : () => patch({ step: step + 1 })}
+          onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
           disabled={Boolean(blocker) || busy}
           className="w-full sm:w-auto"
         >
