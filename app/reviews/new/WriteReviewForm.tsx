@@ -308,6 +308,10 @@ function useHydrated(): boolean {
  * rather than smuggled into a copy change.
  */
 const STEP_COPY: Record<number, { title: string; blurb: string }> = {
+  0: {
+    title: "Tell us your experience",
+    blurb: "Your unfiltered words. Make it count.",
+  },
   1: {
     title: "Your verdict",
     blurb: "Your unfiltered words. Make it count.",
@@ -429,6 +433,7 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
                 draft={draft}
                 patch={patch}
                 user={user}
+                onChangeProduct={() => setPhase("product")}
                 onDone={() => {
                   clearDraft(draftSlot(product));
                   setPhase("done");
@@ -751,64 +756,115 @@ function CrowdBand() {
   );
 }
 
-/**
- * Step 5's "who should not buy this" field.
- *
- * Measured from "Reviewer Page - Step 5.png" / "5.1.png" at 390:
- *
- *   card      x16..373 (358 wide), y477..707 — 231 tall, white, 12px radius,
- *             20px padding, no visible border
- *   text      15px grotesque on a 21px line ("I wouldn't recommend this
- *             people who sweat" measures 319px across)
- *   counter   right-aligned at the card's right edge, 11px
- *
- * The counter is the interesting part, because it is the step's gate written
- * down: the empty frame reads "30 characters remaining" in grey and the
- * filled one reads "I'm sure someone will appreciate this" in orange, with
- * Continue disabled in the first and enabled in the second. So the 30 is a
- * floor, not a limit, and it is what gates the step.
- *
- * This replaces two single-line inputs — "Who should skip this?" and "Who is
- * it right for? (optional)". No frame in the pack draws the second one. The
- * draft still carries `target` so nothing downstream changes shape; it simply
- * has no input on this screen any more.
- */
 const ANTI_MIN = 30;
 
-function AntiPersonaField({
+/**
+ * The frame's big write-it-here card, shared by step 1 and step 5.
+ *
+ * They are the same control in the pack — "Reviewer Page - Step 1.1.png" and
+ * "Step 5.png" both draw a 358x231 white card at 12px radius with 20px of
+ * padding, the placeholder "Write it *bluntly* here..." with the one word in
+ * italics, 15px text on a 21px line, and a right-aligned counter under it.
+ *
+ * The counter is the step's gate written down. Empty, both read "30
+ * characters remaining" in grey; satisfied, step 1 reads "Solid review!" and
+ * step 5 "I'm sure someone will appreciate this", both in orange, and both
+ * frames turn Continue from grey to orange at the same moment. So 30 is a
+ * floor, not a limit.
+ *
+ * The card grows with the text: step 1.2's is well past 231px, while step
+ * 5.1's four lines leave it at the minimum. `field-sizing: content` does that
+ * without measuring scrollHeight in an effect, and where it is unsupported
+ * the card stays at its minimum and scrolls.
+ *
+ * The italic word rules out the placeholder attribute, which is plain text
+ * only, so it is drawn as an overlay — and the real label stays, hidden.
+ */
+function BluntlyTextarea({
+  label,
   value,
   onChange,
+  satisfied,
+  autoFocus = false,
+  className = "",
 }: {
+  label: string;
   value: string;
   onChange: (next: string) => void;
+  satisfied: string;
+  autoFocus?: boolean;
+  className?: string;
 }) {
   const id = useId();
   const remaining = Math.max(0, ANTI_MIN - value.trim().length);
 
   return (
-    <div className="mt-8">
+    <div className={className}>
       <label className="sr-only" htmlFor={id}>
-        Who should not buy this?
+        {label}
       </label>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`h-[231px] w-full resize-none rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
-        placeholder="Write it bluntly here..."
-      />
+      <div className="relative">
+        <textarea
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus={autoFocus}
+          className={`field-sizing-content block min-h-[231px] w-full resize-none rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+        />
+        {value.length === 0 ? (
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-5 top-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-muted)]`}
+          >
+            Write it <em>bluntly</em> here...
+          </span>
+        ) : null}
+      </div>
       <p
         aria-live="polite"
         className={`mt-2 text-right ${CHIP_FACE} text-[11px] ${
-          remaining > 0
-            ? "text-[var(--base-gray-400)]"
-            : "text-[var(--accent-primary)]"
+          remaining > 0 ? "text-[var(--base-gray-400)]" : "text-[var(--accent-primary)]"
         }`}
       >
-        {remaining > 0
-          ? `${remaining} characters remaining`
-          : "I'm sure someone will appreciate this"}
+        {remaining > 0 ? `${remaining} characters remaining` : satisfied}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Step 1's product card: "Currently reviewing", the name, and a way out.
+ *
+ * Measured from "Reviewer Page - Step 1.1.png": card x16..373 y216..293,
+ * white, 12px radius; the label 13px at rgb(55,113,200) — accent-trust to the
+ * unit — the name 18px ink-800, and "Change" 16px in grey against the right
+ * edge. This is the one place the pack names the product mid-flow, which is
+ * why no other step draws it.
+ */
+function CurrentlyReviewingCard({
+  name,
+  onChange,
+}: {
+  name: string | null;
+  onChange: () => void;
+}) {
+  return (
+    <div className="flex items-end gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]">
+      <div className="min-w-0 flex-1">
+        <p className={`${CHIP_FACE} text-[13px] text-[var(--accent-trust)]`}>
+          Currently reviewing
+        </p>
+        <p className={`mt-1 truncate ${CHIP_FACE} text-[18px] text-[var(--text-primary)]`}>
+          {name ?? "your product"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onChange}
+        className={`shrink-0 cursor-pointer ${CHIP_FACE} text-[16px] text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text-primary)] hover:underline`}
+      >
+        Change
+      </button>
     </div>
   );
 }
@@ -1207,6 +1263,7 @@ function StepsFlow({
   draft,
   patch,
   user,
+  onChangeProduct,
   onDone,
 }: {
   product: Product;
@@ -1214,6 +1271,8 @@ function StepsFlow({
   patch: (c: Partial<Draft>) => void;
   /** Step 7's preview draws the reviewer's own name and avatar. */
   user: PanelUser;
+  /** Step 1's card offers "Change" beside the product name. */
+  onChangeProduct: () => void;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -1233,7 +1292,7 @@ function StepsFlow({
   const blocker = ((): string | null => {
     switch (step) {
       case 0:
-        return draft.discussion.trim().length < 40
+        return draft.discussion.trim().length < ANTI_MIN
           ? "Write at least a couple of sentences about your experience."
           : null;
       case 1:
@@ -1334,19 +1393,22 @@ function StepsFlow({
 
       <div className="mt-6">
         {step === 0 ? (
-          <Field label="Tell us what actually happened">
-            <textarea
-              value={draft.discussion}
-              onChange={(e) =>
-                patch({ discussion: e.target.value.slice(0, MAX_DISCUSSION) })
-              }
-              rows={9}
-              autoFocus
-              placeholder="How long have you used it? What surprised you? What would you tell a friend who was about to buy one?"
-              className={`${inputCls} resize-y py-3`}
+          <>
+            <CurrentlyReviewingCard
+              name={product.canonical_name}
+              onChange={onChangeProduct}
             />
-            <Counter value={draft.discussion.length} max={MAX_DISCUSSION} />
-          </Field>
+            <BluntlyTextarea
+              label="Tell us your experience"
+              value={draft.discussion}
+              onChange={(discussion) =>
+                patch({ discussion: discussion.slice(0, MAX_DISCUSSION) })
+              }
+              satisfied="Solid review!"
+              autoFocus
+              className="mt-4"
+            />
+          </>
         ) : null}
 
         {step === 1 ? (
@@ -1478,9 +1540,12 @@ function StepsFlow({
             {/* One textarea, not two single-line fields. The frame draws a
                 single 358x231 card at y477 with 20px padding, and no "who is
                 it right for" field at all — see AntiPersonaField. */}
-            <AntiPersonaField
+            <BluntlyTextarea
+              label="Who should not buy this?"
               value={draft.anti}
               onChange={(anti) => patch({ anti })}
+              satisfied="I'm sure someone will appreciate this"
+              className="mt-8"
             />
           </div>
         ) : null}
@@ -1560,19 +1625,6 @@ function StepsFlow({
 
 /* ------------------------------------------------------------------ shared */
 
-function Counter({ value, max }: { value: number; max: number }) {
-  const near = value > max * 0.9;
-  return (
-    <span
-      className={`self-end text-[11px] ${
-        near ? "text-[var(--accent-danger)]" : "text-[var(--text-muted)]"
-      }`}
-    >
-      {value.toLocaleString("en-PH")} / {max.toLocaleString("en-PH")}
-    </span>
-  );
-}
-
 function DoneStep() {
   return (
     <div className="flex flex-col items-center py-16 text-center">
@@ -1598,12 +1650,3 @@ function DoneStep() {
 
 const inputCls =
   "w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-2.5 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium text-[var(--text-primary)]">{label}</span>
-      {children}
-    </label>
-  );
-}
