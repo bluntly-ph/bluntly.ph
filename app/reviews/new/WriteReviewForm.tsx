@@ -741,7 +741,7 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
         What did you buy?
       </h1>
       <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
-        Find the product. No need for the exact model — just type what you know.
+        Find the product. Your review will matter.
       </p>
 
       <div className="relative mt-6">
@@ -778,6 +778,25 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
           </li>
         ))}
       </ul>
+
+      {/* The reference fills the space under the field with an empty state:
+          a magnifier, "Find the product you bought", and the two-line hint.
+          The composer never had it, which is why the page — and desktop in
+          particular, where the column is only 672px of a much wider viewport —
+          read as an empty grey void below the search box. */}
+      {!searching ? (
+        <div className="flex flex-col items-center py-16 text-center">
+          <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
+          <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
+            Find the product you bought
+          </p>
+          <p className="mt-1 max-w-[22rem] text-[14px] text-[var(--text-secondary)]">
+            No need for the exact model.
+            <br />
+            Just type what you know
+          </p>
+        </div>
+      ) : null}
 
       {searching && !busy ? (
         <div className="mt-4 rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] p-4">
