@@ -37,6 +37,7 @@ import {
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
+import { ReceiptField } from "@/components/reviews/ReceiptField";
 import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
@@ -625,20 +626,24 @@ function TitleField({
  * to it ("A photo of the actual product verifies your review and is required
  * for earning eligibility"), and step 7 draws that same photo on the public
  * review card — so it is the product photo, and the receipt field is not in
- * this flow. ReceiptField and the receipt_key plumbing are left intact and
- * unmounted rather than deleted, because the backend's earn_eligible gate
- * reads receipt_key and nothing else: following the frame here removes a
- * capability, and that is the owner's call to confirm, not one to make
- * quietly by deleting the code.
+ * this flow. Both are collected. The photo is public and decides
+ * *verified* status; the receipt is private, moderator-only, and the only
+ * input to the earn_eligible gate, which reads `receipt_key` and nothing
+ * else. An earlier pass here mounted only the photo, to match the frame, and
+ * left every submission posting receipt_key: null.
  */
 function ProductPhotoCard({
   url,
   onChange,
   onSkip,
+  receiptKey,
+  onReceiptChange,
 }: {
   url: string | null;
   onChange: (url: string | null) => void;
   onSkip: () => void;
+  receiptKey: string | null;
+  onReceiptChange: (key: string | null) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -719,6 +724,21 @@ function ProductPhotoCard({
       >
         Skip &ndash; I&apos;ll add a photo later
       </button>
+
+      {/* INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY.
+          The frame draws one upload. The product needs two, and they are not
+          interchangeable: the photo above is public and decides *verified*
+          status, while this one is proof of purchase — private, moderator-only,
+          and the sole input to the earn_eligible gate, which reads
+          `receipt_key` and nothing else. Treating the public product image as
+          the receipt would be faking verification.
+
+          So the step keeps the frame's card as the primary target and adds the
+          receipt beneath it in the same visual language, clearly labelled,
+          rather than dropping a required capability to reproduce a still. */}
+      <div className="mt-8 border-t border-[var(--line-hairline-10)] pt-6">
+        <ReceiptField value={receiptKey} onChange={onReceiptChange} />
+      </div>
 
       {error ? (
         <p role="alert" className="mt-3 text-center text-[13px] text-[var(--accent-danger)]">
@@ -860,6 +880,47 @@ function BluntlyTextarea({
       >
         {counterLabel(value, satisfied)}
       </p>
+    </div>
+  );
+}
+
+/**
+ * "Who is it right for?" — the other half of FR-3's audience pair.
+ *
+ * Not in the reference frame, and required anyway: FR-3 specifies the
+ * structured format as "all required" and names target-audience in it, and
+ * `reviews.target_audience` has been a column since the schema was written.
+ * Removing the input to match the still left the column receiving null on
+ * every submission.
+ *
+ * Drawn in the frame's own language — the same white card, radius, padding and
+ * grotesque as the field above — at the single-line height the pack uses for
+ * short answers elsewhere, so it reads as part of the step rather than as
+ * something bolted on.
+ */
+function TargetAudienceField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="mt-6">
+      <label
+        htmlFor={id}
+        className={`block ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}
+      >
+        And who is it right for?
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Commuters who want something light"
+        className={`mt-2 h-[53px] w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-5 ${CHIP_FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+      />
     </div>
   );
 }
@@ -1569,15 +1630,25 @@ function StepsFlow({
               buy this?
             </MascotPrompt>
 
-            {/* One textarea, not two single-line fields. The frame draws a
-                single 358x231 card at y477 with 20px padding, and no "who is
-                it right for" field at all — see AntiPersonaField. */}
             <BluntlyTextarea
               label="Who should not buy this?"
               value={draft.anti}
               onChange={(anti) => patch({ anti })}
               satisfied="I'm sure someone will appreciate this"
               className="mt-8"
+            />
+
+            {/* INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY.
+                The frame draws one card here. FR-3 lists the structured format
+                as "all required" and names target-audience among them, and
+                `reviews.target_audience` is a real column, so the field stays
+                and is drawn in the same language as the one above it rather
+                than dropped to reproduce the still. Without it the composer
+                posts target_audience: null on every review — which is what it
+                did after the field was removed to match the frame. */}
+            <TargetAudienceField
+              value={draft.target}
+              onChange={(target) => patch({ target })}
             />
           </div>
         ) : null}
@@ -1587,6 +1658,8 @@ function StepsFlow({
             url={draft.photoUrl}
             onChange={(url) => patch({ photoUrl: url })}
             onSkip={() => patch({ step: step + 1 })}
+            receiptKey={draft.receiptKey}
+            onReceiptChange={(receiptKey) => patch({ receiptKey })}
           />
         ) : null}
 
