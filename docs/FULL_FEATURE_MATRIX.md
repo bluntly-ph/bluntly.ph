@@ -252,6 +252,24 @@ tests should pin both so the difference stays intentional.
 
 ---
 
+## QA-001 .. QA-012, re-run 2026-09-13
+
+Re-run from scratch against production by `.qa-matrix.mjs`, not carried over
+from `docs/RELEASE_HANDOFF.md`. **All twelve pass.** This is my own harness,
+not an independent sign-off.
+
+The first run had six failures. One was a product defect and five were the
+harness measuring the wrong thing:
+
+| Case | First run | Diagnosis |
+|---|---|---|
+| QA-012 | non-pointer control | **PRODUCT DEFECT** — the landing hero's search submit rendered `cursor: default`. Twelve hand-rolled buttons did. Fixed in `a295509` as one base-layer rule |
+| QA-001 | "0/2 cards mention fan" | harness — the hit *is* relevant ("Jisulife Life9" is a handheld fan) and one of the two "results" was the Write-a-review CTA |
+| QA-003 | no drafts listed | harness — `readDrafts()` parses `Record<slot, Draft>`; the harness wrote an array |
+| QA-009 | no activedescendant | harness — `/search` has two visible comboboxes; it filled one and inspected the other |
+| QA-011 | "saw 4k" | harness — the 4k is prose, *"a sub-P4k board"*, not a vote total |
+| QA-012 | nested button | already fixed in `ceb4cb9` — five more sites carried the pattern QA-012 named |
+
 ## Corrections applied after first publication
 
 Row-by-row verification found the first pass had **understated FR-5**. It was
