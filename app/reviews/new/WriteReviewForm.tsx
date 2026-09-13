@@ -30,6 +30,7 @@ import { ComposerHeader } from "@/components/reviews/ComposerHeader";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
+import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
 import { prepareImageForUpload, usablePhoto } from "@/lib/image";
@@ -427,6 +428,7 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
                 product={product}
                 draft={draft}
                 patch={patch}
+                user={user}
                 onDone={() => {
                   clearDraft(draftSlot(product));
                   setPhase("done");
@@ -1204,11 +1206,14 @@ function StepsFlow({
   product,
   draft,
   patch,
+  user,
   onDone,
 }: {
   product: Product;
   draft: Draft;
   patch: (c: Partial<Draft>) => void;
+  /** Step 7's preview draws the reviewer's own name and avatar. */
+  user: PanelUser;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -1488,7 +1493,18 @@ function StepsFlow({
           />
         ) : null}
 
-        {step === 6 ? <TitleField value={draft.title} onChange={(title) => patch({ title })} /> : null}
+        {step === 6 ? (
+          <>
+            <TitleField value={draft.title} onChange={(title) => patch({ title })} />
+            <ReviewPreviewCard
+              username={user?.username ?? null}
+              avatarUrl={user?.avatarUrl ?? null}
+              productName={product.canonical_name}
+              title={draft.title}
+              photoUrl={draft.photoUrl}
+            />
+          </>
+        ) : null}
       </div>
 
       {error ? (
