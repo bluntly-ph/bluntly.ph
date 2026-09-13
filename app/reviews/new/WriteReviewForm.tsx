@@ -1174,16 +1174,15 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
         Find the product. Your review will matter.
       </p>
 
-      <div className="relative mt-6">
-        <MagnifyingGlass
-          size={20}
-          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-        />
+      {/* x16..373 and 56 tall at y174, the page colour inside a hairline pill
+          — not a raised white card, and with no magnifier in it. The glyph was
+          this field's only decoration and the frame does not draw one. */}
+      <div className="mt-[19px]">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. Jisulife Fan Life9"
-          className="h-12 w-full rounded-[var(--radius-pill)] bg-[var(--surface-card)] pl-11 pr-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]"
+          placeholder="e.g Jisulife Fanlife 9"
+          className={`h-[56px] w-full rounded-[var(--radius-pill)] bg-[var(--surface-app)] px-5 ${CHIP_FACE} text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]`}
         />
       </div>
 
@@ -1215,7 +1214,7 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
           particular, where the column is only 672px of a much wider viewport —
           read as an empty grey void below the search box. */}
       {!searching ? (
-        <div className="flex flex-col items-center py-16 text-center">
+        <div className="flex flex-col items-center pb-16 pt-[98px] text-center">
           <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
           <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
             Find the product you bought
