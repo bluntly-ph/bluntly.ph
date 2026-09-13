@@ -15,7 +15,6 @@ import {
 import {
   ArrowRight,
   Check,
-  CheckCircle,
   Equals,
   Image as ImageIcon,
   MagnifyingGlass,
@@ -1732,21 +1731,35 @@ function StepsFlow({
 
 function DoneStep() {
   return (
-    <div className="flex flex-col items-center py-16 text-center">
-      <CheckCircle size={56} weight="fill" className="text-[var(--accent-success)]" />
-      <h1 className="mt-5 text-[24px] font-bold text-[var(--text-primary)]">
-        Your review is in!
+    <div className="pt-6">
+      {/* The frame's headline is "Your review is now live!". It is not: every
+          review is held for moderation before it publishes, which is what the
+          submit flow does and what the gate exists for. So the layout is the
+          frame's and the wording is true — "submitted", with the check that
+          follows stated plainly. The CTA goes to the reviewer's own history,
+          where the pending review actually is, rather than pointing the public
+          at something nobody else can see yet. */}
+      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>All done!</p>
+      <h1 className="mt-[6px] text-[24px] font-semibold leading-[25px] text-[var(--accent-primary)]">
+        Your review has been submitted!
       </h1>
-      <p className="mt-2 max-w-[26rem] text-[14px] text-[var(--text-secondary)]">
-        A moderator will check it shortly. Once approved, it goes live — and if it
-        earns an affiliate link, you start earning from it.
+      <p className={`mt-[10px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
+        A moderator checks every review before it goes public. You&rsquo;ll hear
+        from us once it&rsquo;s been through.
       </p>
-      <div className="mt-8 flex gap-3">
-        <Link href="/" className="contents">
-          <Button variant="secondary" size="sm">Back home</Button>
+
+      <div className="mt-10 flex flex-col items-center gap-3">
+        <Link href="/dashboard/history" className="contents">
+          <Button type="button" fullWidth>
+            See my submissions
+            <ArrowRight size={18} weight="bold" aria-hidden="true" />
+          </Button>
         </Link>
-        <Link href="/reviews/new" className="contents">
-          <Button size="sm">Write another</Button>
+        <Link
+          href="/reviews/new"
+          className={`${CHIP_FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}
+        >
+          Write another
         </Link>
       </div>
     </div>
