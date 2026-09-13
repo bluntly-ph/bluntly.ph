@@ -71,51 +71,71 @@ const check = async (name, fn) => {
 const rowCount = () => p.evaluate(() => document.querySelectorAll("tbody tr").length);
 const firstId = () => p.evaluate(() => document.querySelector("tbody tr td")?.textContent?.trim() ?? "");
 
+// The queue tabs are links carrying a `tab=` href, not buttons, and Answers
+// is a built surface now (QaAnswersTab) rather than a placeholder admitting
+// it is unwired.
 await check("tab: Answers", async () => {
-  await p.getByRole("button", { name: /^Answers/ }).click();
-  await p.waitForTimeout(600);
-  return /not wired into this console/i.test(await p.evaluate(() => document.body.innerText));
+  await p.getByRole("link", { name: /^Answers/ }).click();
+  await p.waitForTimeout(900);
+  return /request by:|no questions/i.test(await p.evaluate(() => document.body.innerText));
 });
 await check("tab: Report", async () => {
-  await p.getByRole("button", { name: /^Report/ }).click();
+  await p.getByRole("link", { name: /^Report/ }).click();
   await p.waitForTimeout(600);
   return /reported|nothing has been reported/i.test(await p.evaluate(() => document.body.innerText));
 });
 await check("tab: Reviews (back)", async () => {
-  await p.getByRole("button", { name: /^Reviews/ }).click();
+  await p.getByRole("link", { name: /^Reviews/ }).click();
   await p.waitForTimeout(600);
   return (await rowCount()) > 0;
 });
-await check("sort toggle", async () => {
-  const before = await firstId();
-  await p.getByRole("button", { name: /Newest first|Oldest first/ }).click();
-  await p.waitForTimeout(600);
-  return (await firstId()) !== before;
-});
+// No sort toggle any more, deliberately: the server orders the whole backlog
+// by policy and then cuts the page, so a High-priority review submitted after
+// the first fifty lands on page one instead of hiding behind a client-side
+// sort. What is worth auditing is that the order is the policy order, which
+// the backend suite covers; there is no control here to exercise.
 await check("priority filter", async () => {
+  // Two traps here, both of which made a working control read as dead. The
+  // values are lowercase — "high", not "High" — and every review currently in
+  // the queue is High, so filtering to that band legitimately returns the
+  // same rows. What the control owes is that the choice reaches the URL and
+  // that some band narrows the set; asserting "the count changed" against
+  // whatever data happens to be queued is not a test of the control.
   const before = await rowCount();
-  await p.selectOption("select", "High");
-  await p.waitForTimeout(600);
-  const after = await rowCount();
-  await p.selectOption("select", "");
-  await p.waitForTimeout(400);
-  return after !== before;
+  const counts = {};
+  for (const band of ["high", "normal", "low"]) {
+    await p.locator("select").first().selectOption(band);
+    await p.waitForTimeout(2200);
+    if (!new URL(p.url()).search.includes(`band=${band}`)) return false;
+    counts[band] = await rowCount();
+  }
+  await p.locator("select").first().selectOption("");
+  await p.waitForTimeout(1800);
+  return Object.values(counts).some((c) => c !== before);
 });
+
 await check("search", async () => {
   const before = await rowCount();
+  // A real form: it submits on Enter and puts `q=` in the URL, which is what
+  // makes a filtered queue shareable. Typing alone filters nothing by design.
   await p.getByRole("searchbox").fill("zzz-no-match-zzz");
-  await p.waitForTimeout(700);
+  await p.getByRole("searchbox").press("Enter");
+  await p.waitForTimeout(2500);
   const after = await rowCount();
   await p.getByRole("searchbox").fill("");
-  await p.waitForTimeout(500);
+  await p.getByRole("searchbox").press("Enter");
+  await p.waitForTimeout(1800);
   return after !== before;
 });
 await check("page size", async () => {
-  const sels = await p.locator("select").count();
-  if (sels < 2) return false;
-  await p.locator("select").nth(1).selectOption("25");
-  await p.waitForTimeout(600);
-  return true;
+  // `nth(1)` was the SLA filter, whose options are not page sizes, so the
+  // select timed out looking for "25". The page size is the last select.
+  const sels = p.locator("select");
+  if ((await sels.count()) < 2) return false;
+  const before = await rowCount();
+  await sels.last().selectOption("10");
+  await p.waitForTimeout(2500);
+  return (await rowCount()) !== before;
 });
 await check("row selects into detail panel", async () => {
   const rows = p.locator("tbody tr");
