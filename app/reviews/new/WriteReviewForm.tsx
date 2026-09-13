@@ -385,14 +385,14 @@ export function WriteReviewForm() {
 
   if (phase === "done") {
     return (
-      <div className="mx-auto w-full max-w-[42rem] px-6 py-8 lg:py-10">
+      <div className="mx-auto w-full max-w-[42rem] px-4 py-8 lg:py-10">
         <DoneStep />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[42rem] px-6 py-8 lg:py-10">
+    <div className="mx-auto w-full max-w-[42rem] px-4 py-8 lg:py-10">
       <ResumeList drafts={resumable} onResume={resume} onDiscard={discard} />
 
       {phase === "product" ? (
@@ -1133,7 +1133,7 @@ function StepsFlow({
                 onChange={(e) => patch({ anti: e.target.value })}
                 autoFocus
                 placeholder="Anyone who needs it to fit in a pocket"
-                className={inputCls}
+                className={singleLineInputCls}
               />
             </Field>
             <Field label="Who is it right for? (optional)">
@@ -1141,7 +1141,7 @@ function StepsFlow({
                 value={draft.target}
                 onChange={(e) => patch({ target: e.target.value })}
                 placeholder="Commuters who want something light"
-                className={inputCls}
+                className={singleLineInputCls}
               />
             </Field>
           </div>
@@ -1170,7 +1170,7 @@ function StepsFlow({
                 onChange={(e) => patch({ title: e.target.value.slice(0, MAX_TITLE) })}
                 autoFocus
                 placeholder="Worth the money, or just overhyped?"
-                className={inputCls}
+                className={singleLineInputCls}
               />
               <Counter value={draft.title.length} max={MAX_TITLE} />
             </Field>
@@ -1507,6 +1507,15 @@ function DoneStep() {
 
 const inputCls =
   "w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-2.5 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]";
+
+/**
+ * A single-line field, at the height the reference draws: 53px, measured off the
+ * title field in "Reviewer Page - Step 7.png" (x=16, 358x53).
+ *
+ * The height cannot live in `inputCls` itself — the step-1 experience textarea
+ * shares that class and must stay nine rows tall.
+ */
+const singleLineInputCls = `${inputCls} h-[53px]`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
