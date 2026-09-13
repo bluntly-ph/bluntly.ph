@@ -83,8 +83,17 @@ export function PriceCaptureCard({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="fixed left-1/2 top-1/2 z-50 w-[min(23rem,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] bg-[var(--surface-app)] p-6 shadow-[var(--shadow-sheet)]"
+        className="fixed left-1/2 top-1/2 isolate z-50 w-[min(23rem,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--radius-lg)] bg-[var(--surface-app)] p-6 shadow-[var(--shadow-sheet)]"
       >
+        {/* The piggy bank and coin stacks the frame scatters around the
+            mascot, at x28..336 y150..274 of its 366-wide card. Lifted from
+            "Let's talk money.png" rather than redrawn - the same treatment as
+            step 3's clouds - and hidden from assistive tech. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -z-10 h-[125px] w-[309px] select-none bg-contain bg-no-repeat"
+          style={{ left: 28, top: 150, backgroundImage: "url(/patterns/money-coins.png)" }}
+        />
         <h2 id={titleId} className="text-[20px] font-bold text-[var(--accent-primary)]">
           Let&rsquo;s talk money
         </h2>
@@ -120,19 +129,24 @@ export function PriceCaptureCard({
           </p>
         ) : null}
 
-        <Button
-          type="button"
-          onClick={onSubmit}
-          disabled={busy}
-          fullWidth
-          className="mt-6"
-          variant={hasPrice ? "primary" : "secondary"}
-        >
-          {busy ? "Submitting…" : hasPrice ? "Submit" : "Skip — continue to submission"}
-          {busy || !hasPrice ? null : (
-            <ArrowRight size={18} weight="bold" aria-hidden="true" />
-          )}
-        </Button>
+        {/* Two different controls in the pack, not one restyled. Empty, the
+            frame draws Skip as a second field - the same 310x52 white rounded
+            row as the price input above it, centred grey text, no border.
+            Filled, "Let's talk money-1.png" draws the orange pill. */}
+        {hasPrice || busy ? (
+          <Button type="button" onClick={onSubmit} disabled={busy} fullWidth className="mt-6">
+            {busy ? "Submitting…" : "Submit"}
+            {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+          </Button>
+        ) : (
+          <button
+            type="button"
+            onClick={onSubmit}
+            className="mt-6 h-[52px] w-full cursor-pointer rounded-[var(--radius-md)] bg-[var(--surface-card)] text-center font-[family-name:var(--font-system)] text-[15px] text-[var(--text-muted)] shadow-[var(--shadow-hairline-inset)] hover:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+          >
+            Skip &ndash; continue to submission
+          </button>
+        )}
       </div>
     </>,
     document.body,
