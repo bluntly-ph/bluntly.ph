@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -12,7 +14,6 @@ import {
 } from "react";
 import {
   ArrowRight,
-  CaretLeft,
   Check,
   CheckCircle,
   Equals,
@@ -26,11 +27,12 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
+import { ComposerHeader } from "@/components/reviews/ComposerHeader";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
+import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/TextField";
 import { prepareImageForUpload, usablePhoto } from "@/lib/image";
 
 type Product = {
@@ -340,10 +342,11 @@ const STEPS = [
   "Title",
 ] as const;
 
-export function WriteReviewForm() {
+export function WriteReviewForm({ user }: { user: PanelUser }) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [product, setProduct] = useState<Product | null>(null);
   const [phase, setPhase] = useState<"product" | "steps" | "done">("product");
+  const router = useRouter();
 
   const hydrated = useHydrated();
   // Captured once, at hydration: the autosave below rewrites the same key on
@@ -384,39 +387,52 @@ export function WriteReviewForm() {
     setHandled((slots) => [...slots, slot]);
   }
 
-  if (phase === "done") {
-    return (
-      <div className="mx-auto w-full max-w-[42rem] px-4 py-8 sm:px-6 lg:py-10">
-        <DoneStep />
-      </div>
-    );
-  }
+  // What the header's arrow means right here. Inside the step flow it walks
+  // back through the steps and then out to the product picker; on the first
+  // and last screens there is no earlier step, so it leaves the composer.
+  const step = Math.min(draft.step, STEPS.length - 1);
+  const back =
+    phase === "steps" && product
+      ? step > 0
+        ? { label: `Back to ${STEPS[step - 1]}`, run: () => patch({ step: step - 1 }) }
+        : { label: "Change product", run: () => setPhase("product") }
+      : { label: "Go back", run: () => router.back() };
 
   return (
-    <div className="mx-auto w-full max-w-[42rem] px-4 py-8 sm:px-6 lg:py-10">
-      <ResumeList drafts={resumable} onResume={resume} onDiscard={discard} />
+    <>
+      <ComposerHeader user={user} onBack={back.run} backLabel={back.label} />
 
-      {phase === "product" ? (
-        <ProductStep
-          onPick={(p) => {
-            setProduct(p);
-            patch({ step: 0 });
-            setPhase("steps");
-          }}
-        />
-      ) : product ? (
-        <StepsFlow
-          product={product}
-          draft={draft}
-          patch={patch}
-          onChangeProduct={() => setPhase("product")}
-          onDone={() => {
-            clearDraft(draftSlot(product));
-            setPhase("done");
-          }}
-        />
-      ) : null}
-    </div>
+      {/* pb clears the bottom-anchored Continue (56px pill + 32px inset). */}
+      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-4 pb-[120px] sm:px-6">
+        {phase === "done" ? (
+          <DoneStep />
+        ) : (
+          <>
+            <ResumeList drafts={resumable} onResume={resume} onDiscard={discard} />
+
+            {phase === "product" ? (
+              <ProductStep
+                onPick={(p) => {
+                  setProduct(p);
+                  patch({ step: 0 });
+                  setPhase("steps");
+                }}
+              />
+            ) : product ? (
+              <StepsFlow
+                product={product}
+                draft={draft}
+                patch={patch}
+                onDone={() => {
+                  clearDraft(draftSlot(product));
+                  setPhase("done");
+                }}
+              />
+            ) : null}
+          </>
+        )}
+      </main>
+    </>
   );
 }
 
@@ -521,14 +537,49 @@ const PRO_SUGGESTIONS = [
 const CON_SUGGESTIONS = [
   "Not worth it",
   "Too expensive",
-  // "Too heavy" and "Feels cheap" are in the reference's con list and were
-  // missing here, so two of the seven drawn chips could not be tapped.
-  "Too heavy",
+  // "Too Heavy" and "Feels cheap" are in the reference's con list and were
+  // missing here, so two of the seven drawn chips could not be tapped. The
+  // capital H is the frame's own.
+  "Too Heavy",
   "Feels cheap",
   "Flimsy",
   "Not as advertised",
   "Looks better in the photos",
 ];
+
+/**
+ * The chip shell, measured from "Reviewer Page - Step 4.png" at 390:
+ *
+ *   card        x16..373 (358 wide), fill #f2f2f2 — the page colour, told
+ *               apart from the page by its shadow alone — 12px radius, 20px pad
+ *   chip        52px tall, fill #f6f6f6, 12px radius, NO border, soft shadow
+ *   row pitch   64px  (so a 12px vertical gap), ~10px horizontal gap
+ *   plus        16px glyph at x54 — an 18px inset — then 10px to the label
+ *   label       x80, a grotesque at ~15px, not Poppins: "Worth it!" is 58px
+ *               wide with a 10px cap, where 13px Poppins renders it 67px wide
+ *               with a 9px cap
+ *
+ * The live chips were 37px tall, white, and outlined in a hard grey hairline.
+ */
+const CHIP_FACE = "font-[family-name:var(--font-system)]";
+const CHIP_SHELL =
+  `inline-flex h-[52px] items-center gap-[10px] rounded-[var(--radius-sm)] ` +
+  `bg-[rgb(246,246,246)] px-[18px] text-[15px] ` +
+  `shadow-[0_4px_4px_0_var(--shadow-color-10)] ${CHIP_FACE}`;
+
+/**
+ * The plus in front of a chip's label.
+ *
+ * Every state is the same glyph at half opacity over the chip fill, which is
+ * how the frame's exact values fall out: grey-400 at .5 over #f6f6f6 is the
+ * measured rgb(193,193,193), success-600 is rgb(138,210,151), and danger is
+ * rgb(231,123,142) — all three to the unit. Selection is carried by this
+ * colour and by the label turning brand orange; the frame adds no border, and
+ * the live chip's orange outline was not in it.
+ */
+function ChipPlus({ color }: { color: string }) {
+  return <Plus size={16} aria-hidden="true" className="shrink-0 opacity-50" style={{ color }} />;
+}
 
 /**
  * Chips plus free text, over the same newline-joined string the draft and the
@@ -552,6 +603,7 @@ function PhrasePicker({
   onChange: (next: string) => void;
 }) {
   const [custom, setCustom] = useState("");
+  const addId = useId();
   const chosen = lines(value);
   const has = (phrase: string) =>
     chosen.some((c) => c.toLowerCase() === phrase.toLowerCase());
@@ -582,11 +634,13 @@ function PhrasePicker({
     tone === "pro" ? "text-[var(--accent-trust)]" : "text-[var(--accent-danger)]";
 
   return (
-    <div className="rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-hairline-inset)]">
+    <div className="rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-5 shadow-[var(--shadow-card)]">
       <p className={`text-[13px] font-semibold ${accent}`}>{label}</p>
-      <p className="mt-0.5 text-[12px] text-[var(--text-secondary)]">{prompt}</p>
+      <p className={`mt-0.5 ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}>
+        {prompt}
+      </p>
 
-      <ul className="mt-3 flex flex-wrap gap-2">
+      <ul className="mt-3 flex flex-wrap gap-x-[10px] gap-y-3">
         {[...suggestions, ...extras].map((phrase) => {
           const on = has(phrase);
           return (
@@ -595,13 +649,19 @@ function PhrasePicker({
                 type="button"
                 onClick={() => toggle(phrase)}
                 aria-pressed={on}
-                className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-[13px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
-                  on
-                    ? "border-[var(--accent-primary)] bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] text-[var(--accent-primary)]"
-                    : "border-[var(--line-hairline-30)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]"
+                className={`${CHIP_SHELL} cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
+                  on ? "text-[var(--accent-primary)]" : "text-[var(--text-primary)]"
                 }`}
               >
-                <Plus size={14} weight="bold" aria-hidden="true" />
+                <ChipPlus
+                  color={
+                    on
+                      ? tone === "pro"
+                        ? "var(--accent-success)"
+                        : "var(--accent-danger)"
+                      : "var(--base-gray-400)"
+                  }
+                />
                 {phrase}
               </button>
             </li>
@@ -609,15 +669,17 @@ function PhrasePicker({
         })}
       </ul>
 
-      {/* The shared design-system input rather than a bespoke one: it carries
-          the 48px height, 12px radius and hairline the onboarding frames
-          specify, and renders a real <label> even where the frame shows only
-          placeholder text — a placeholder is not an accessible name and
-          disappears on focus. */}
-      <div className="mt-3">
-        <TextField
-          label={addLabel}
-          labelHidden
+      {/* The frame draws this as one more chip — same 52px shell, same grey
+          plus — that happens to accept typing, not as a bordered form input.
+          A placeholder is not an accessible name and disappears on focus, so
+          the real label is still there, just visually hidden. */}
+      <div className={`mt-3 ${CHIP_SHELL} w-full text-[var(--text-primary)]`}>
+        <ChipPlus color="var(--base-gray-400)" />
+        <label className="sr-only" htmlFor={addId}>
+          {addLabel}
+        </label>
+        <input
+          id={addId}
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           onKeyDown={(e) => {
@@ -630,6 +692,7 @@ function PhrasePicker({
           }}
           onBlur={addCustom}
           placeholder={addLabel}
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--text-muted)]"
         />
       </div>
     </div>
@@ -877,13 +940,11 @@ function StepsFlow({
   product,
   draft,
   patch,
-  onChangeProduct,
   onDone,
 }: {
   product: Product;
   draft: Draft;
   patch: (c: Partial<Draft>) => void;
-  onChangeProduct: () => void;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -965,53 +1026,38 @@ function StepsFlow({
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={step === 0 ? onChangeProduct : () => patch({ step: step - 1 })}
-        className="inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-      >
-        <CaretLeft size={16} /> {step === 0 ? "Change product" : STEPS[step - 1]}
-      </button>
+      {/* Back lives in the header now, as a bare arrow — the frames draw no
+          breadcrumb here. No progress bar either: measured across steps 2,
+          3.1, 5 and 7, there are zero wide orange horizontal runs anywhere in
+          the header band. The step count is the only progress the design shows.
 
-      {/* No progress bar: the reference draws the step count as plain text and
-          nothing else. Measured across steps 2, 3.1, 5 and 7 — zero wide orange
-          horizontal runs anywhere in the header band. The count itself still
-          tells a screen reader where they are, so nothing is lost by removing a
-          decoration the design does not have. */}
-      <p className="mt-4 text-[12px] font-medium text-[var(--text-muted)]">
+          Type measured from "Reviewer Page - Step 2.png" at 390:
+            step count  13px, ink-800 at full strength (darkest pixel 32, not
+                        the muted grey this drew at 158)
+            title       Poppins 20px / weight 500 — "Your verdict" is 120px
+                        wide with 2px stems, where 22px bold renders it 137px
+                        wide with 4px stems and twice the ink
+            blurb       13px, text-secondary (darkest pixel 95 = ink-800 @ .7)
+          The count and the blurb are set in the file's grotesque, not Poppins:
+          "Your unfiltered words. Make it count." is 212px wide in the frame
+          and 233px in 13px Poppins, and the letterforms in a 3x crop are a
+          different face entirely. The orange title stays Poppins. */}
+      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>
         Step {step + 1} out of {STEPS.length}
       </p>
 
       <h1
         // Orange on every step: the reference draws each heading in the accent,
         // not just the ones with their own line underneath.
-        className="mt-4 text-[22px] font-bold text-[var(--accent-primary)]"
+        className="mt-2 text-[length:var(--text-lg)] font-[number:var(--weight-medium)] text-[var(--accent-primary)]"
       >
         {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
       {STEP_COPY[step] ? (
-        <>
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-            {STEP_COPY[step].blurb}
-          </p>
-          {/* The frame drops the product name on this step. It is kept, one
-              size down, because losing track of what you are reviewing
-              mid-flow is a usability cost the design was not weighing. */}
-          <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
-            Reviewing{" "}
-            <span className="font-medium text-[var(--accent-primary)]">
-              {product.canonical_name ?? "your product"}
-            </span>
-          </p>
-        </>
-      ) : (
-        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-          Reviewing{" "}
-          <span className="font-medium text-[var(--accent-primary)]">
-            {product.canonical_name ?? "your product"}
-          </span>
+        <p className={`mt-2 ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}>
+          {STEP_COPY[step].blurb}
         </p>
-      )}
+      ) : null}
 
       <div className="mt-6">
         {step === 0 ? (
@@ -1123,7 +1169,7 @@ function StepsFlow({
             <PhrasePicker
               tone="pro"
               label="Pros"
-              prompt="What's great about this product?"
+              prompt="What's so great about this product?"
               suggestions={PRO_SUGGESTIONS}
               addLabel="Add a pro…"
               value={draft.pros}
@@ -1220,28 +1266,34 @@ function StepsFlow({
         onCancel={() => setAskingPrice(false)}
       />
 
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
-          disabled={Boolean(blocker) || busy}
-          className="w-full sm:w-auto"
-        >
-          {busy ? "Submitting…" : isLast ? "Submit for review" : "Continue"}
-          {busy || isLast ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
-        </Button>
-        {blocker ? (
-          <p role="status" className="text-[12px] text-[var(--text-secondary)]">
-            {blocker}
-          </p>
-        ) : isLast ? (
-          <p className="text-[12px] text-[var(--text-muted)]">
-            A moderator checks every review before it goes live.
-          </p>
-        ) : (
-          <p className="text-[12px] text-[var(--text-muted)]">Saved as you type.</p>
-        )}
+      {/* Anchored to the bottom of the viewport, not to the end of the step.
+          Measured identically in every frame that has one — steps 2, 4, 4.1,
+          5, 6, 7 and 7.1 — at x16..373 (w358) and y756..811 (h56) inside an
+          844-tall device. Step 4's frame is 1130 tall and still draws it at
+          y756, which is what makes it the viewport and not the content that
+          it is pinned to. The step content carries 120px of bottom padding so
+          the pill never traps anything underneath it.
+
+          The frames draw no helper text beside the button, so neither does
+          this — but a disabled control still has to say why, so the reason
+          moved into a live region instead of off the screen entirely. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
+        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
+          <Button
+            type="button"
+            onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
+            disabled={Boolean(blocker) || busy}
+            fullWidth
+            className="pointer-events-auto"
+          >
+            {busy ? "Submitting…" : "Continue"}
+            {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+          </Button>
+        </div>
       </div>
+      <p role="status" className="sr-only">
+        {blocker ?? "Saved as you type."}
+      </p>
     </div>
   );
 }
