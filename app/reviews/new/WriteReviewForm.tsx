@@ -1006,8 +1006,17 @@ function StepsFlow({
 
         {step === 1 ? (
           <div className="flex flex-col gap-3">
-            <MascotPrompt className="mb-2">
-              Would you recommend this to a friend?
+            {/* The references switch treatment here: step 2 and 2.1 draw the
+                flat silhouette while nothing is chosen, and step 2.2 — the frame
+                where a verdict HAS been picked and Bunbun asks why — draws the
+                full illustration. So the mascot reacts to the answer. */}
+            <MascotPrompt
+              className="mb-2"
+              variant={draft.verdict ? "detailed" : "simple"}
+            >
+              {draft.verdict
+                ? "Woah, mind telling us why?"
+                : "Would you recommend this to a friend?"}
             </MascotPrompt>
             {VERDICTS.map((v) => (
               <button
@@ -1106,7 +1115,9 @@ function StepsFlow({
           <div className="flex flex-col gap-5">
             {/* The reference emphasises "not" here — this is the step that asks
                 the reviewer to be specific about who the product is wrong for. */}
-            <MascotPrompt>
+            {/* Steps 5 and 5.1 both draw the silhouette — the illustration
+                never appears on this step in the reference pack. */}
+            <MascotPrompt variant="simple">
               Who should <strong className="font-bold underline">not</strong> buy this?
             </MascotPrompt>
             <Field label="Who should skip this?">
