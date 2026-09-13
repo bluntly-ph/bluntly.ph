@@ -22,7 +22,6 @@ import {
   Link as LinkIcon,
   Plus,
   Star,
-  Trash,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
@@ -90,7 +89,12 @@ const STAR_ARC = [16, 5, 0, 5, 16] as const;
 
 /** Enforced in the API too (MAX_DISCUSSION_CHARS) — BUG-022. */
 const MAX_DISCUSSION = 5000;
-const MAX_TITLE = 200;
+/**
+ * 30, from the counter "Reviewer Page - Step 7.png" draws under the title
+ * field. The API accepts 1..200, so this is a tighter client limit rather than
+ * a contract change, and it only ever applies to what this form can type.
+ */
+const MAX_TITLE = 30;
 
 const lines = (s: string) =>
   s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
@@ -548,6 +552,266 @@ const CON_SUGGESTIONS = [
 ];
 
 /**
+ * Step 7's title field.
+ *
+ * Measured from "Reviewer Page - Step 7.png" at 390:
+ *
+ *   field        x16..373 (358 wide), y228..280 — 53 tall, white, 16px radius
+ *   placeholder  "Your interesting title here...", 15px, 17px in from the
+ *                left, ink-800 at ~.30 (darkest pixel 189 over white)
+ *   counter      "0/30 characters", 11px, right-aligned to the field's edge
+ *
+ * There is no visible label — the frame shows placeholder text only — so the
+ * real label is present and hidden rather than dropped: a placeholder is not
+ * an accessible name and it disappears the moment you type.
+ */
+function TitleField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <label className="sr-only" htmlFor={id}>
+        Review title
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, MAX_TITLE))}
+        autoFocus
+        placeholder="Your interesting title here..."
+        className={`h-[53px] w-full rounded-[var(--radius-md)] bg-[var(--surface-card)] px-[17px] ${CHIP_FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+      />
+      <p className={`mt-2 text-right ${CHIP_FACE} text-[11px] text-[var(--text-secondary)]`}>
+        {value.length}/{MAX_TITLE} characters
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Step 6: one upload target, the whole card.
+ *
+ * Measured from "Reviewer Page - Step 6.png" / "6.1.png" at 390:
+ *
+ *   card    x16..373 (358 wide), y246..635 — 390 tall, white, 16px radius
+ *   icon    52x44 at pure black, centred, top edge 100px into the card —
+ *           Phosphor's Image at fill weight
+ *   line 1  "Tap to upload your product photo", 15px ink-800, y409
+ *   line 2  "Use your own photo of the product", 13px, y434, and light:
+ *           the darkest pixel is 197 over white, so ink-800 at ~.26
+ *   skip    "Skip - I'll add a photo later", 14px ink-800, centred, 22px
+ *           under the card
+ *   6.1     the photo covers the card edge to edge, same rounding
+ *
+ * Continue is grey in 6 and orange in 6.1, so the photo gates the step and
+ * Skip is the way past it.
+ *
+ * WHAT THIS DROPS, deliberately and worth flagging: the separate proof-of-
+ * purchase upload. The frame has one upload, its blurb assigns verification
+ * to it ("A photo of the actual product verifies your review and is required
+ * for earning eligibility"), and step 7 draws that same photo on the public
+ * review card — so it is the product photo, and the receipt field is not in
+ * this flow. ReceiptField and the receipt_key plumbing are left intact and
+ * unmounted rather than deleted, because the backend's earn_eligible gate
+ * reads receipt_key and nothing else: following the frame here removes a
+ * capability, and that is the owner's call to confirm, not one to make
+ * quietly by deleting the code.
+ */
+function ProductPhotoCard({
+  url,
+  onChange,
+  onSkip,
+}: {
+  url: string | null;
+  onChange: (url: string | null) => void;
+  onSkip: () => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pick(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const prepared = await prepareImageForUpload(file, "photo");
+      if (prepared.error) {
+        setError(prepared.error);
+        return;
+      }
+      const body = new FormData();
+      body.append("file", prepared.file);
+      const res = await fetch("/api/bff/api/v1/reviews/photo", { method: "POST", body });
+      if (!res.ok) {
+        const p = (await res.json().catch(() => ({}))) as { detail?: string };
+        setError(p.detail ?? "That image couldn't be uploaded.");
+        return;
+      }
+      const { url: uploaded } = (await res.json()) as { url: string };
+      onChange(uploaded);
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setBusy(false);
+      // Let the same file be re-picked after a failure.
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => input.current?.click()}
+        disabled={busy}
+        aria-label={url ? "Replace your product photo" : "Upload your product photo"}
+        className="relative block h-[390px] w-full cursor-pointer overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)] disabled:cursor-wait"
+      >
+        {url ? (
+          <Image src={url} alt="" fill sizes="358px" className="object-cover" />
+        ) : (
+          <span className="flex h-full flex-col items-center pt-[100px]">
+            <ImageIcon
+              size={52}
+              weight="fill"
+              aria-hidden="true"
+              className="text-[var(--base-black)]"
+            />
+            <span className={`mt-[14px] ${CHIP_FACE} text-[15px] text-[var(--text-primary)]`}>
+              {busy ? "Uploading…" : "Tap to upload your product photo"}
+            </span>
+            <span className={`mt-[6px] ${CHIP_FACE} text-[13px] text-[rgba(32,32,32,0.26)]`}>
+              Use your own photo of the product
+            </span>
+          </span>
+        )}
+      </button>
+
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void pick(file);
+        }}
+      />
+
+      <button
+        type="button"
+        onClick={onSkip}
+        className={`mt-[22px] block w-full cursor-pointer text-center ${CHIP_FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}
+      >
+        Skip &ndash; I&apos;ll add a photo later
+      </button>
+
+      {error ? (
+        <p role="alert" className="mt-3 text-center text-[13px] text-[var(--accent-danger)]">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The crowd behind step 5's mascot.
+ *
+ * "Reviewer Page - Step 5.png" fills y238..419 edge to edge with a lattice of
+ * outlined person glyphs. An autocorrelation over a clean 105x143 patch of it
+ * puts the repeat at 41x31 (41x62 and 82x31 score no better, being two copies
+ * of the same cell), with the seam at x31,y238.
+ *
+ * The tile in public/patterns is that cell, lifted straight out of the frame
+ * rather than redrawn from an eyeballed circle-and-arc: each pixel's alpha is
+ * (242 - value) / 210, i.e. how much ink-800 the export laid over the page
+ * colour, with anything under 4% dropped to erase the faint layout grid the
+ * export carries. Tiled back over #f2f2f2 it reproduces the band seamlessly.
+ *
+ * Purely decorative: hidden from assistive tech, and behind everything.
+ */
+function CrowdBand() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute -left-4 -right-4 top-0 -z-10 h-[182px] select-none bg-repeat sm:-left-6 sm:-right-6"
+      style={{
+        backgroundImage: "url(/patterns/crowd.png)",
+        backgroundSize: "41px 31px",
+      }}
+    />
+  );
+}
+
+/**
+ * Step 5's "who should not buy this" field.
+ *
+ * Measured from "Reviewer Page - Step 5.png" / "5.1.png" at 390:
+ *
+ *   card      x16..373 (358 wide), y477..707 — 231 tall, white, 12px radius,
+ *             20px padding, no visible border
+ *   text      15px grotesque on a 21px line ("I wouldn't recommend this
+ *             people who sweat" measures 319px across)
+ *   counter   right-aligned at the card's right edge, 11px
+ *
+ * The counter is the interesting part, because it is the step's gate written
+ * down: the empty frame reads "30 characters remaining" in grey and the
+ * filled one reads "I'm sure someone will appreciate this" in orange, with
+ * Continue disabled in the first and enabled in the second. So the 30 is a
+ * floor, not a limit, and it is what gates the step.
+ *
+ * This replaces two single-line inputs — "Who should skip this?" and "Who is
+ * it right for? (optional)". No frame in the pack draws the second one. The
+ * draft still carries `target` so nothing downstream changes shape; it simply
+ * has no input on this screen any more.
+ */
+const ANTI_MIN = 30;
+
+function AntiPersonaField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const id = useId();
+  const remaining = Math.max(0, ANTI_MIN - value.trim().length);
+
+  return (
+    <div className="mt-8">
+      <label className="sr-only" htmlFor={id}>
+        Who should not buy this?
+      </label>
+      <textarea
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-[231px] w-full resize-none rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+        placeholder="Write it bluntly here..."
+      />
+      <p
+        aria-live="polite"
+        className={`mt-2 text-right ${CHIP_FACE} text-[11px] ${
+          remaining > 0
+            ? "text-[var(--base-gray-400)]"
+            : "text-[var(--accent-primary)]"
+        }`}
+      >
+        {remaining > 0
+          ? `${remaining} characters remaining`
+          : "I'm sure someone will appreciate this"}
+      </p>
+    </div>
+  );
+}
+
+/**
  * The chip shell, measured from "Reviewer Page - Step 4.png" at 390:
  *
  *   card        x16..373 (358 wide), fill #f2f2f2 — the page colour, told
@@ -976,7 +1240,11 @@ function StepsFlow({
           ? "Give at least one pro and one con — both are required."
           : null;
       case 4:
-        return draft.anti.trim() ? null : "Say who should skip this one.";
+        return draft.anti.trim().length < ANTI_MIN
+          ? "Say who should skip this one, in a sentence or so."
+          : null;
+      case 5:
+        return draft.photoUrl ? null : "Add a photo, or skip this step.";
       case 6:
         return draft.title.trim() ? null : "Give your review a title.";
       default:
@@ -1188,63 +1456,39 @@ function StepsFlow({
         ) : null}
 
         {step === 4 ? (
-          <div className="flex flex-col gap-5">
-            {/* The reference emphasises "not" here — this is the step that asks
-                the reviewer to be specific about who the product is wrong for. */}
-            {/* Steps 5 and 5.1 both draw the silhouette — the illustration
+          <div className="relative">
+            <CrowdBand />
+            {/* "not" is red in the frame — rgb(216,0,39), the danger token to
+                the unit — as well as bold and underlined. It was black here.
+                Steps 5 and 5.1 both draw the silhouette; the illustration
                 never appears on this step in the reference pack. */}
-            <MascotPrompt variant="simple">
-              Who should <strong className="font-bold underline">not</strong> buy this?
+            <MascotPrompt variant="simple" className="pt-[59px]">
+              Who should{" "}
+              <strong className="font-bold text-[var(--accent-danger)] underline">
+                not
+              </strong>{" "}
+              buy this?
             </MascotPrompt>
-            <Field label="Who should skip this?">
-              <input
-                value={draft.anti}
-                onChange={(e) => patch({ anti: e.target.value })}
-                autoFocus
-                placeholder="Anyone who needs it to fit in a pocket"
-                className={singleLineInputCls}
-              />
-            </Field>
-            <Field label="Who is it right for? (optional)">
-              <input
-                value={draft.target}
-                onChange={(e) => patch({ target: e.target.value })}
-                placeholder="Commuters who want something light"
-                className={singleLineInputCls}
-              />
-            </Field>
+
+            {/* One textarea, not two single-line fields. The frame draws a
+                single 358x231 card at y477 with 20px padding, and no "who is
+                it right for" field at all — see AntiPersonaField. */}
+            <AntiPersonaField
+              value={draft.anti}
+              onChange={(anti) => patch({ anti })}
+            />
           </div>
         ) : null}
 
         {step === 5 ? (
-          <div className="flex flex-col gap-6">
-            <ReceiptField
-              value={draft.receiptKey}
-              onChange={(key) => patch({ receiptKey: key })}
-            />
-            <PhotoField
-              label="A photo of the product (optional)"
-              hint="Your own photo, not the seller's listing image."
-              url={draft.photoUrl}
-              onChange={(url) => patch({ photoUrl: url })}
-            />
-          </div>
+          <ProductPhotoCard
+            url={draft.photoUrl}
+            onChange={(url) => patch({ photoUrl: url })}
+            onSkip={() => patch({ step: step + 1 })}
+          />
         ) : null}
 
-        {step === 6 ? (
-          <div className="flex flex-col gap-5">
-            <Field label="Review title">
-              <input
-                value={draft.title}
-                onChange={(e) => patch({ title: e.target.value.slice(0, MAX_TITLE) })}
-                autoFocus
-                placeholder="Worth the money, or just overhyped?"
-                className={singleLineInputCls}
-              />
-              <Counter value={draft.title.length} max={MAX_TITLE} />
-            </Field>
-          </div>
-        ) : null}
+        {step === 6 ? <TitleField value={draft.title} onChange={(title) => patch({ title })} /> : null}
       </div>
 
       {error ? (
@@ -1286,7 +1530,7 @@ function StepsFlow({
             fullWidth
             className="pointer-events-auto"
           >
-            {busy ? "Submitting…" : "Continue"}
+            {busy ? "Submitting…" : isLast ? "Submit" : "Continue"}
             {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
           </Button>
         </div>
@@ -1294,250 +1538,6 @@ function StepsFlow({
       <p role="status" className="sr-only">
         {blocker ?? "Saved as you type."}
       </p>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ photos */
-
-/**
- * One image, uploaded on selection (BUG-023).
- *
- * Uploading immediately rather than at submit means the reviewer sees straight
- * away whether the file was accepted — a rejection discovered at the end, after
- * seven steps, is the worst possible time to learn a photo was too large.
- */
-/**
- * Proof of purchase — private storage, deliberately not a PhotoField.
- *
- * Three differences from the public photo field, all of them the point:
- *  - it posts to /reviews/receipt, so the *server* picks the private bucket;
- *    the client never names a destination
- *  - it stores an opaque object key, not a URL
- *  - the preview URL is signed, short-lived, and held only in component state.
- *    Resuming a saved draft therefore shows "attached" rather than the image:
- *    persisting the signed URL to survive a reload is exactly the mistake this
- *    whole change exists to undo.
- */
-function ReceiptField({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (key: string | null) => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-
-  async function pick(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      // Shrink before sending: the platform refuses a body over ~4.5MB with a
-      // bare 413, and a phone photo of a receipt is routinely larger. Kept at a
-      // higher resolution than the proof photo because a moderator has to read
-      // the small print on it.
-      const prepared = await prepareImageForUpload(file, "document");
-      if (prepared.error) {
-        setError(prepared.error);
-        return;
-      }
-      const body = new FormData();
-      body.append("file", prepared.file);
-      const res = await fetch("/api/bff/api/v1/reviews/receipt", {
-        method: "POST",
-        body,
-      });
-      if (!res.ok) {
-        const p = (await res.json().catch(() => ({}))) as { detail?: string };
-        setError(p.detail ?? "That image couldn't be uploaded.");
-        return;
-      }
-      const { key, preview_url } = (await res.json()) as {
-        key: string;
-        preview_url: string;
-      };
-      onChange(key);
-      setPreview(preview_url);
-    } catch {
-      setError("Couldn't reach the server.");
-    } finally {
-      setBusy(false);
-      if (input.current) input.current.value = "";
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium text-[var(--text-primary)]">
-        Proof of purchase
-      </span>
-      <span className="text-[12px] text-[var(--text-secondary)]">
-        A receipt, order screenshot, or the confirmation email. Only you and the
-        moderators reviewing it can ever open this — it is never shown on your
-        published review.
-      </span>
-
-      {value ? (
-        <div className="mt-2 flex items-start gap-3">
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={preview}
-              alt="Proof of purchase preview"
-              className="h-28 w-28 rounded-[var(--radius-sm)] object-cover shadow-[var(--shadow-hairline-inset)]"
-            />
-          ) : (
-            <div className="grid h-28 w-28 place-items-center rounded-[var(--radius-sm)] text-center text-[12px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-              Attached
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              onChange(null);
-              setPreview(null);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-2 text-[13px] text-[var(--accent-danger)] hover:bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)]"
-          >
-            <Trash size={16} /> Remove
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => input.current?.click()}
-          disabled={busy}
-          className="mt-2 inline-flex items-center gap-2 self-start rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] px-4 py-3 text-[13px] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] disabled:opacity-60"
-        >
-          <ImageIcon size={18} />
-          {busy ? "Uploading…" : "Choose an image"}
-        </button>
-      )}
-
-      <input
-        ref={input}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void pick(file);
-        }}
-      />
-      {error ? (
-        <p className="text-[12px] text-[var(--accent-danger)]">{error}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function PhotoField({
-  label,
-  hint,
-  url,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  url: string | null;
-  onChange: (url: string | null) => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function pick(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      // See ReceiptField: the real ceiling is the platform's, not the API's.
-      const prepared = await prepareImageForUpload(file, "photo");
-      if (prepared.error) {
-        setError(prepared.error);
-        return;
-      }
-      const body = new FormData();
-      body.append("file", prepared.file);
-      const res = await fetch("/api/bff/api/v1/reviews/photo", {
-        method: "POST",
-        body,
-      });
-      if (!res.ok) {
-        const p = (await res.json().catch(() => ({}))) as { detail?: string };
-        setError(p.detail ?? "That image couldn't be uploaded.");
-        return;
-      }
-      const { url: uploaded } = (await res.json()) as { url: string };
-      onChange(uploaded);
-    } catch {
-      setError("Couldn't reach the server.");
-    } finally {
-      setBusy(false);
-      // Let the same file be re-picked after a failure.
-      if (input.current) input.current.value = "";
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium text-[var(--text-primary)]">{label}</span>
-      <span className="text-[12px] text-[var(--text-secondary)]">{hint}</span>
-
-      {url ? (
-        <div className="mt-2 flex items-start gap-3">
-          {/* The uploaded object, so it goes through the optimizer. The
-              *local* preview above stays a plain <img>: it is a blob: URL that
-              never reaches the network. */}
-          <Image
-            src={url}
-            alt="Uploaded preview"
-            width={112}
-            height={112}
-            className="h-28 w-28 rounded-[var(--radius-sm)] object-cover shadow-[var(--shadow-hairline-inset)]"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-2 text-[13px] text-[var(--accent-danger)] hover:bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)]"
-          >
-            <Trash size={16} /> Remove
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => input.current?.click()}
-          disabled={busy}
-          className="mt-2 inline-flex items-center gap-2 self-start rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] px-4 py-3 text-[13px] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--text-primary)] disabled:opacity-60"
-        >
-          <ImageIcon size={18} />
-          {busy ? "Uploading…" : "Choose an image"}
-        </button>
-      )}
-
-      <input
-        ref={input}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void pick(file);
-        }}
-      />
-
-      {error ? (
-        <p role="alert" className="text-[12px] text-[var(--accent-danger)]">
-          {error}
-        </p>
-      ) : (
-        <p className="text-[11px] text-[var(--text-muted)]">
-          PNG, JPEG, or WebP. Up to 8 MB.
-        </p>
-      )}
     </div>
   );
 }
@@ -1582,15 +1582,6 @@ function DoneStep() {
 
 const inputCls =
   "w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-2.5 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]";
-
-/**
- * A single-line field, at the height the reference draws: 53px, measured off the
- * title field in "Reviewer Page - Step 7.png" (x=16, 358x53).
- *
- * The height cannot live in `inputCls` itself — the step-1 experience textarea
- * shares that class and must stay nine rows tall.
- */
-const singleLineInputCls = `${inputCls} h-[53px]`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
