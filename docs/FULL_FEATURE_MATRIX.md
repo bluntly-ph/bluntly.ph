@@ -119,14 +119,14 @@ implementation and should be the starting point rather than a fresh design.
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | 5.1 | Buyer asks a question | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PROVISIONAL | — | `models/qa.py`, `routes/qa.py`, `app/questions/new` |
-| 5.2 | Audience selection (buyers vs seller) | PARTIAL | PARTIAL | — | MISSING | PROVISIONAL | Seller half depends on 4.1 | `qa.py` has an audience concept; seller routing has no seller to route to |
+| 5.2 | Audience selection (buyers vs seller) | COMPLETE | COMPLETE | — | PARTIAL | PROVISIONAL | Delivery to a seller depends on 4.1 | `QuestionDirectedTo.buyers/seller`, `AskQuestionForm.tsx`; the choice is stored and shown, but with no seller entity there is nobody to route it to |
 | 5.3 | Registered-user answers | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PROVISIONAL | — | `services/qa_service.py`, `QaAnswersTab` |
 | 5.4 | Seller answers where claimed | MISSING | MISSING | MISSING | MISSING | MISSING | Depends on 4.3 | — |
-| 5.5 | Best Answer (one per question) | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PROVISIONAL | — | needs audit; trust-score effect unverified |
-| 5.6 | First Responder badge (first answer < 24h) | MISSING | MISSING | — | MISSING | MISSING | — | no award path found |
+| 5.5 | Best Answer (one per question) | COMPLETE | COMPLETE | COMPLETE | PARTIAL | PROVISIONAL | — | `qa_service.mark_best_answer` (demotes the previous one), `questions.best_answer_id`, `answers.is_best_answer`; rendered on `/questions/[id]` and in `QaAnswersTab` |
+| 5.6 | First Responder badge (first answer < 24h) | COMPLETE | COMPLETE | COMPLETE | PARTIAL | PROVISIONAL | — | `FIRST_RESPONDER_WINDOW = 24h` in `qa_service`, awards the `first_responder` badge, refuses self-answers; `answers.is_first_responder` rendered on `/questions/[id]` |
 | 5.7 | Answer voting | COMPLETE | COMPLETE | — | COMPLETE | PROVISIONAL | — | `models/vote.py`, `test_votes_api` |
 | 5.8 | Answers ranked by time-decayed Wilson | COMPLETE | PARTIAL | — | COMPLETE | PROVISIONAL | — | `services/ranking.py`, `test_ranking_properties` |
-| 5.9 | earn_eligible gate for eligible answers | PARTIAL | — | PARTIAL | COMPLETE | PROVISIONAL | — | `test_qa_self_dealing` |
+| 5.9 | earn_eligible gate for eligible answers | COMPLETE | — | PARTIAL | COMPLETE | PROVISIONAL | — | `answers.earn_eligible`, `answers.wilson_score`; `test_qa_self_dealing` |
 | 5.10 | Question search | COMPLETE | COMPLETE | — | COMPLETE | COMPLETE | — | `test_question_search` |
 | 5.11 | "Relevant product experience" routing | BLOCKED | BLOCKED | — | — | — | **PRODUCT_DECISION_REQUIRED** — PRD FR-5 marks the matching logic `[AMBIGUOUS]`: who counts as relevant, and how they are notified, is unspecified | PRD §4 FR-5 |
 
@@ -252,12 +252,30 @@ tests should pin both so the difference stays intentional.
 
 ---
 
+## Corrections applied after first publication
+
+Row-by-row verification found the first pass had **understated FR-5**. It was
+written from a model/route/service inventory, and four rows were wrong:
+
+| Row | First pass | Verified | How it was found |
+|---|---|---|---|
+| 5.2 | PARTIAL / MISSING test | `QuestionDirectedTo` is a real enum, stored and rendered | read `AskQuestionForm.tsx` |
+| 5.5 | PARTIAL | `mark_best_answer` demotes the previous winner; rendered in three places | read `qa_service.py` |
+| 5.6 | MISSING everywhere | 24h window, badge award, self-answer refused | read `qa_service.py` |
+| 5.9 | PARTIAL backend | `answers.earn_eligible` and `wilson_score` both exist | read `models/qa.py` |
+
+The lesson is recorded rather than quietly fixed: **a grep for a feature name
+is not evidence of its absence.** Rows still marked MISSING below on the
+strength of an inventory alone — 1.6, 1.7, 2.8, 8.2, 8.3, X.3 — were each
+re-checked by reading the relevant service, not by counting matches.
+
 ## What this matrix says overall
 
 - **Rows: 96. Unclassified: 0.**
 - Largest genuine gaps, in contract priority order: seller reviews and seller
-  accounts (FR-4, 14 rows MISSING), notifications and messaging (1.6, 1.7),
-  price-history frontend (2.5), duplicate detection (2.8), disclosure (X.1),
-  plagiarism and reverse-image layers (8.2, 8.3), 3D/360 (X.3).
+  accounts (FR-4 — schema landed in `ef34e72`, service/API/UI still to come),
+  notifications and messaging (1.6, 1.7), price-history frontend (2.5),
+  duplicate detection (2.8), disclosure (X.1), plagiarism and reverse-image
+  layers (8.2, 8.3), 3D/360 (X.3).
 - Genuine blockers: 5.11, 6.12, 7.9 (policy undefined), X.5 (platform console),
   and 8.3's provider choice — everything else is engineering work.
