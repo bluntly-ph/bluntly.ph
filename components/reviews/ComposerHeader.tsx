@@ -11,7 +11,8 @@ import { ProfileNavPanel, type PanelUser } from "@/components/site/ProfileNavPan
  * wordmark, no search, no nav. Measured from "Reviewer Page - Step 2.png":
  *
  *   band          y 42..112 on #f2f2f2, 1px rule beneath at rgb(140,140,140)
- *   back arrow    x 27..48, y 69..86 — a 24px glyph, ink-800, centred
+ *   back arrow    x 27..48, y 69..86 — 22x18 of ink-800, centred, which
+ *                 is Phosphor's ArrowLeft at 28 (at 24 it renders 18x16)
  *   avatar        x 326..365, y 58..97 — 40x40 circle, right gutter 24px
  *
  * The arrow replaces the breadcrumb link the form used to draw above the step
@@ -44,7 +45,7 @@ export function ComposerHeader({
             aria-label={backLabel ?? "Go back"}
             className="-ml-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
           >
-            <ArrowLeft size={24} aria-hidden="true" />
+            <ArrowLeft size={28} aria-hidden="true" />
           </button>
         ) : (
           // Holds the avatar against the right edge on the first screen.

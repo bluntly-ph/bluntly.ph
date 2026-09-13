@@ -412,7 +412,7 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
       <ComposerHeader user={user} onBack={back.run} backLabel={back.label} />
 
       {/* pb clears the bottom-anchored Continue (56px pill + 32px inset). */}
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-4 pb-[120px] sm:px-6">
+      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-3 pb-[120px] sm:px-6">
         {phase === "done" ? (
           <DoneStep />
         ) : (
@@ -1122,8 +1122,10 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
 
   return (
     // `relative` so the decorative rating cards can be positioned against this
-    // step rather than the document.
-    <div className="relative">
+    // step, and `isolate` so they are actually visible: they sit at -z-10, and
+    // without a stacking context here that puts them behind the page's own
+    // background rather than behind this step's content.
+    <div className="relative isolate">
       <ProductStepDecor />
       <p className="text-[13px] text-[var(--text-secondary)]">Let&rsquo;s get started!</p>
       <h1 className="mt-1 text-[26px] font-bold text-[var(--accent-primary)]">
@@ -1370,6 +1372,10 @@ function StepsFlow({
                         wide with 2px stems, where 22px bold renders it 137px
                         wide with 4px stems and twice the ink
             blurb       13px, text-secondary (darkest pixel 95 = ink-800 @ .7)
+          Vertical rhythm, glyph tops measured from the header rule: step
+          count 89, title 112, blurb 144 and 162 — an 18px line. The live page
+          sat at 92/123/158/177 before these margins were cut.
+
           The count and the blurb are set in the file's grotesque, not Poppins:
           "Your unfiltered words. Make it count." is 212px wide in the frame
           and 233px in 13px Poppins, and the letterforms in a 3x crop are a
@@ -1381,17 +1387,17 @@ function StepsFlow({
       <h1
         // Orange on every step: the reference draws each heading in the accent,
         // not just the ones with their own line underneath.
-        className="mt-2 text-[length:var(--text-lg)] font-[number:var(--weight-medium)] text-[var(--accent-primary)]"
+        className="text-[length:var(--text-lg)] font-[number:var(--weight-medium)] leading-[21px] text-[var(--accent-primary)]"
       >
         {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
       {STEP_COPY[step] ? (
-        <p className={`mt-2 ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}>
+        <p className={`mt-[5px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
           {STEP_COPY[step].blurb}
         </p>
       ) : null}
 
-      <div className="mt-6">
+      <div className="mt-5">
         {step === 0 ? (
           <>
             <CurrentlyReviewingCard
@@ -1523,7 +1529,7 @@ function StepsFlow({
         ) : null}
 
         {step === 4 ? (
-          <div className="relative">
+          <div className="relative isolate">
             <CrowdBand />
             {/* "not" is red in the frame — rgb(216,0,39), the danger token to
                 the unit — as well as bold and underlined. It was black here.
