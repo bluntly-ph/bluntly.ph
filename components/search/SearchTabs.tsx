@@ -7,13 +7,10 @@ import { searchTabHref, type SearchTab } from "./search-tabs-model";
  *
  * The design reference draws three tabs — Reviews, Questions, Sellers.
  *
- * SELLERS IS DELIBERATELY ABSENT. There is no seller entity in this product:
- * "seller" exists only as a value of the user role enum and as a report/review
- * category. There is no seller table, no seller profile, no seller directory and
- * no endpoint to search one, so the tab could only be filled with invented
- * sellers or wired to a dead route. Both are worse than its absence — the same
- * reasoning that keeps Bookmarks and Recent reads out of the profile panel.
- * Restore it here the moment a real seller surface exists.
+ * Sellers was held back while the product had no seller entity, because the
+ * tab could only have been filled with invented stores. The completion
+ * contract reinstated sellers (migration 0042, GET /sellers), so all three are
+ * drawn and each is backed by a real search.
  *
  * Real links, not client state: each tab is a distinct set of server-rendered
  * results, so they are `<Link>`s that carry the query across. That keeps them
@@ -25,6 +22,7 @@ export type { SearchTab };
 const TABS: { key: SearchTab; label: string }[] = [
   { key: "reviews", label: "Reviews" },
   { key: "questions", label: "Questions" },
+  { key: "sellers", label: "Sellers" },
 ];
 
 export function SearchTabs({

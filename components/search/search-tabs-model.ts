@@ -1,5 +1,5 @@
 /** Which set of results /search is showing. */
-export type SearchTab = "reviews" | "questions";
+export type SearchTab = "reviews" | "questions" | "sellers";
 
 /**
  * The href for a tab, preserving the reader's context across the switch.

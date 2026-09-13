@@ -8,10 +8,11 @@ import {
 } from "../../components/site/action-menu-model.ts";
 
 /**
- * The contract worth locking here is the surprising one: a visible action that
- * deliberately does nothing. Without a test, "Rate a Seller has no href" reads
- * like an oversight and is one confident cleanup away from being wired to a
- * route that does not exist.
+ * "Rate a Seller" was drawn and shipped disabled while no seller entity
+ * existed. The completion contract reinstated the seller flow (sellers,
+ * claims, seller reviews), so it now opens the seller composer. What stays
+ * locked is the rule that made the disabled state honest: nothing is enabled
+ * without a real route behind it.
  */
 
 const byKey = (k) => ACTION_MENU_ITEMS.find((i) => i.key === k);
@@ -23,24 +24,23 @@ test("the menu offers exactly the three drawn actions, in order", () => {
   );
 });
 
-test("Rate a Seller is present but not actionable", () => {
+test("Rate a Seller opens the seller composer", () => {
   const seller = byKey("seller");
-
-  assert.ok(seller, "it must stay visible — the design says the capability exists");
-  assert.equal(seller.enabled, false);
-  assert.equal(seller.href, null, "there is no seller entity to link to");
-  assert.equal(isActionable(seller), false);
+  assert.equal(seller.enabled, true);
+  assert.equal(seller.href, "/sellers/rate");
+  assert.equal(isActionable(seller), true);
 });
 
-test("a disabled action explains itself to assistive technology", () => {
-  assert.match(DISABLED_REASON.seller, /not available/i);
+test("no action is left disabled, so none needs a reason", () => {
+  for (const item of ACTION_MENU_ITEMS) {
+    assert.equal(isActionable(item), true, `${item.key} should be actionable`);
+  }
+  assert.deepEqual(DISABLED_REASON, {});
 });
 
-test("the two real actions point at routes that exist", () => {
+test("the actions point at routes that exist", () => {
   assert.equal(byKey("ask").href, "/questions/new");
   assert.equal(byKey("review").href, "/reviews/new");
-  assert.equal(isActionable(byKey("ask")), true);
-  assert.equal(isActionable(byKey("review")), true);
 });
 
 test("no action is enabled without somewhere to go", () => {

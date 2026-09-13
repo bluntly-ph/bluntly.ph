@@ -1,17 +1,16 @@
 /**
- * What the floating action menu offers, and what it cannot.
+ * What the floating action menu offers.
  *
- * Separated from the component so the contract is testable without a DOM, and
- * so the one genuinely surprising entry — a visible action that does nothing —
- * cannot be quietly "fixed" later by someone who assumes it is a bug.
+ * Separated from the component so the contract is testable without a DOM.
  *
- * "Rate a Seller" is DISABLED IN THE DESIGN. The reference draws its circle in
- * neutral grey, rgb(140,140,140), where the other two are brand orange, and
- * this product has no seller entity to rate: "seller" exists only as a user-role
- * value and a report category. The design is telling a reader the capability
- * exists and is not available yet, so it is shown and disabled rather than
- * hidden — hiding it would lose that message, and enabling it would need a
- * seller model that does not exist.
+ * "Rate a Seller" shipped DISABLED for as long as this product had no seller
+ * entity: the design drew it in neutral grey, and enabling it would have meant
+ * a route with nothing behind it. The completion contract reinstated sellers —
+ * stores, moderated claims and seller reviews (migrations 0042, 0043) — so it
+ * now opens the seller composer at /sellers/rate.
+ *
+ * The rule that made the disabled state honest still holds and is tested: an
+ * item is actionable only when it is enabled AND has somewhere to go.
  */
 
 export type ActionMenuItem = {
@@ -24,14 +23,12 @@ export type ActionMenuItem = {
 
 export const ACTION_MENU_ITEMS: readonly ActionMenuItem[] = [
   { key: "ask", label: "Ask a Question", href: "/questions/new", enabled: true },
-  { key: "seller", label: "Rate a Seller", href: null, enabled: false },
+  { key: "seller", label: "Rate a Seller", href: "/sellers/rate", enabled: true },
   { key: "review", label: "Write a Review", href: "/reviews/new", enabled: true },
 ] as const;
 
 /** Why a disabled action is unavailable, for assistive technology. */
-export const DISABLED_REASON: Record<string, string> = {
-  seller: "Rating a seller is not available yet",
-};
+export const DISABLED_REASON: Record<string, string> = {};
 
 /** An action is actionable only when it is enabled AND has somewhere to go. */
 export function isActionable(item: ActionMenuItem): boolean {

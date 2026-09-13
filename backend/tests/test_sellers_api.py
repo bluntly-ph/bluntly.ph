@@ -213,6 +213,11 @@ def test_search_reports_each_stores_visible_review_count(client):
 
     found = client.get("/api/v1/sellers", params={"q": name}).json()
     assert [s["review_count"] for s in found if s["id"] == seller["id"]] == [1]
+    assert [s["overall_average"] for s in found if s["id"] == seller["id"]] == [5.0]
+
+    unrated = _create_seller(client, _auth(token), _store_name("Unrated"))
+    listed = client.get("/api/v1/sellers", params={"q": unrated["display_name"]}).json()
+    assert [(s["review_count"], s["overall_average"]) for s in listed] == [(0, None)]
 
 
 @requires_db

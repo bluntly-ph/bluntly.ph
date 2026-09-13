@@ -29,6 +29,13 @@ test("a category narrows reviews and is not carried to questions", () => {
   assert.equal(searchTabHref("questions", { q: "fan", category: "audio" }), "/search?q=fan&tab=questions");
 });
 
+test("the sellers tab carries the query and not the category", () => {
+  assert.equal(
+    searchTabHref("sellers", { q: "jisulife", category: "audio" }),
+    "/search?q=jisulife&tab=sellers",
+  );
+});
+
 test("the categories back-link context survives both tabs", () => {
   assert.equal(
     searchTabHref("questions", { q: "fan", from: "categories" }),

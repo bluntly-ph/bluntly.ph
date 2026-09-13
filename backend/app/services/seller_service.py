@@ -158,12 +158,14 @@ def get_seller_or_404(db: Session, seller_id: uuid.UUID) -> Seller:
 def list_sellers(db: Session, *, q: str | None, platform: Platform | None,
                  limit: int) -> list[SellerOut]:
     counts = (
-        select(SellerReview.seller_id, func.count(SellerReview.id).label("n"))
+        select(SellerReview.seller_id,
+               func.count(SellerReview.id).label("n"),
+               func.avg(SellerReview.overall_rating).label("average"))
         .where(_VISIBLE)
         .group_by(SellerReview.seller_id)
         .subquery()
     )
-    stmt = select(Seller, func.coalesce(counts.c.n, 0)).outerjoin(
+    stmt = select(Seller, func.coalesce(counts.c.n, 0), counts.c.average).outerjoin(
         counts, counts.c.seller_id == Seller.id)
     if platform is not None:
         stmt = stmt.where(Seller.platform == platform)
@@ -173,8 +175,11 @@ def list_sellers(db: Session, *, q: str | None, platform: Platform | None,
             stmt = stmt.where(Seller.normalized_name.contains(needle, autoescape=True))
     stmt = stmt.order_by(Seller.display_name).limit(limit)
     return [
-        SellerOut.model_validate(seller).model_copy(update={"review_count": n})
-        for seller, n in db.execute(stmt).all()
+        SellerOut.model_validate(seller).model_copy(update={
+            "review_count": n,
+            "overall_average": None if average is None else round(float(average), 2),
+        })
+        for seller, n, average in db.execute(stmt).all()
     ]
 
 
@@ -186,6 +191,7 @@ def get_seller_detail(db: Session, seller_id: uuid.UUID) -> SellerDetailOut:
     summary = summarize_reviews(reviews)
     data = SellerOut.model_validate(seller).model_dump()
     data["review_count"] = summary.review_count
+    data["overall_average"] = summary.overall_average
     return SellerDetailOut(**data, summary=summary)
 
 

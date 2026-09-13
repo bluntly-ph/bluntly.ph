@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CaretLeft, ChatCircle, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, ChatCircle, MagnifyingGlass, Storefront } from "@phosphor-icons/react/dist/ssr";
 
 import { QuestionResultRow } from "@/components/search/QuestionResultRow";
+import { SellerResultRow } from "@/components/sellers/SellerResultRow";
 import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
 import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
 import { ReviewListRow } from "@/components/review/ReviewListRow";
@@ -13,6 +14,7 @@ import { CATEGORIES } from "@/lib/landing-data";
 import { getUser } from "@/lib/dal";
 import { getQuestions } from "@/lib/qa";
 import { searchReviews } from "@/lib/reviews";
+import { searchSellers } from "@/lib/sellers";
 
 export const metadata: Metadata = {
   title: "Search — bluntly",
@@ -24,7 +26,8 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string; category?: string; from?: string; tab?: string }>;
 }) {
   const { q = "", category, from, tab } = await searchParams;
-  const activeTab: SearchTab = tab === "questions" ? "questions" : "reviews";
+  const activeTab: SearchTab =
+    tab === "questions" ? "questions" : tab === "sellers" ? "sellers" : "reviews";
   const activeCategory = CATEGORIES.find((c) => c.slug === category);
   const searching = Boolean(q.trim() || category);
   // Arrived by tapping a tile on /categories. That makes /categories the
@@ -36,7 +39,7 @@ export default async function SearchPage({
   // Parallel: the viewer and the results are independent (see app/page.tsx).
   // Only the active tab's results are fetched — the other tab is a separate URL
   // and will fetch its own when it is visited.
-  const [me, results, questions] = await Promise.all([
+  const [me, results, questions, sellers] = await Promise.all([
     getUser().catch(() => null),
     activeTab === "reviews"
       ? searchReviews({ q, category, limit: 24 })
@@ -44,6 +47,7 @@ export default async function SearchPage({
     activeTab === "questions"
       ? getQuestions(undefined, { q, limit: 24 })
       : Promise.resolve(null),
+    activeTab === "sellers" ? searchSellers(q, 24) : Promise.resolve(null),
   ]);
   const user: HeaderUser = me
     ? { username: me.username, avatarUrl: me.avatar_url }
@@ -55,7 +59,9 @@ export default async function SearchPage({
       ? activeCategory.label
       : activeTab === "questions"
         ? "Recent questions"
-        : "Trending reviews";
+        : activeTab === "sellers"
+          ? "Sellers"
+          : "Trending reviews";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
@@ -130,7 +136,27 @@ export default async function SearchPage({
           {heading}
         </h1>
 
-        {activeTab === "questions" ? (
+        {activeTab === "sellers" ? (
+          sellers === null ? (
+            <Unavailable what="sellers" />
+          ) : sellers.length > 0 ? (
+            <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
+              {sellers.map((seller) => (
+                <SellerResultRow key={seller.id} seller={seller} />
+              ))}
+            </ul>
+          ) : (
+            <EmptyResults
+              icon={<Storefront size={40} className="text-[var(--text-muted)]" />}
+              title={searching ? "No sellers found" : "No sellers yet"}
+              body={
+                searching
+                  ? "Try the store name as the marketplace shows it."
+                  : "Stores appear here once a buyer rates one."
+              }
+            />
+          )
+        ) : activeTab === "questions" ? (
           questions === null ? (
             <Unavailable what="questions" />
           ) : questions.length > 0 ? (

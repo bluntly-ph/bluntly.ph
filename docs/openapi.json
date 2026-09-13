@@ -11899,6 +11899,17 @@
             "title": "Review Count",
             "default": 0
           },
+          "overall_average": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Average"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -11951,6 +11962,17 @@
             "type": "integer",
             "title": "Review Count",
             "default": 0
+          },
+          "overall_average": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Average"
           },
           "created_at": {
             "type": "string",

@@ -54,6 +54,8 @@ class SellerOut(BaseModel):
     claim_status: SellerClaimStatus
     #: Visible ratings only; a removed review no longer counts.
     review_count: int = 0
+    #: Mean overall rating of the visible reviews; null until there is one.
+    overall_average: float | None = None
     created_at: datetime
 
 

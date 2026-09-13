@@ -4064,6 +4064,8 @@ export interface components {
              * @default 0
              */
             review_count: number;
+            /** Overall Average */
+            overall_average?: number | null;
             /**
              * Created At
              * Format: date-time
@@ -4089,6 +4091,8 @@ export interface components {
              * @default 0
              */
             review_count: number;
+            /** Overall Average */
+            overall_average?: number | null;
             /**
              * Created At
              * Format: date-time
