@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 /**
@@ -40,6 +41,22 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: Size;
   icon?: ReactNode;
   fullWidth?: boolean;
+  /**
+   * Render as a link instead of a button.
+   *
+   * Something that navigates should be an anchor. Wrapping this component in
+   * `<Link className="contents">` instead nests a button inside an anchor,
+   * which is invalid, and leaves the control with `cursor: default` — that is
+   * QA-012, and it survived in five more places than the two QA reported.
+   *
+   * `CtaLink` is the other half of that fix and remains the right choice for a
+   * standalone call to action. This exists for the cases where the pill has to
+   * stay byte-identical to the button beside it: CtaLink's sizes are its own
+   * (36/44px against this component's 31/56), and swapping one for the other
+   * silently resizes the control — which is how the page-title CTAs grew from
+   * a 31px chip to a 44px pill the last time QA-012 was fixed.
+   */
+  href?: string;
 };
 
 export function Button({
@@ -50,12 +67,10 @@ export function Button({
   fullWidth = false,
   className = "",
   disabled,
+  href,
   ...rest
 }: ButtonProps) {
-  return (
-    <button
-      disabled={disabled}
-      className={[
+  const classes = [
         // `cursor-pointer` (QA-012): a <button> renders with cursor:default,
         // so nothing about it said "clickable" until it was pressed.
         // `disabled:` is not decoration — this project has no tailwind-merge,
@@ -78,9 +93,27 @@ export function Button({
         SIZES[size],
         fullWidth ? "w-full" : "",
         className,
-      ].join(" ")}
-      {...rest}
-    >
+  ].join(" ");
+
+  // A disabled link is not a thing the platform has, so a disabled Button
+  // stays a <button> even when given an href — it cannot navigate anyway.
+  if (href && !disabled) {
+    return (
+      <Link
+        href={href}
+        // Read by `.prose a:not([data-cta])`: without it a pill dropped into an
+        // article inherits the prose link colour and loses its label.
+        data-cta=""
+        className={`${classes} no-underline`}
+      >
+        {icon}
+        {children}
+      </Link>
+    );
+  }
+
+  return (
+    <button disabled={disabled} className={classes} {...rest}>
       {icon}
       {children}
     </button>

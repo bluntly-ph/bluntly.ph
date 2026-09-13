@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -21,11 +20,9 @@ export function AnswerForm({
 
   if (!canAnswer) {
     return (
-      <Link href="/login" className="contents">
-        <Button size="sm" variant="secondary">
-          Log in to answer
-        </Button>
-      </Link>
+      <Button href="/login" size="sm" variant="secondary">
+        Log in to answer
+      </Button>
     );
   }
 

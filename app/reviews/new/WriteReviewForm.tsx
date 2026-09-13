@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -1749,12 +1749,10 @@ function DoneStep() {
       </p>
 
       <div className="mt-10 flex flex-col items-center gap-3">
-        <Link href="/dashboard/history" className="contents">
-          <Button type="button" fullWidth>
-            See my submissions
-            <ArrowRight size={18} weight="bold" aria-hidden="true" />
-          </Button>
-        </Link>
+        <Button href="/dashboard/history" fullWidth>
+          See my submissions
+          <ArrowRight size={18} weight="bold" aria-hidden="true" />
+        </Button>
         <Link
           href="/reviews/new"
           className={`${CHIP_FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}

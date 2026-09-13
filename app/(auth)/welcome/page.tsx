@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
@@ -50,15 +50,14 @@ export default function WelcomePage() {
 
       <div className="mt-8 flex flex-col gap-3 lg:mt-7">
         <GoogleButton />
-        <Link href="/signup" className="contents">
-          <Button
-            variant="outline"
-            fullWidth
-            className="lg:border-transparent lg:bg-[var(--accent-primary)] lg:text-white lg:hover:bg-[var(--accent-primary-strong)]"
-          >
-            Sign up with email
-          </Button>
-        </Link>
+        <Button
+          href="/signup"
+          variant="outline"
+          fullWidth
+          className="lg:border-transparent lg:bg-[var(--accent-primary)] lg:text-white lg:hover:bg-[var(--accent-primary-strong)]"
+        >
+          Sign up with email
+        </Button>
       </div>
 
       <p className="mt-5 text-center text-[12px] font-light tracking-[0.144px]">

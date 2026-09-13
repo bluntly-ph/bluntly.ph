@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Info, SealCheck, Wallet } from "@phosphor-icons/react/dist/ssr";
 
 import { PayoutAccountForm } from "@/components/dashboard/PayoutAccountForm";
@@ -214,9 +214,7 @@ export default async function DashboardPage({
         </section>
 
         <div className="mt-8 flex flex-wrap items-center gap-4">
-          <Link href="/reviews/new" className="contents">
-            <Button>Write a review &amp; earn</Button>
-          </Link>
+          <Button href="/reviews/new">Write a review &amp; earn</Button>
           <Link
             href="/contracts"
             className="text-[13px] font-medium text-[var(--accent-primary)] hover:underline"

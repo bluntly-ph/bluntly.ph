@@ -60,14 +60,15 @@ export default async function ProfilePage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Link href="/dashboard" className="contents">
-              <Button size="sm">Earnings</Button>
-            </Link>
-            <Link href="/onboarding" className="contents">
-              <Button variant="secondary" size="sm" icon={<PencilSimpleLine size={14} />}>
-                Edit
-              </Button>
-            </Link>
+            <Button href="/dashboard" size="sm">Earnings</Button>
+            <Button
+              href="/onboarding"
+              variant="secondary"
+              size="sm"
+              icon={<PencilSimpleLine size={14} />}
+            >
+              Edit
+            </Button>
             <form action={logout}>
               <Button type="submit" variant="secondary" size="sm">
                 Log out
