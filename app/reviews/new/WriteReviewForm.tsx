@@ -1209,12 +1209,13 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
       </ul>
 
       {/* The reference fills the space under the field with an empty state:
-          a magnifier, "Find the product you bought", and the two-line hint.
+          a magnifier, "Find the product you bought", and the two-line hint,
+          its block running y411..545 below the header.
           The composer never had it, which is why the page — and desktop in
           particular, where the column is only 672px of a much wider viewport —
           read as an empty grey void below the search box. */}
       {!searching ? (
-        <div className="flex flex-col items-center pb-16 pt-[98px] text-center">
+        <div className="flex flex-col items-center pb-16 pt-[159px] text-center">
           <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
           <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
             Find the product you bought
