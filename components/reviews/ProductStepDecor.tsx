@@ -1,78 +1,46 @@
-import { Star } from "@phosphor-icons/react/dist/ssr";
-
 /**
- * The floating rating cards behind the product step.
+ * The rating cards drifting in behind the product step's empty state.
  *
- * The reference drops three tilted cards around the empty state, each showing
- * only a row of stars. They are ordinary primitives — a rounded surface, a soft
- * shadow, a few degrees of rotation and star glyphs — so they are built rather
- * than treated as missing artwork.
+ * "Reviewer Page - Step 1.png" draws six of them, not three: three sliding in
+ * from the right edge and three from the bottom-left, each tilted, each
+ * clipped by the frame, each carrying a row of stars.
  *
- * Measured from "Reviewer Page - Step 1.png" at 390x844:
+ *   right edge   star rows at y339..355 (yellow), y395..410 and y452..465
+ *                (green), running off the right of the frame
+ *   bottom left  star rows at y694..709 (coral), y746..764 and y800 (green),
+ *                running off the left and the bottom
  *
- *   green stars  13x13  rgb(109,214,120)  x=51,67,83,99  y~789-793  (4, 16px pitch)
- *   red stars    13x13  rgb(251,132,116)  x=100,116      y~737-738  (2, 16px pitch)
- *   right cluster                          x~364-390, y~438 and ~495, clipped
+ * all measured below the header rule. The cards themselves are the page
+ * colour — like every other card in this pack — so they read only through
+ * their shadows, which is why an earlier pass that hunted for a card fill
+ * found nothing and rebuilt three of them from the star positions alone.
  *
- * The rows drift about 4px over 48px, which is a tilt of roughly 5 degrees.
+ * The layer in public/patterns is lifted from the frame rather than redrawn:
+ * every pixel that differs from the page colour by more than 4 is kept at its
+ * exact value, which drops the export's layout grid and reproduces the cards,
+ * their shadows, their tilts and their stars exactly when composited back over
+ * #f2f2f2. The centre column — the magnifier and the three lines of copy —
+ * is masked out, since that is real content the page draws itself.
  *
- * MOBILE ONLY. Every position above is absolute within a 390-wide frame, and the
- * pack contains no desktop frame for this step — so rather than invent where
- * they belong on a 1440 canvas, they are drawn where the reference specifies and
- * omitted above `sm`. Purely decorative: hidden from assistive tech and
+ * MOBILE ONLY. Every coordinate above belongs to a 390-wide frame and the pack
+ * has no desktop frame for this step, so rather than invent where six clipped
+ * cards belong on a 1440 canvas they are drawn where the reference puts them
+ * and omitted above `sm`. Purely decorative: hidden from assistive tech and
  * unclickable.
  */
-
-const GREEN = "rgb(109,214,120)";
-const RED = "rgb(251,132,116)";
-
-function StarRow({ count, color }: { count: number; color: string }) {
-  return (
-    <span className="flex gap-[3px]">
-      {Array.from({ length: count }, (_, i) => (
-        <Star key={i} size={13} weight="fill" style={{ color }} />
-      ))}
-    </span>
-  );
-}
-
-function Card({
-  className,
-  rotate,
-  children,
-}: {
-  className: string;
-  rotate: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      className={`absolute rounded-[var(--radius-md)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-card)] ${className}`}
-      style={{ transform: `rotate(${rotate}deg)` }}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function ProductStepDecor() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 -z-10 hidden select-none overflow-hidden max-sm:block"
-    >
-      {/* bottom-left pair: the red row sits above the green row, both tilted */}
-      <Card className="left-[76px] top-[470px]" rotate={4}>
-        <StarRow count={2} color={RED} />
-      </Card>
-      <Card className="left-[27px] top-[522px]" rotate={5}>
-        <StarRow count={4} color={GREEN} />
-      </Card>
-      {/* right edge: deliberately runs past the viewport, as drawn */}
-      <Card className="left-[340px] top-[170px]" rotate={-6}>
-        <StarRow count={3} color={GREEN} />
-      </Card>
-    </span>
+      className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[542px] select-none bg-[length:390px_542px] bg-top bg-no-repeat max-sm:block"
+      style={{
+        // The artwork starts 260px below the header in the frame. The step's
+        // own box begins at 84 (a 72px header plus the main's 12px of top
+        // padding), so 176 from there. Same arithmetic as step 3's clouds.
+        top: "176px",
+        backgroundImage: "url(/patterns/step1-cards.png)",
+      }}
+    />
   );
 }
 
