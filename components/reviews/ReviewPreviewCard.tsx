@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ArrowFatUp, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, DotsThree, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 
 /**
  * "This is what people see first" — step 7's live preview of the review card.
@@ -98,6 +98,16 @@ export function ReviewPreviewCard({
               0 comments
             </p>
           </div>
+
+          {/* The frame's overflow affordance. Drawn, not wired: this is a
+              preview of a review that does not exist yet, so there is nothing
+              for a menu to act on. */}
+          <DotsThree
+            size={20}
+            weight="bold"
+            aria-hidden="true"
+            className="absolute right-3 top-3 text-[var(--text-muted)]"
+          />
 
           <span className="relative h-[105px] w-[105px] shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--base-gray-200)]">
             {photoUrl ? (

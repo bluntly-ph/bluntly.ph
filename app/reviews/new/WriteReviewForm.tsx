@@ -606,8 +606,9 @@ function TitleField({
  * Measured from "Reviewer Page - Step 6.png" / "6.1.png" at 390:
  *
  *   card    x16..373 (358 wide), y246..635 — 390 tall, white, 16px radius
- *   icon    52x44 at pure black, centred, top edge 100px into the card —
- *           Phosphor's Image at fill weight
+ *   icon    52x44 at pure black, centred, top edge 100px into the card.
+ *           Phosphor's Image at fill weight draws well inside its box, so
+ *           that is size 64 — at 52 it renders 42x36
  *   line 1  "Tap to upload your product photo", 15px ink-800, y409
  *   line 2  "Use your own photo of the product", 13px, y434, and light:
  *           the darkest pixel is 197 over white, so ink-800 at ~.26
@@ -684,7 +685,7 @@ function ProductPhotoCard({
         ) : (
           <span className="flex h-full flex-col items-center pt-[100px]">
             <ImageIcon
-              size={52}
+              size={64}
               weight="fill"
               aria-hidden="true"
               className="text-[var(--base-black)]"
