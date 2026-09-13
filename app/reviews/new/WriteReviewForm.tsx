@@ -27,6 +27,13 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 
 import { ComposerHeader } from "@/components/reviews/ComposerHeader";
+import {
+  MAX_TITLE,
+  blockerFor,
+  buttonLabel,
+  counterIsSatisfied,
+  counterLabel,
+} from "@/components/reviews/composer-gate-model";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
@@ -90,12 +97,6 @@ const STAR_ARC = [16, 5, 0, 5, 16] as const;
 
 /** Enforced in the API too (MAX_DISCUSSION_CHARS) — BUG-022. */
 const MAX_DISCUSSION = 5000;
-/**
- * 30, from the counter "Reviewer Page - Step 7.png" draws under the title
- * field. The API accepts 1..200, so this is a tighter client limit rather than
- * a contract change, and it only ever applies to what this form can type.
- */
-const MAX_TITLE = 30;
 
 const lines = (s: string) =>
   s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
@@ -757,7 +758,6 @@ function CrowdBand() {
   );
 }
 
-const ANTI_MIN = 30;
 
 /**
  * The frame's big write-it-here card, shared by step 1 and step 5.
@@ -797,7 +797,6 @@ function BluntlyTextarea({
   className?: string;
 }) {
   const id = useId();
-  const remaining = Math.max(0, ANTI_MIN - value.trim().length);
 
   return (
     <div className={className}>
@@ -824,10 +823,12 @@ function BluntlyTextarea({
       <p
         aria-live="polite"
         className={`mt-2 text-right ${CHIP_FACE} text-[11px] ${
-          remaining > 0 ? "text-[var(--base-gray-400)]" : "text-[var(--accent-primary)]"
+          counterIsSatisfied(value)
+            ? "text-[var(--accent-primary)]"
+            : "text-[var(--base-gray-400)]"
         }`}
       >
-        {remaining > 0 ? `${remaining} characters remaining` : satisfied}
+        {counterLabel(value, satisfied)}
       </p>
     </div>
   );
@@ -1292,32 +1293,7 @@ function StepsFlow({
    * there greyed out (BUG-001), and pros/cons is genuinely gating here rather
    * than optional-in-practice (BUG-021).
    */
-  const blocker = ((): string | null => {
-    switch (step) {
-      case 0:
-        return draft.discussion.trim().length < ANTI_MIN
-          ? "Write at least a couple of sentences about your experience."
-          : null;
-      case 1:
-        return draft.verdict ? null : "Pick a verdict.";
-      case 2:
-        return draft.rating > 0 ? null : "Give it a star rating.";
-      case 3:
-        return lines(draft.pros).length === 0 || lines(draft.cons).length === 0
-          ? "Give at least one pro and one con — both are required."
-          : null;
-      case 4:
-        return draft.anti.trim().length < ANTI_MIN
-          ? "Say who should skip this one, in a sentence or so."
-          : null;
-      case 5:
-        return draft.photoUrl ? null : "Add a photo, or skip this step.";
-      case 6:
-        return draft.title.trim() ? null : "Give your review a title.";
-      default:
-        return null;
-    }
-  })();
+  const blocker = blockerFor(step, draft);
 
   const isLast = step === STEPS.length - 1;
 
@@ -1618,7 +1594,7 @@ function StepsFlow({
             fullWidth
             className="pointer-events-auto"
           >
-            {busy ? "Submitting…" : isLast ? "Submit" : "Continue"}
+            {buttonLabel(step, STEPS.length, busy)}
             {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
           </Button>
         </div>
