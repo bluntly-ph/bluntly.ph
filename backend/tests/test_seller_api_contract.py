@@ -27,6 +27,7 @@ SELLER_ROUTES = {
     ("POST", "/api/v1/sellers/{seller_id}/claims"),
     ("GET", "/api/v1/admin/seller-claims"),
     ("POST", "/api/v1/admin/seller-claims/{claim_id}/decision"),
+    ("POST", "/api/v1/admin/seller-reviews/{review_id}/removal"),
 }
 
 
@@ -95,3 +96,14 @@ def test_only_moderators_see_and_decide_claims():
         assert "moderator" in roles, f"{key} is not moderator-guarded: {roles}"
         assert "seller" not in roles, f"{key} lets a seller decide their own claim"
         assert "user" not in roles, f"{key} lets any user decide a claim"
+
+
+def test_only_moderators_remove_a_seller_review():
+    # Seller reviews publish without the product-review gate (DEVIATIONS §37),
+    # so removal after the fact is the moderation hook. A store owner able to
+    # remove the ratings of their own store would make the summary meaningless.
+    route = _routes()[("POST", "/api/v1/admin/seller-reviews/{review_id}/removal")]
+    roles = _required_roles(route)
+    assert "moderator" in roles, f"removal is not moderator-guarded: {roles}"
+    assert "seller" not in roles
+    assert "user" not in roles

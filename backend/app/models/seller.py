@@ -45,7 +45,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
@@ -187,4 +187,21 @@ class SellerReview(UUIDPrimaryKey, Timestamps, Base):
     overall_rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     would_recommend: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
+    #: Added by 0043. The composer caps it at 30; the column allows 200.
+    title: Mapped[str | None] = mapped_column(String(200))
     comment: Mapped[str | None] = mapped_column(Text)
+    #: Public URLs from POST /reviews/photo, each checked as the reviewer's own.
+    photo_urls: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default=text("'{}'"), nullable=False
+    )
+
+    #: Moderator removal (0043). A flag rather than a delete, so the audit trail
+    #: survives and the unique constraint still blocks a straight re-post.
+    is_removed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    removed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    removal_note: Mapped[str | None] = mapped_column(Text)

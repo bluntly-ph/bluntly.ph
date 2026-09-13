@@ -21,7 +21,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import Platform, SellerClaimStatus
+from app.schemas.qa import QAAuthor
 from app.schemas.urls import web_url_or_none
+
+#: The composer draws one "Add more" tile beside the photos; four keeps a
+#: seller review a rating with evidence rather than a gallery.
+MAX_SELLER_REVIEW_PHOTOS = 4
 
 
 class SellerCreate(BaseModel):
@@ -47,6 +52,8 @@ class SellerOut(BaseModel):
     platform: Platform
     store_url: str | None = None
     claim_status: SellerClaimStatus
+    #: Visible ratings only; a removed review no longer counts.
+    review_count: int = 0
     created_at: datetime
 
 
@@ -61,7 +68,19 @@ class SellerReviewCreate(BaseModel):
     would_recommend: bool
     #: What was bought, when the reviewer says.
     product_id: uuid.UUID | None = None
+    #: The composer caps this at 30; 200 here, the same split product reviews
+    #: use, so a copy change in the composer never needs a migration.
+    title: str | None = Field(default=None, max_length=200)
     comment: str | None = Field(default=None, max_length=2000)
+    #: Public photos from POST /reviews/photo. Ownership is checked by the route.
+    photo_urls: list[str] = Field(default_factory=list, max_length=MAX_SELLER_REVIEW_PHOTOS)
+
+    # Drawn as image sources on the seller page, so the same http(s)-only rule
+    # as every other user-supplied URL applies to each one.
+    @field_validator("photo_urls")
+    @classmethod
+    def _only_web_photos(cls, value: list[str]) -> list[str]:
+        return [url for url in (web_url_or_none(v, field="Photo links") for v in value) if url]
 
 
 class SellerReviewOut(BaseModel):
@@ -70,6 +89,7 @@ class SellerReviewOut(BaseModel):
     id: uuid.UUID
     seller_id: uuid.UUID
     product_id: uuid.UUID | None = None
+    title: str | None = None
     accuracy: bool
     order_completeness: bool
     customer_service: int
@@ -77,15 +97,28 @@ class SellerReviewOut(BaseModel):
     overall_rating: int
     would_recommend: bool
     comment: str | None = None
+    photo_urls: list[str] = Field(default_factory=list)
+    #: Always false on public reads, which never return a removed review.
+    is_removed: bool = False
+    reviewer: QAAuthor | None = None
     created_at: datetime
+
+
+class SellerReviewRemoval(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+def _empty_distribution() -> dict[int, int]:
+    return {star: 0 for star in range(1, 6)}
 
 
 class SellerSummary(BaseModel):
     """The public aggregate for one store.
 
-    Every figure is nullable, and null when there is nothing to aggregate. A
-    store nobody has rated has no accuracy rate; reporting 0.0 would state that
-    none of its orders matched the listing.
+    Every rate and average is nullable, and null when there is nothing to
+    aggregate. A store nobody has rated has no accuracy rate; reporting 0.0
+    would state that none of its orders matched the listing. The star breakdown
+    is counts, not rates, so zeroes there are true.
     """
 
     review_count: int = 0
@@ -95,6 +128,8 @@ class SellerSummary(BaseModel):
     customer_service_average: float | None = None
     packaging_quality_average: float | None = None
     overall_average: float | None = None
+    #: Overall rating -> number of reviews, keys 1..5 always present.
+    rating_distribution: dict[int, int] = Field(default_factory=_empty_distribution)
 
 
 class SellerDetailOut(SellerOut):

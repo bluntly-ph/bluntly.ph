@@ -1908,6 +1908,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/seller-reviews/{review_id}/removal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a seller review from the store's page and numbers */
+        post: operations["remove_seller_review_api_v1_admin_seller_reviews__review_id__removal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4043,6 +4060,11 @@ export interface components {
             store_url?: string | null;
             claim_status: components["schemas"]["SellerClaimStatus"];
             /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -4062,6 +4084,11 @@ export interface components {
             /** Store Url */
             store_url?: string | null;
             claim_status: components["schemas"]["SellerClaimStatus"];
+            /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
             /**
              * Created At
              * Format: date-time
@@ -4084,8 +4111,12 @@ export interface components {
             would_recommend: boolean;
             /** Product Id */
             product_id?: string | null;
+            /** Title */
+            title?: string | null;
             /** Comment */
             comment?: string | null;
+            /** Photo Urls */
+            photo_urls?: string[];
         };
         /** SellerReviewOut */
         SellerReviewOut: {
@@ -4101,6 +4132,8 @@ export interface components {
             seller_id: string;
             /** Product Id */
             product_id?: string | null;
+            /** Title */
+            title?: string | null;
             /** Accuracy */
             accuracy: boolean;
             /** Order Completeness */
@@ -4115,19 +4148,33 @@ export interface components {
             would_recommend: boolean;
             /** Comment */
             comment?: string | null;
+            /** Photo Urls */
+            photo_urls?: string[];
+            /**
+             * Is Removed
+             * @default false
+             */
+            is_removed: boolean;
+            reviewer?: components["schemas"]["QAAuthor"] | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
         };
+        /** SellerReviewRemoval */
+        SellerReviewRemoval: {
+            /** Note */
+            note?: string | null;
+        };
         /**
          * SellerSummary
          * @description The public aggregate for one store.
          *
-         *     Every figure is nullable, and null when there is nothing to aggregate. A
-         *     store nobody has rated has no accuracy rate; reporting 0.0 would state that
-         *     none of its orders matched the listing.
+         *     Every rate and average is nullable, and null when there is nothing to
+         *     aggregate. A store nobody has rated has no accuracy rate; reporting 0.0
+         *     would state that none of its orders matched the listing. The star breakdown
+         *     is counts, not rates, so zeroes there are true.
          */
         SellerSummary: {
             /**
@@ -4147,6 +4194,10 @@ export interface components {
             packaging_quality_average?: number | null;
             /** Overall Average */
             overall_average?: number | null;
+            /** Rating Distribution */
+            rating_distribution?: {
+                [key: string]: number;
+            };
         };
         /**
          * SlaState
@@ -8280,6 +8331,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SellerClaimOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_seller_review_api_v1_admin_seller_reviews__review_id__removal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerReviewRemoval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewOut"];
                 };
             };
             /** @description Validation Error */

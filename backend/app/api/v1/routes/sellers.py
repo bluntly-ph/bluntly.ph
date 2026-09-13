@@ -12,6 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
+from app.core.errors import ForbiddenError
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.enums import Platform
@@ -26,6 +27,7 @@ from app.schemas.seller import (
     SellerReviewOut,
 )
 from app.services import seller_service
+from app.services.storage import review_photo_belongs_to
 
 router = APIRouter(prefix="/sellers", tags=["sellers"])
 
@@ -65,6 +67,13 @@ def get_seller(seller_id: uuid.UUID, db: Session = Depends(get_db)) -> SellerDet
 def rate_seller(seller_id: uuid.UUID, payload: SellerReviewCreate,
                 db: Session = Depends(get_db),
                 user: User = Depends(get_current_user)) -> SellerReviewOut:
+    # The same ownership rule as a product review's photo (routes/reviews.py):
+    # without it any public image URL could be passed off as this buyer's own.
+    for url in payload.photo_urls:
+        if not review_photo_belongs_to(url, user.id):
+            raise ForbiddenError(
+                "A photo must be one you uploaded through /reviews/photo.",
+                code="photo_not_owned")
     seller = seller_service.get_seller_or_404(db, seller_id)
     return seller_service.create_seller_review(db, seller, user, payload)
 

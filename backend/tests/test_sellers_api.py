@@ -177,6 +177,73 @@ def test_a_store_owner_cannot_rate_their_own_store(client):
 
 
 @requires_db
+def test_a_review_carries_its_title_and_its_reviewer(client):
+    _, token, _ = register_and_token(client)
+    seller = _create_seller(client, _auth(token), _store_name("Content"))
+    url = f"/api/v1/sellers/{seller['id']}/reviews"
+
+    resp = client.post(url, headers=_auth(token),
+                       json=_review(title="Shipped my package securely",
+                                    comment="Bubble wrap on every side."))
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["title"] == "Shipped my package securely"
+
+    listed = client.get(url).json()
+    assert listed[0]["title"] == "Shipped my package securely"
+    assert listed[0]["photo_urls"] == []
+    assert listed[0]["reviewer"] is not None
+
+
+@requires_db
+def test_a_photo_hosted_anywhere_else_is_refused(client):
+    _, token, _ = register_and_token(client)
+    seller = _create_seller(client, _auth(token), _store_name("Photo"))
+    resp = client.post(f"/api/v1/sellers/{seller['id']}/reviews", headers=_auth(token),
+                       json=_review(photo_urls=["https://example.com/not-ours.jpg"]))
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "photo_not_owned"
+
+
+@requires_db
+def test_search_reports_each_stores_visible_review_count(client):
+    _, token, _ = register_and_token(client)
+    name = _store_name("Count")
+    seller = _create_seller(client, _auth(token), name)
+    client.post(f"/api/v1/sellers/{seller['id']}/reviews", headers=_auth(token), json=_review())
+
+    found = client.get("/api/v1/sellers", params={"q": name}).json()
+    assert [s["review_count"] for s in found if s["id"] == seller["id"]] == [1]
+
+
+@requires_db
+def test_a_removed_review_leaves_the_page_and_the_numbers(client):
+    _, reviewer, _ = register_and_token(client)
+    _, moderator, _ = register_and_token(client, role="moderator")
+    seller = _create_seller(client, _auth(reviewer), _store_name("Removal"))
+    reviews_url = f"/api/v1/sellers/{seller['id']}/reviews"
+    created = client.post(reviews_url, headers=_auth(reviewer),
+                          json=_review(overall_rating=1)).json()
+    removal_url = f"/api/v1/admin/seller-reviews/{created['id']}/removal"
+
+    assert client.post(removal_url, headers=_auth(reviewer), json={}).status_code == 403
+
+    removed = client.post(removal_url, headers=_auth(moderator),
+                          json={"note": "Not about this store."})
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["is_removed"] is True
+
+    assert client.get(reviews_url).json() == []
+    detail = client.get(f"/api/v1/sellers/{seller['id']}").json()
+    assert detail["summary"]["review_count"] == 0
+    assert detail["summary"]["overall_average"] is None
+    assert detail["review_count"] == 0
+
+    again = client.post(removal_url, headers=_auth(moderator), json={})
+    assert again.status_code == 409
+    assert again.json()["code"] == "seller_review_already_removed"
+
+
+@requires_db
 def test_a_moderator_cannot_decide_their_own_claim(client):
     _, moderator, _ = register_and_token(client, role="moderator")
     seller = _create_seller(client, _auth(moderator), _store_name("SelfMod"))

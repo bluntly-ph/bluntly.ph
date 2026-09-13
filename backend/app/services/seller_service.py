@@ -9,11 +9,16 @@ Two integrity rules carry the weight here, both refusals of self-dealing in the
 same shape as `self_report` and Q&A's `cannot_pick_own_answer`:
 
 * a store's claimed owner cannot rate their own store;
-* a moderator cannot decide a claim they submitted themselves.
+* a moderator cannot decide a claim they submitted themselves, nor remove a
+  rating of a store they run or a rating they wrote.
 
 Claiming never grants ownership by itself. FR-4 limits seller verification to a
 moderator cross-checking the store name against the public listing, so a claim
 stays `pending` until a moderator decides it.
+
+Seller reviews publish without the product-review gate (DEVIATIONS §37), so
+removal after the fact is the moderation hook, and every public read — the
+review list, the summary, the review count in search — filters removed rows.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +38,7 @@ from app.models.enums import Platform, SellerClaimStatus
 from app.models.product import Product
 from app.models.seller import Seller, SellerClaim, SellerReview
 from app.models.user import User
+from app.schemas.qa import QAAuthor
 from app.schemas.seller import (
     ClaimDecision,
     SellerClaimCreate,
@@ -46,6 +52,9 @@ from app.schemas.seller import (
 )
 
 _WHITESPACE = re.compile(r"\s+")
+
+#: The one predicate every public read of seller reviews shares.
+_VISIBLE = SellerReview.is_removed.is_(False)
 
 
 def normalize_seller_name(name: str) -> str:
@@ -65,13 +74,16 @@ def summarize_reviews(reviews: Iterable[Any]) -> SellerSummary:
     """Aggregate seller reviews into the public summary.
 
     Rates are the share of positive answers; averages are the mean of the
-    graded dimensions, rounded for display. With no reviews every figure is
-    None rather than zero — see SellerSummary.
+    graded dimensions, rounded for display. With no reviews every rate and
+    average is None rather than zero — see SellerSummary.
     """
     rows = list(reviews)
     count = len(rows)
+    distribution = {star: 0 for star in range(1, 6)}
+    for row in rows:
+        distribution[row.overall_rating] += 1
     if count == 0:
-        return SellerSummary(review_count=0)
+        return SellerSummary(review_count=0, rating_distribution=distribution)
 
     def rate(attribute: str) -> float:
         return round(sum(1 for row in rows if getattr(row, attribute)) / count, 4)
@@ -87,6 +99,7 @@ def summarize_reviews(reviews: Iterable[Any]) -> SellerSummary:
         customer_service_average=mean("customer_service"),
         packaging_quality_average=mean("packaging_quality"),
         overall_average=mean("overall_rating"),
+        rating_distribution=distribution,
     )
 
 
@@ -144,7 +157,14 @@ def get_seller_or_404(db: Session, seller_id: uuid.UUID) -> Seller:
 
 def list_sellers(db: Session, *, q: str | None, platform: Platform | None,
                  limit: int) -> list[SellerOut]:
-    stmt = select(Seller)
+    counts = (
+        select(SellerReview.seller_id, func.count(SellerReview.id).label("n"))
+        .where(_VISIBLE)
+        .group_by(SellerReview.seller_id)
+        .subquery()
+    )
+    stmt = select(Seller, func.coalesce(counts.c.n, 0)).outerjoin(
+        counts, counts.c.seller_id == Seller.id)
     if platform is not None:
         stmt = stmt.where(Seller.platform == platform)
     if q:
@@ -152,21 +172,44 @@ def list_sellers(db: Session, *, q: str | None, platform: Platform | None,
         if needle:
             stmt = stmt.where(Seller.normalized_name.contains(needle, autoescape=True))
     stmt = stmt.order_by(Seller.display_name).limit(limit)
-    return [SellerOut.model_validate(s) for s in db.scalars(stmt).all()]
+    return [
+        SellerOut.model_validate(seller).model_copy(update={"review_count": n})
+        for seller, n in db.execute(stmt).all()
+    ]
 
 
 def get_seller_detail(db: Session, seller_id: uuid.UUID) -> SellerDetailOut:
     seller = get_seller_or_404(db, seller_id)
     reviews = db.scalars(
-        select(SellerReview).where(SellerReview.seller_id == seller.id)
+        select(SellerReview).where(SellerReview.seller_id == seller.id, _VISIBLE)
     ).all()
-    return SellerDetailOut(
-        **SellerOut.model_validate(seller).model_dump(),
-        summary=summarize_reviews(reviews),
-    )
+    summary = summarize_reviews(reviews)
+    data = SellerOut.model_validate(seller).model_dump()
+    data["review_count"] = summary.review_count
+    return SellerDetailOut(**data, summary=summary)
 
 
 # ---------------------------------------------------------------- reviews
+
+def _review_out(review: SellerReview, reviewer: User | None) -> SellerReviewOut:
+    return SellerReviewOut(
+        id=review.id,
+        seller_id=review.seller_id,
+        product_id=review.product_id,
+        title=review.title,
+        accuracy=review.accuracy,
+        order_completeness=review.order_completeness,
+        customer_service=review.customer_service,
+        packaging_quality=review.packaging_quality,
+        overall_rating=review.overall_rating,
+        would_recommend=review.would_recommend,
+        comment=review.comment,
+        photo_urls=list(review.photo_urls or []),
+        is_removed=bool(review.is_removed),
+        reviewer=QAAuthor.model_validate(reviewer) if reviewer is not None else None,
+        created_at=review.created_at,
+    )
+
 
 def create_seller_review(db: Session, seller: Seller, reviewer: User,
                          payload: SellerReviewCreate) -> SellerReviewOut:
@@ -189,6 +232,7 @@ def create_seller_review(db: Session, seller: Seller, reviewer: User,
         seller_id=seller.id,
         reviewer_id=reviewer.id,
         product_id=payload.product_id,
+        title=(payload.title or "").strip() or None,
         accuracy=payload.accuracy,
         order_completeness=payload.order_completeness,
         customer_service=payload.customer_service,
@@ -196,6 +240,7 @@ def create_seller_review(db: Session, seller: Seller, reviewer: User,
         overall_rating=payload.overall_rating,
         would_recommend=payload.would_recommend,
         comment=payload.comment,
+        photo_urls=list(payload.photo_urls),
     )
     db.add(review)
     try:
@@ -205,18 +250,49 @@ def create_seller_review(db: Session, seller: Seller, reviewer: User,
         db.rollback()
         raise duplicate from exc
     db.refresh(review)
-    return SellerReviewOut.model_validate(review)
+    return _review_out(review, reviewer)
 
 
 def list_seller_reviews(db: Session, seller_id: uuid.UUID, limit: int) -> list[SellerReviewOut]:
     get_seller_or_404(db, seller_id)
-    rows = db.scalars(
-        select(SellerReview)
-        .where(SellerReview.seller_id == seller_id)
+    rows = db.execute(
+        select(SellerReview, User)
+        .outerjoin(User, User.id == SellerReview.reviewer_id)
+        .where(SellerReview.seller_id == seller_id, _VISIBLE)
         .order_by(SellerReview.created_at.desc())
         .limit(limit)
     ).all()
-    return [SellerReviewOut.model_validate(r) for r in rows]
+    return [_review_out(review, reviewer) for review, reviewer in rows]
+
+
+def remove_seller_review(db: Session, review_id: uuid.UUID, moderator: User,
+                         note: str | None) -> SellerReviewOut:
+    """Take a rating off the store's page and out of its numbers.
+
+    A flag, not a delete: the row stays for the audit trail, and the unique
+    constraint keeps the same reviewer from simply posting it again.
+    """
+    review = db.get(SellerReview, review_id, with_for_update=True)
+    if review is None:
+        raise NotFoundError("Seller review not found.")
+    seller = db.get(Seller, review.seller_id)
+    if review.reviewer_id == moderator.id or (
+            seller is not None and seller.claimed_by_id == moderator.id):
+        raise AppError("You cannot moderate a rating you wrote or a store you run.",
+                       code="self_decision", status_code=422, title="Invalid decision")
+    if review.is_removed:
+        raise AppError("This seller review has already been removed.",
+                       code="seller_review_already_removed", status_code=409,
+                       title="Seller review already removed")
+
+    review.is_removed = True
+    review.removed_at = datetime.now(UTC)
+    review.removed_by_id = moderator.id
+    review.removal_note = note
+    db.commit()
+    db.refresh(review)
+    reviewer = db.get(User, review.reviewer_id) if review.reviewer_id else None
+    return _review_out(review, reviewer)
 
 
 # ----------------------------------------------------------------- claims

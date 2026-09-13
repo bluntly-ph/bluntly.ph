@@ -6251,6 +6251,64 @@
           }
         }
       }
+    },
+    "/api/v1/admin/seller-reviews/{review_id}/removal": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Remove a seller review from the store's page and numbers",
+        "operationId": "remove_seller_review_api_v1_admin_seller_reviews__review_id__removal_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerReviewRemoval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11836,6 +11894,11 @@
           "claim_status": {
             "$ref": "#/components/schemas/SellerClaimStatus"
           },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -11883,6 +11946,11 @@
           },
           "claim_status": {
             "$ref": "#/components/schemas/SellerClaimStatus"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
           },
           "created_at": {
             "type": "string",
@@ -11944,6 +12012,18 @@
             ],
             "title": "Product Id"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "comment": {
             "anyOf": [
               {
@@ -11955,6 +12035,14 @@
               }
             ],
             "title": "Comment"
+          },
+          "photo_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Photo Urls"
           }
         },
         "type": "object",
@@ -11992,6 +12080,17 @@
             ],
             "title": "Product Id"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "accuracy": {
             "type": "boolean",
             "title": "Accuracy"
@@ -12027,6 +12126,28 @@
             ],
             "title": "Comment"
           },
+          "photo_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Photo Urls"
+          },
+          "is_removed": {
+            "type": "boolean",
+            "title": "Is Removed",
+            "default": false
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QAAuthor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -12046,6 +12167,24 @@
           "created_at"
         ],
         "title": "SellerReviewOut"
+      },
+      "SellerReviewRemoval": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "SellerReviewRemoval"
       },
       "SellerSummary": {
         "properties": {
@@ -12119,11 +12258,18 @@
               }
             ],
             "title": "Overall Average"
+          },
+          "rating_distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Rating Distribution"
           }
         },
         "type": "object",
         "title": "SellerSummary",
-        "description": "The public aggregate for one store.\n\nEvery figure is nullable, and null when there is nothing to aggregate. A\nstore nobody has rated has no accuracy rate; reporting 0.0 would state that\nnone of its orders matched the listing."
+        "description": "The public aggregate for one store.\n\nEvery rate and average is nullable, and null when there is nothing to\naggregate. A store nobody has rated has no accuracy rate; reporting 0.0\nwould state that none of its orders matched the listing. The star breakdown\nis counts, not rates, so zeroes there are true."
       },
       "SlaState": {
         "type": "string",
