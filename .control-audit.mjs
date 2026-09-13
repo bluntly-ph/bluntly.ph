@@ -69,7 +69,6 @@ const check = async (name, fn) => {
 };
 
 const rowCount = () => p.evaluate(() => document.querySelectorAll("tbody tr").length);
-const firstId = () => p.evaluate(() => document.querySelector("tbody tr td")?.textContent?.trim() ?? "");
 
 // The queue tabs are links carrying a `tab=` href, not buttons, and Answers
 // is a built surface now (QaAnswersTab) rather than a placeholder admitting
