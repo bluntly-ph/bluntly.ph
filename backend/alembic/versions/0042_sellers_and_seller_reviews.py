@@ -48,13 +48,17 @@ CLAIM_STATUS = "seller_claim_status"
 
 
 def upgrade() -> None:
-    claim_status = postgresql.ENUM(
+    postgresql.ENUM(
         "unclaimed", "pending", "claimed", "rejected", name=CLAIM_STATUS
-    )
-    claim_status.create(op.get_bind(), checkfirst=True)
+    ).create(op.get_bind(), checkfirst=True)
 
-    # `platform` already exists (products, referral_links). Bind to it rather
-    # than letting SQLAlchemy try to CREATE TYPE a second time.
+    # Both enums are bound with create_type=False for the columns below. The
+    # type is created once, above; handing create_table an ENUM that still
+    # thinks it owns the type makes it emit CREATE TYPE a second time, which
+    # is `DuplicateObject: type "seller_claim_status" already exists`.
+    # `platform` has the same shape for the opposite reason — it already
+    # exists from products / referral_links.
+    claim_status = postgresql.ENUM(name=CLAIM_STATUS, create_type=False)
     platform = postgresql.ENUM(name="platform", create_type=False)
 
     op.create_table(
