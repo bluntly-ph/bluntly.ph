@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     admin_earnings,
     admin_referral,
     admin_reports,
+    admin_sellers,
     admin_users,
     ai,
     auth,
@@ -24,6 +25,7 @@ from app.api.v1.routes import (
     reading_telemetry,
     requests,
     reviews,
+    sellers,
     tokens,
     traffic_ingest,
     users,
@@ -55,3 +57,5 @@ api_v1_router.include_router(requests.router)
 api_v1_router.include_router(contracts.router)
 api_v1_router.include_router(payouts.router)
 api_v1_router.include_router(postback.router)
+api_v1_router.include_router(sellers.router)
+api_v1_router.include_router(admin_sellers.router)

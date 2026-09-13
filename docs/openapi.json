@@ -1974,7 +1974,7 @@
         "tags": [
           "admin: referral"
         ],
-        "summary": "Moderator queue: pending reviews + monetized-but-edited",
+        "summary": "Moderator queue: one policy-prioritized, filtered page",
         "operationId": "review_queue_api_v1_admin_review_queue_get",
         "security": [
           {
@@ -1982,6 +1982,98 @@
           }
         ],
         "parameters": [
+          {
+            "name": "band",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PriorityBand"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one priority band.",
+              "title": "Band"
+            },
+            "description": "Filter to one priority band."
+          },
+          {
+            "name": "lane",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PriorityLane"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one routing lane.",
+              "title": "Lane"
+            },
+            "description": "Filter to one routing lane."
+          },
+          {
+            "name": "sla",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SlaState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one SLA state.",
+              "title": "Sla"
+            },
+            "description": "Filter to one SLA state."
+          },
+          {
+            "name": "factor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to cards carrying this factor code.",
+              "title": "Factor"
+            },
+            "description": "Filter to cards carrying this factor code."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free-text match on review title/body or product.",
+              "title": "Q"
+            },
+            "description": "Free-text match on review title/body or product."
+          },
           {
             "name": "limit",
             "in": "query",
@@ -4023,6 +4115,7 @@
           "qa"
         ],
         "summary": "List questions",
+        "description": "List questions, optionally filtered by product or by free text.\n\n`q` matches the question wording or the product's name, which is what the\nQuestions tab on /search needs.",
         "operationId": "list_questions_api_v1_questions_get",
         "parameters": [
           {
@@ -4040,6 +4133,23 @@
                 }
               ],
               "title": "Product Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           },
           {
@@ -5686,6 +5796,461 @@
           }
         }
       }
+    },
+    "/api/v1/sellers": {
+      "post": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Find a store, or add it if it is new",
+        "description": "201 when the store is new, 200 when an existing one matched.\n\nMatching is by platform and normalised name, so casing and stray spaces\nreturn the existing store rather than a duplicate.",
+        "operationId": "add_seller_api_v1_sellers_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Search stores",
+        "operationId": "list_sellers_api_v1_sellers_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Platform"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SellerOut"
+                  },
+                  "title": "Response List Sellers Api V1 Sellers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}": {
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "A store with its public rating summary",
+        "operationId": "get_seller_api_v1_sellers__seller_id__get",
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}/reviews": {
+      "post": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Rate a store on FR-4's four dimensions",
+        "operationId": "rate_seller_api_v1_sellers__seller_id__reviews_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerReviewCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "A store's ratings, newest first",
+        "operationId": "list_seller_reviews_api_v1_sellers__seller_id__reviews_get",
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SellerReviewOut"
+                  },
+                  "title": "Response List Seller Reviews Api V1 Sellers  Seller Id  Reviews Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}/claims": {
+      "post": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Ask to be recognised as this store's owner",
+        "operationId": "claim_seller_api_v1_sellers__seller_id__claims_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerClaimCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerClaimOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/seller-claims": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Seller claims waiting for a decision, oldest first",
+        "operationId": "pending_claims_api_v1_admin_seller_claims_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SellerClaimOut"
+                  },
+                  "title": "Response Pending Claims Api V1 Admin Seller Claims Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/seller-claims/{claim_id}/decision": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Approve or reject a seller claim",
+        "operationId": "decide_claim_api_v1_admin_seller_claims__claim_id__decision_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "claim_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Claim Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerClaimOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5849,6 +6414,16 @@
           "urgent": {
             "type": "integer",
             "title": "Urgent"
+          },
+          "approaching_sla": {
+            "type": "integer",
+            "title": "Approaching Sla",
+            "default": 0
+          },
+          "overdue_sla": {
+            "type": "integer",
+            "title": "Overdue Sla",
+            "default": 0
           },
           "breakdown": {
             "items": {
@@ -6297,6 +6872,35 @@
           "amount"
         ],
         "title": "BuyoutOffer"
+      },
+      "ClaimDecision": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "ClaimDecision"
       },
       "CommentAuthor": {
         "properties": {
@@ -8418,6 +9022,27 @@
         "title": "PricePanelOut",
         "description": "The panel, or the reason it is not shown yet.\n\n`sufficient` is false until at least 3 INDEPENDENT observations exist\n(FR-2), and the price fields are null in that state - the UI is given the\ncounts so it can say how many more are needed, not prices to hide."
       },
+      "PriorityBand": {
+        "type": "string",
+        "enum": [
+          "high",
+          "normal",
+          "low"
+        ],
+        "title": "PriorityBand"
+      },
+      "PriorityLane": {
+        "type": "string",
+        "enum": [
+          "escalated",
+          "reported",
+          "integrity",
+          "routine",
+          "quality_audit"
+        ],
+        "title": "PriorityLane",
+        "description": "Mutually exclusive operational routing, in precedence order."
+      },
       "Problem": {
         "properties": {
           "type": {
@@ -9054,6 +9679,39 @@
         ],
         "title": "QueueAuthor"
       },
+      "QueueCounts": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "by_lane": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Lane"
+          },
+          "by_band": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Band"
+          },
+          "by_sla": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Sla"
+          }
+        },
+        "type": "object",
+        "title": "QueueCounts",
+        "description": "Totals over the filtered, ordered candidate set \u2014 computed before the\nrequested page is sliced, so the UI can show queue depth truthfully even\nwhile looking at page one."
+      },
       "QueueItem": {
         "properties": {
           "review": {
@@ -9090,6 +9748,18 @@
           "signals": {
             "$ref": "#/components/schemas/QueueSignals"
           },
+          "priority": {
+            "$ref": "#/components/schemas/QueuePriorityAssessment"
+          },
+          "queue_time_basis": {
+            "type": "string",
+            "enum": [
+              "review_created_at",
+              "review_updated_at"
+            ],
+            "title": "Queue Time Basis",
+            "default": "review_created_at"
+          },
           "suggested_sub_id": {
             "anyOf": [
               {
@@ -9105,7 +9775,8 @@
         "type": "object",
         "required": [
           "review",
-          "product"
+          "product",
+          "priority"
         ],
         "title": "QueueItem"
       },
@@ -9125,6 +9796,89 @@
           "is_monetizable"
         ],
         "title": "QueuePlatform"
+      },
+      "QueuePriorityAssessment": {
+        "properties": {
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "lane": {
+            "$ref": "#/components/schemas/PriorityLane"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "band": {
+            "$ref": "#/components/schemas/PriorityBand"
+          },
+          "sla_state": {
+            "$ref": "#/components/schemas/SlaState"
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Due At"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/QueuePriorityFactor"
+            },
+            "type": "array",
+            "title": "Factors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy_version",
+          "lane",
+          "score",
+          "band",
+          "sla_state",
+          "due_at"
+        ],
+        "title": "QueuePriorityAssessment",
+        "description": "Serialized ``PriorityAssessment`` \u2014 the moderator-visible reason a review\nsits where it does in the queue. Pure policy output: no telemetry, no PII."
+      },
+      "QueuePriorityFactor": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Observed"
+          },
+          "contribution": {
+            "type": "integer",
+            "title": "Contribution"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "observed",
+          "contribution",
+          "explanation"
+        ],
+        "title": "QueuePriorityFactor",
+        "description": "One explainable contribution to a review's integrity score."
       },
       "QueueProduct": {
         "properties": {
@@ -10465,26 +11219,34 @@
       },
       "ReviewQueueResponse": {
         "properties": {
-          "pending": {
+          "items": {
             "items": {
               "$ref": "#/components/schemas/QueueItem"
             },
             "type": "array",
-            "title": "Pending"
+            "title": "Items"
           },
-          "edited_since_monetized": {
-            "items": {
-              "$ref": "#/components/schemas/QueueItem"
-            },
-            "type": "array",
-            "title": "Edited Since Monetized"
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/QueueCounts"
           }
         },
         "type": "object",
-        "required": [
-          "pending",
-          "edited_since_monetized"
-        ],
         "title": "ReviewQueueResponse"
       },
       "ReviewUpdate": {
@@ -10913,6 +11675,464 @@
         ],
         "title": "SchedulerHealth",
         "description": "What a moderator needs to answer \"is the automation healthy?\"."
+      },
+      "SellerClaimCreate": {
+        "properties": {
+          "evidence": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "SellerClaimCreate"
+      },
+      "SellerClaimOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "seller_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Display Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SellerClaimStatus"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seller_id",
+          "status",
+          "created_at"
+        ],
+        "title": "SellerClaimOut"
+      },
+      "SellerClaimStatus": {
+        "type": "string",
+        "enum": [
+          "unclaimed",
+          "pending",
+          "claimed",
+          "rejected"
+        ],
+        "title": "SellerClaimStatus",
+        "description": "Who, if anyone, speaks for a store (FR-4).\n\n`unclaimed` is the default and the common case: most sellers are reviewed\nby buyers long before the store notices the platform exists, and FR-4\nrequires those profiles to be representable rather than waiting for a\nsignup. The rest is the moderator's decision on a claim request, kept as a\nstatus rather than a boolean so a rejection is distinguishable from never\nhaving been asked \u2014 a retry should not look like a first attempt."
+      },
+      "SellerCreate": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "store_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "platform"
+        ],
+        "title": "SellerCreate"
+      },
+      "SellerDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "store_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Url"
+          },
+          "claim_status": {
+            "$ref": "#/components/schemas/SellerClaimStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SellerSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "platform",
+          "claim_status",
+          "created_at",
+          "summary"
+        ],
+        "title": "SellerDetailOut"
+      },
+      "SellerOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "store_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Url"
+          },
+          "claim_status": {
+            "$ref": "#/components/schemas/SellerClaimStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "platform",
+          "claim_status",
+          "created_at"
+        ],
+        "title": "SellerOut"
+      },
+      "SellerReviewCreate": {
+        "properties": {
+          "accuracy": {
+            "type": "boolean",
+            "title": "Accuracy"
+          },
+          "order_completeness": {
+            "type": "boolean",
+            "title": "Order Completeness"
+          },
+          "customer_service": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Customer Service"
+          },
+          "packaging_quality": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Packaging Quality"
+          },
+          "overall_rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Overall Rating"
+          },
+          "would_recommend": {
+            "type": "boolean",
+            "title": "Would Recommend"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accuracy",
+          "order_completeness",
+          "customer_service",
+          "packaging_quality",
+          "overall_rating",
+          "would_recommend"
+        ],
+        "title": "SellerReviewCreate"
+      },
+      "SellerReviewOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "accuracy": {
+            "type": "boolean",
+            "title": "Accuracy"
+          },
+          "order_completeness": {
+            "type": "boolean",
+            "title": "Order Completeness"
+          },
+          "customer_service": {
+            "type": "integer",
+            "title": "Customer Service"
+          },
+          "packaging_quality": {
+            "type": "integer",
+            "title": "Packaging Quality"
+          },
+          "overall_rating": {
+            "type": "integer",
+            "title": "Overall Rating"
+          },
+          "would_recommend": {
+            "type": "boolean",
+            "title": "Would Recommend"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seller_id",
+          "accuracy",
+          "order_completeness",
+          "customer_service",
+          "packaging_quality",
+          "overall_rating",
+          "would_recommend",
+          "created_at"
+        ],
+        "title": "SellerReviewOut"
+      },
+      "SellerSummary": {
+        "properties": {
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
+          },
+          "accuracy_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy Rate"
+          },
+          "order_completeness_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Completeness Rate"
+          },
+          "recommend_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommend Rate"
+          },
+          "customer_service_average": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Service Average"
+          },
+          "packaging_quality_average": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Packaging Quality Average"
+          },
+          "overall_average": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Average"
+          }
+        },
+        "type": "object",
+        "title": "SellerSummary",
+        "description": "The public aggregate for one store.\n\nEvery figure is nullable, and null when there is nothing to aggregate. A\nstore nobody has rated has no accuracy rate; reporting 0.0 would state that\nnone of its orders matched the listing."
+      },
+      "SlaState": {
+        "type": "string",
+        "enum": [
+          "on_track",
+          "approaching",
+          "overdue"
+        ],
+        "title": "SlaState"
       },
       "StaffUserPage": {
         "properties": {

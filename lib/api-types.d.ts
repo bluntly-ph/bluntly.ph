@@ -575,7 +575,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Moderator queue: pending reviews + monetized-but-edited */
+        /** Moderator queue: one policy-prioritized, filtered page */
         get: operations["review_queue_api_v1_admin_review_queue_get"];
         put?: never;
         post?: never;
@@ -1319,7 +1319,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List questions */
+        /**
+         * List questions
+         * @description List questions, optionally filtered by product or by free text.
+         *
+         *     `q` matches the question wording or the product's name, which is what the
+         *     Questions tab on /search needs.
+         */
         get: operations["list_questions_api_v1_questions_get"];
         put?: never;
         /** Ask a question about a product */
@@ -1792,6 +1798,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search stores */
+        get: operations["list_sellers_api_v1_sellers_get"];
+        put?: never;
+        /**
+         * Find a store, or add it if it is new
+         * @description 201 when the store is new, 200 when an existing one matched.
+         *
+         *     Matching is by platform and normalised name, so casing and stray spaces
+         *     return the existing store rather than a duplicate.
+         */
+        post: operations["add_seller_api_v1_sellers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/{seller_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A store with its public rating summary */
+        get: operations["get_seller_api_v1_sellers__seller_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/{seller_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A store's ratings, newest first */
+        get: operations["list_seller_reviews_api_v1_sellers__seller_id__reviews_get"];
+        put?: never;
+        /** Rate a store on FR-4's four dimensions */
+        post: operations["rate_seller_api_v1_sellers__seller_id__reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/{seller_id}/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask to be recognised as this store's owner */
+        post: operations["claim_seller_api_v1_sellers__seller_id__claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seller-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Seller claims waiting for a decision, oldest first */
+        get: operations["pending_claims_api_v1_admin_seller_claims_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seller-claims/{claim_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or reject a seller claim */
+        post: operations["decide_claim_api_v1_admin_seller_claims__claim_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1859,6 +1975,16 @@ export interface components {
             honesty_fund_month: string;
             /** Urgent */
             urgent: number;
+            /**
+             * Approaching Sla
+             * @default 0
+             */
+            approaching_sla: number;
+            /**
+             * Overdue Sla
+             * @default 0
+             */
+            overdue_sla: number;
             /** Breakdown */
             breakdown: components["schemas"]["BreakdownBarOut"][];
             /** Activity */
@@ -2057,6 +2183,16 @@ export interface components {
              * @description One-time PHP wallet credit.
              */
             amount: number | string;
+        };
+        /** ClaimDecision */
+        ClaimDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Note */
+            note?: string | null;
         };
         /** CommentAuthor */
         CommentAuthor: {
@@ -2862,6 +2998,17 @@ export interface components {
             platforms?: string[];
         };
         /**
+         * PriorityBand
+         * @enum {string}
+         */
+        PriorityBand: "high" | "normal" | "low";
+        /**
+         * PriorityLane
+         * @description Mutually exclusive operational routing, in precedence order.
+         * @enum {string}
+         */
+        PriorityLane: "escalated" | "reported" | "integrity" | "routine" | "quality_audit";
+        /**
          * Problem
          * @description RFC 9457 problem document — the single error schema for the API.
          */
@@ -3104,6 +3251,31 @@ export interface components {
             /** Reputation Score */
             reputation_score: string;
         };
+        /**
+         * QueueCounts
+         * @description Totals over the filtered, ordered candidate set — computed before the
+         *     requested page is sliced, so the UI can show queue depth truthfully even
+         *     while looking at page one.
+         */
+        QueueCounts: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /** By Lane */
+            by_lane?: {
+                [key: string]: number;
+            };
+            /** By Band */
+            by_band?: {
+                [key: string]: number;
+            };
+            /** By Sla */
+            by_sla?: {
+                [key: string]: number;
+            };
+        };
         /** QueueItem */
         QueueItem: {
             review: components["schemas"]["ReviewOut"];
@@ -3116,6 +3288,13 @@ export interface components {
              */
             edited_since_monetized: boolean;
             signals?: components["schemas"]["QueueSignals"];
+            priority: components["schemas"]["QueuePriorityAssessment"];
+            /**
+             * Queue Time Basis
+             * @default review_created_at
+             * @enum {string}
+             */
+            queue_time_basis: "review_created_at" | "review_updated_at";
             /** Suggested Sub Id */
             suggested_sub_id?: string | null;
         };
@@ -3124,6 +3303,41 @@ export interface components {
             platform: components["schemas"]["Platform"];
             /** Is Monetizable */
             is_monetizable: boolean;
+        };
+        /**
+         * QueuePriorityAssessment
+         * @description Serialized ``PriorityAssessment`` — the moderator-visible reason a review
+         *     sits where it does in the queue. Pure policy output: no telemetry, no PII.
+         */
+        QueuePriorityAssessment: {
+            /** Policy Version */
+            policy_version: string;
+            lane: components["schemas"]["PriorityLane"];
+            /** Score */
+            score: number;
+            band: components["schemas"]["PriorityBand"];
+            sla_state: components["schemas"]["SlaState"];
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+            /** Factors */
+            factors?: components["schemas"]["QueuePriorityFactor"][];
+        };
+        /**
+         * QueuePriorityFactor
+         * @description One explainable contribution to a review's integrity score.
+         */
+        QueuePriorityFactor: {
+            /** Code */
+            code: string;
+            /** Observed */
+            observed: boolean | number | string;
+            /** Contribution */
+            contribution: number;
+            /** Explanation */
+            explanation: string;
         };
         /** QueueProduct */
         QueueProduct: {
@@ -3615,10 +3829,16 @@ export interface components {
         };
         /** ReviewQueueResponse */
         ReviewQueueResponse: {
-            /** Pending */
-            pending: components["schemas"]["QueueItem"][];
-            /** Edited Since Monetized */
-            edited_since_monetized: components["schemas"]["QueueItem"][];
+            /** Items */
+            items?: components["schemas"]["QueueItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            counts?: components["schemas"]["QueueCounts"];
         };
         /**
          * ReviewUpdate
@@ -3756,6 +3976,183 @@ export interface components {
             /** Never Run */
             never_run: string[];
         };
+        /** SellerClaimCreate */
+        SellerClaimCreate: {
+            /** Evidence */
+            evidence: string;
+        };
+        /** SellerClaimOut */
+        SellerClaimOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seller Id
+             * Format: uuid
+             */
+            seller_id: string;
+            /** Seller Display Name */
+            seller_display_name?: string | null;
+            status: components["schemas"]["SellerClaimStatus"];
+            /** Evidence */
+            evidence?: string | null;
+            /** Decision Note */
+            decision_note?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at?: string | null;
+        };
+        /**
+         * SellerClaimStatus
+         * @description Who, if anyone, speaks for a store (FR-4).
+         *
+         *     `unclaimed` is the default and the common case: most sellers are reviewed
+         *     by buyers long before the store notices the platform exists, and FR-4
+         *     requires those profiles to be representable rather than waiting for a
+         *     signup. The rest is the moderator's decision on a claim request, kept as a
+         *     status rather than a boolean so a rejection is distinguishable from never
+         *     having been asked — a retry should not look like a first attempt.
+         * @enum {string}
+         */
+        SellerClaimStatus: "unclaimed" | "pending" | "claimed" | "rejected";
+        /** SellerCreate */
+        SellerCreate: {
+            /** Display Name */
+            display_name: string;
+            platform: components["schemas"]["Platform"];
+            /** Store Url */
+            store_url?: string | null;
+        };
+        /** SellerDetailOut */
+        SellerDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            platform: components["schemas"]["Platform"];
+            /** Store Url */
+            store_url?: string | null;
+            claim_status: components["schemas"]["SellerClaimStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            summary: components["schemas"]["SellerSummary"];
+        };
+        /** SellerOut */
+        SellerOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            platform: components["schemas"]["Platform"];
+            /** Store Url */
+            store_url?: string | null;
+            claim_status: components["schemas"]["SellerClaimStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** SellerReviewCreate */
+        SellerReviewCreate: {
+            /** Accuracy */
+            accuracy: boolean;
+            /** Order Completeness */
+            order_completeness: boolean;
+            /** Customer Service */
+            customer_service: number;
+            /** Packaging Quality */
+            packaging_quality: number;
+            /** Overall Rating */
+            overall_rating: number;
+            /** Would Recommend */
+            would_recommend: boolean;
+            /** Product Id */
+            product_id?: string | null;
+            /** Comment */
+            comment?: string | null;
+        };
+        /** SellerReviewOut */
+        SellerReviewOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Seller Id
+             * Format: uuid
+             */
+            seller_id: string;
+            /** Product Id */
+            product_id?: string | null;
+            /** Accuracy */
+            accuracy: boolean;
+            /** Order Completeness */
+            order_completeness: boolean;
+            /** Customer Service */
+            customer_service: number;
+            /** Packaging Quality */
+            packaging_quality: number;
+            /** Overall Rating */
+            overall_rating: number;
+            /** Would Recommend */
+            would_recommend: boolean;
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * SellerSummary
+         * @description The public aggregate for one store.
+         *
+         *     Every figure is nullable, and null when there is nothing to aggregate. A
+         *     store nobody has rated has no accuracy rate; reporting 0.0 would state that
+         *     none of its orders matched the listing.
+         */
+        SellerSummary: {
+            /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
+            /** Accuracy Rate */
+            accuracy_rate?: number | null;
+            /** Order Completeness Rate */
+            order_completeness_rate?: number | null;
+            /** Recommend Rate */
+            recommend_rate?: number | null;
+            /** Customer Service Average */
+            customer_service_average?: number | null;
+            /** Packaging Quality Average */
+            packaging_quality_average?: number | null;
+            /** Overall Average */
+            overall_average?: number | null;
+        };
+        /**
+         * SlaState
+         * @enum {string}
+         */
+        SlaState: "on_track" | "approaching" | "overdue";
         /** StaffUserPage */
         StaffUserPage: {
             /** Rows */
@@ -5347,6 +5744,16 @@ export interface operations {
     review_queue_api_v1_admin_review_queue_get: {
         parameters: {
             query?: {
+                /** @description Filter to one priority band. */
+                band?: components["schemas"]["PriorityBand"] | null;
+                /** @description Filter to one routing lane. */
+                lane?: components["schemas"]["PriorityLane"] | null;
+                /** @description Filter to one SLA state. */
+                sla?: components["schemas"]["SlaState"] | null;
+                /** @description Filter to cards carrying this factor code. */
+                factor?: string | null;
+                /** @description Free-text match on review title/body or product. */
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -6596,6 +7003,7 @@ export interface operations {
         parameters: {
             query?: {
                 product_id?: string | null;
+                q?: string | null;
                 limit?: number;
             };
             header?: never;
@@ -7615,6 +8023,272 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    list_sellers_api_v1_sellers_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                platform?: components["schemas"]["Platform"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_seller_api_v1_sellers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_seller_api_v1_sellers__seller_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_seller_reviews_api_v1_sellers__seller_id__reviews_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                seller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_seller_api_v1_sellers__seller_id__reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerReviewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_seller_api_v1_sellers__seller_id__claims_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerClaimCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerClaimOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_claims_api_v1_admin_seller_claims_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerClaimOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_claim_api_v1_admin_seller_claims__claim_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerClaimOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
