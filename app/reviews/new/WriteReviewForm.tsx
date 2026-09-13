@@ -1391,12 +1391,12 @@ function StepsFlow({
       <h1
         // Orange on every step: the reference draws each heading in the accent,
         // not just the ones with their own line underneath.
-        className="text-[length:var(--text-lg)] font-[number:var(--weight-medium)] leading-[21px] text-[var(--accent-primary)]"
+        className="mt-[6px] text-[length:var(--text-lg)] font-[number:var(--weight-medium)] leading-[21px] text-[var(--accent-primary)]"
       >
         {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
       {STEP_COPY[step] ? (
-        <p className={`mt-[5px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
+        <p className={`mt-[10px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
           {STEP_COPY[step].blurb}
         </p>
       ) : null}
@@ -1487,10 +1487,15 @@ function StepsFlow({
                 of the SAME size, 45x44, at a 60px pitch, with the middle one
                 highest and the outer pair dropped 16px — 16, 5, 0, 5, 16.
 
-                "Reviewer Page - Step 3.1.png" puts the row at y316..374 below
+                A Star glyph fills about 85% of its Phosphor box: the frame's
+                middle star measures 46x44, which is size 53, and 53 + a 7px
+                gap is the 60px pitch that was measured. At size 45 with a 15px
+                gap the pitch was right and every star was 7px too small.
+
+                "Reviewer Page - Step 3.1.png" puts the row at y315..374 below
                 the header rule and its blurb's glyph top at 144, so the stars
-                sit 172px under the blurb. The live page had 42. */}
-            <div className="mt-[130px] flex items-start justify-center gap-[15px]">
+                sit 171px under the blurb. The live page had 42. */}
+            <div className="mt-[153px] flex items-start justify-center gap-[7px]">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
@@ -1502,7 +1507,7 @@ function StepsFlow({
                   style={{ marginTop: STAR_ARC[n - 1] }}
                 >
                   <Star
-                    size={45}
+                    size={53}
                     weight="fill"
                     className={
                       n <= draft.rating
