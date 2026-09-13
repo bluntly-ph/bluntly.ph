@@ -236,7 +236,10 @@ function CommentComposer({
         onChange={(e) => setBody(e.target.value)}
         autoFocus={autoFocus}
         rows={parentId ? 2 : 3}
-        placeholder={parentId ? "Write a reply…" : "Add a comment"}
+        // "Join the discussion!" is the reference's own wording for the
+        // collapsed composer (the "Group 410" export). Replies keep their own
+        // prompt — the reference only draws the top-level field.
+        placeholder={parentId ? "Write a reply…" : "Join the discussion!"}
         aria-label={parentId ? "Write a reply" : "Add a comment"}
         className="w-full resize-y rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-3 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]"
       />
