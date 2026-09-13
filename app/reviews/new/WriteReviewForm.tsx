@@ -730,6 +730,33 @@ function ProductPhotoCard({
 }
 
 /**
+ * The clouds behind step 3's stars.
+ *
+ * "Reviewer Page - Step 3.1.png" scatters outlined clouds across the whole
+ * step. An autocorrelation over the band finds no repeat — they are placed by
+ * hand, not tiled — so the layer is lifted from the frame the way the crowd
+ * tile is: alpha = (242 - value) / 210, keeping only pixels under 232 so the
+ * export's layout grid drops out, with the star row masked off. Composited
+ * back over the page colour it reproduces the frame's clouds exactly.
+ *
+ * Frame coordinates, so MOBILE ONLY, like ProductStepDecor: the artwork spans
+ * y247..702 and x15..387 of a 390-wide frame, which is 205px below the header
+ * rule. There is no desktop frame for this step to place it against.
+ */
+function RatingStepDecor() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[456px] select-none bg-[length:390px_456px] bg-top bg-no-repeat max-sm:block"
+      style={{
+        top: "-15px",
+        backgroundImage: "url(/patterns/step3-clouds.png)",
+      }}
+    />
+  );
+}
+
+/**
  * The crowd behind step 5's mascot.
  *
  * "Reviewer Page - Step 5.png" fills y238..419 edge to edge with a lattice of
@@ -1454,31 +1481,38 @@ function StepsFlow({
         ) : null}
 
         {step === 2 ? (
-          // An arc, not a flat row. Measured from the reference: five stars of
-          // the SAME size, 45x44, at a 60px pitch, with the middle one highest
-          // and the outer pair dropped 16px — 16, 5, 0, 5, 16.
-          <div className="flex items-start justify-center gap-[15px]">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => patch({ rating: n })}
-                aria-label={`${n} star${n > 1 ? "s" : ""}`}
-                aria-pressed={draft.rating === n}
-                className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
-                style={{ marginTop: STAR_ARC[n - 1] }}
-              >
-                <Star
-                  size={45}
-                  weight={n <= draft.rating ? "fill" : "fill"}
-                  className={
-                    n <= draft.rating
-                      ? "text-[var(--accent-star)]"
-                      : "text-[var(--base-gray-300)]"
-                  }
-                />
-              </button>
-            ))}
+          <div className="relative isolate">
+            <RatingStepDecor />
+            {/* An arc, not a flat row. Measured from the reference: five stars
+                of the SAME size, 45x44, at a 60px pitch, with the middle one
+                highest and the outer pair dropped 16px — 16, 5, 0, 5, 16.
+
+                "Reviewer Page - Step 3.1.png" puts the row at y316..374 below
+                the header rule and its blurb's glyph top at 144, so the stars
+                sit 172px under the blurb. The live page had 42. */}
+            <div className="mt-[130px] flex items-start justify-center gap-[15px]">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => patch({ rating: n })}
+                  aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                  aria-pressed={draft.rating === n}
+                  className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+                  style={{ marginTop: STAR_ARC[n - 1] }}
+                >
+                  <Star
+                    size={45}
+                    weight="fill"
+                    className={
+                      n <= draft.rating
+                        ? "text-[var(--accent-star)]"
+                        : "text-[var(--base-gray-300)]"
+                    }
+                  />
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 
