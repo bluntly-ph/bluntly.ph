@@ -27,6 +27,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
+import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
@@ -735,7 +736,10 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
   }
 
   return (
-    <div>
+    // `relative` so the decorative rating cards can be positioned against this
+    // step rather than the document.
+    <div className="relative">
+      <ProductStepDecor />
       <p className="text-[13px] text-[var(--text-secondary)]">Let&rsquo;s get started!</p>
       <h1 className="mt-1 text-[26px] font-bold text-[var(--accent-primary)]">
         What did you buy?
