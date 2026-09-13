@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import PureWindowsPath
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models.review import Review
@@ -286,53 +286,96 @@ def export_relationships(
     `fraud_service`'s "computed on read, bounded queries" posture.
     """
     cutoff = _cutoff(since_days, now)
-    author_ids = db.execute(
-        select(Review.author_id)
+
+    # One set-based query, not a loop over authors.
+    #
+    # This used to select every author with a review in the window and then run
+    # TWO queries per author — their recent review ids, then a vote tally. That
+    # is N+1, and it degrades with the number of authors rather than with the
+    # amount of data actually exported.
+    #
+    # It bit CI hard. The isolated-database project is cumulative and reused
+    # across runs, so by the time this ran essentially every author the suite
+    # had ever created fell inside a 90-day window: the same test went from
+    # ~330s to ~25 minutes and timed out the 150-minute gate twice. Because the
+    # database is never recreated, that curve only steepens — every run made the
+    # next one slower.
+    #
+    # The semantics are unchanged: per author, their RELATIONSHIP_WINDOW most
+    # recent published reviews inside the window, and only votes whose own
+    # created_at is inside it. `row_number()` expresses "most recent N per
+    # author" directly, so the whole export is one round trip.
+    ranked = (
+        select(
+            Review.id.label("review_id"),
+            Review.author_id.label("author_id"),
+            func.row_number()
+            .over(
+                partition_by=Review.author_id,
+                # `id` only breaks ties. The previous LIMIT left the choice to
+                # the planner when two reviews shared a timestamp; this makes
+                # the same rule deterministic.
+                order_by=(Review.published_at.desc(), Review.id.desc()),
+            )
+            .label("rn"),
+        )
         .where(
             Review.author_id.isnot(None),
             Review.published_at.isnot(None),
             Review.published_at >= cutoff,
             Review.is_removed.is_(False),
         )
-        .distinct()
-    ).scalars().all()
+        .subquery()
+    )
+    # A CTE rather than a subquery: the windowed set is referenced twice — once
+    # to join votes, once to count each author's eligible reviews — and naming it
+    # lets the planner see that they are the same set.
+    windowed = (
+        select(ranked.c.review_id, ranked.c.author_id)
+        .where(ranked.c.rn <= RELATIONSHIP_WINDOW)
+        .cte("windowed_reviews")
+    )
+    eligible = (
+        select(
+            windowed.c.author_id.label("author_id"),
+            func.count().label("eligible"),
+        )
+        .group_by(windowed.c.author_id)
+        .subquery()
+    )
+    tallies = db.execute(
+        select(
+            windowed.c.author_id,
+            ReviewVote.voter_id,
+            func.count().label("voted"),
+            eligible.c.eligible,
+        )
+        .join(
+            ReviewVote,
+            and_(
+                ReviewVote.review_id == windowed.c.review_id,
+                ReviewVote.created_at >= cutoff,
+            ),
+        )
+        .join(eligible, eligible.c.author_id == windowed.c.author_id)
+        .group_by(windowed.c.author_id, ReviewVote.voter_id, eligible.c.eligible)
+        # Stable output, so a diff of two exports is meaningful.
+        .order_by(windowed.c.author_id, ReviewVote.voter_id)
+    ).all()
 
     rows_written = 0
     with _open_output(output_path) as handle:
         writer = csv.writer(handle)
         writer.writerow(RELATIONSHIPS_HEADER)
-        for author_id in author_ids:
-            recent_ids = db.execute(
-                select(Review.id)
-                .where(
-                    Review.author_id == author_id,
-                    Review.published_at.isnot(None),
-                    Review.published_at >= cutoff,
-                    Review.is_removed.is_(False),
-                )
-                .order_by(Review.published_at.desc())
-                .limit(RELATIONSHIP_WINDOW)
-            ).scalars().all()
-            if not recent_ids:
-                continue
-            eligible = len(recent_ids)
-            tally = db.execute(
-                select(ReviewVote.voter_id, func.count().label("voted"))
-                .where(
-                    ReviewVote.review_id.in_(recent_ids),
-                    ReviewVote.created_at >= cutoff,
-                )
-                .group_by(ReviewVote.voter_id)
-            ).all()
-            for voter_id, voted in tally:
-                writer.writerow([
-                    str(author_id),
-                    str(voter_id),
-                    int(voted),
-                    eligible,
-                    round(wilson_lower_bound(float(voted), float(eligible)), 4),
-                ])
-                rows_written += 1
+        for author_id, voter_id, voted, eligible_count in tallies:
+            writer.writerow([
+                str(author_id),
+                str(voter_id),
+                int(voted),
+                int(eligible_count),
+                round(wilson_lower_bound(float(voted), float(eligible_count)), 4),
+            ])
+            rows_written += 1
     return ExportResult(rows_written=rows_written, output_path=output_path)
 
 
