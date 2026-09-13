@@ -122,11 +122,44 @@ def test_a_request_the_edge_could_not_place_is_not_recorded():
 
 @requires_db
 def test_ranking_is_descending_by_count(db):
-    svc.record(db, _geo(city="RankSmall" + _RUN), count=3)
-    svc.record(db, _geo(city="RankBig" + _RUN), count=99)
-    db.commit()
-    cities = [loc.city for loc in svc.summary(db, range_key="24h", limit=50).locations]
-    assert cities.index("RankBig" + _RUN) < cities.index("RankSmall" + _RUN)
+    """Ranked by request_count, descending.
+
+    Two things are asserted and both have to hold: that the whole returned
+    list is in descending order, and that a planted pair comes back the right
+    way round.
+
+    The planted counts are derived from the current leader rather than
+    hardcoded, because this suite runs against a cumulative database. Fixed
+    counts of 3 and 99 were enough until more than MAX_LIMIT cities had
+    accumulated above 3 requests inside a 24h window; the small one then
+    stopped appearing in the response at all, and the test failed on the
+    history of earlier runs rather than on the ordering. Seeding above the
+    current leader puts both rows at ranks 1 and 2 whatever else is in the
+    table, and the pair is deleted afterwards so this test does not itself
+    inflate the counts the next run reads.
+    """
+    big, small = "RankBig" + _RUN, "RankSmall" + _RUN
+    ranked = svc.summary(db, range_key="24h", limit=svc.MAX_LIMIT).locations
+    top = ranked[0].request_count if ranked else 0
+
+    try:
+        svc.record(db, _geo(city=small), count=top + 1)
+        svc.record(db, _geo(city=big), count=top + 2)
+        db.commit()
+
+        result = svc.summary(db, range_key="24h", limit=svc.MAX_LIMIT)
+        counts = [loc.request_count for loc in result.locations]
+        assert counts == sorted(counts, reverse=True), (
+            "the ranked list came back out of order")
+
+        cities = [loc.city for loc in result.locations]
+        assert big in cities and small in cities, (
+            "a row seeded above the leader is missing from the ranking")
+        assert cities.index(big) < cities.index(small)
+    finally:
+        db.execute(delete(RequestGeoBucket)
+                   .where(RequestGeoBucket.city.in_([big, small])))
+        db.commit()
 
 
 @requires_db
