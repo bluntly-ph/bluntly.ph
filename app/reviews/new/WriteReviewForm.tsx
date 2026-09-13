@@ -1159,11 +1159,18 @@ function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
     // background rather than behind this step's content.
     <div className="relative isolate">
       <ProductStepDecor />
-      <p className="text-[13px] text-[var(--text-secondary)]">Let&rsquo;s get started!</p>
-      <h1 className="mt-1 text-[26px] font-bold text-[var(--accent-primary)]">
+      {/* This screen's heading block is set like every other step's, which it
+          was not: "Reviewer Page - Step 1.png" puts glyph tops at 89 / 111 /
+          141, an eyebrow and a subtitle in the file's grotesque, and the
+          heading in Poppins at 24/600 — 226px wide with 2px stems, where
+          26px bold renders it 248px wide with 4px stems. */}
+      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>
+        Let&rsquo;s get started!
+      </p>
+      <h1 className="mt-[3px] text-[24px] font-semibold leading-[25px] text-[var(--accent-primary)]">
         What did you buy?
       </h1>
-      <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
+      <p className={`mt-[7px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
         Find the product. Your review will matter.
       </p>
 
