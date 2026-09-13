@@ -749,7 +749,10 @@ function RatingStepDecor() {
       aria-hidden="true"
       className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[456px] select-none bg-[length:390px_456px] bg-top bg-no-repeat max-sm:block"
       style={{
-        top: "-15px",
+        // The artwork starts 205px below the header rule in the frame. Measured
+        // on the deployed page, the layer landed 92px lower than that; the
+        // cluster tops now line up at 205 / 382 / 440 / 565 / 645 / 714.
+        top: "-107px",
         backgroundImage: "url(/patterns/step3-clouds.png)",
       }}
     />
