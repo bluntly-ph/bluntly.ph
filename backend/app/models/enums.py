@@ -267,3 +267,20 @@ class SettlementStatus(str, enum.Enum):
     earned = "earned"          # recognised, payable, not yet paid
     paid = "paid"              # included in a sent payout
     reversed = "reversed"      # recognised, then reversed by a return
+
+
+class SellerClaimStatus(str, enum.Enum):
+    """Who, if anyone, speaks for a store (FR-4).
+
+    `unclaimed` is the default and the common case: most sellers are reviewed
+    by buyers long before the store notices the platform exists, and FR-4
+    requires those profiles to be representable rather than waiting for a
+    signup. The rest is the moderator's decision on a claim request, kept as a
+    status rather than a boolean so a rejection is distinguishable from never
+    having been asked — a retry should not look like a first attempt.
+    """
+
+    unclaimed = "unclaimed"
+    pending = "pending"
+    claimed = "claimed"
+    rejected = "rejected"

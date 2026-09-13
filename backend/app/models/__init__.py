@@ -18,6 +18,7 @@ from app.models.product import PriceHistory, Product, ProductPlatform  # noqa: F
 from app.models.qa import Answer, Question  # noqa: F401
 from app.models.request_board import RequestUpvote, ReviewRequest  # noqa: F401
 from app.models.review import ReferralLink, Review, ReviewVersion  # noqa: F401
+from app.models.seller import Seller, SellerClaim, SellerReview  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.telemetry import ReviewReadingSession  # noqa: F401
 from app.models.token import TokenTransaction  # noqa: F401
@@ -38,4 +39,5 @@ __all__ = [
     "ReviewRequest", "RequestUpvote", "ReviewContract", "Payout", "EmailOtp",
     "AffiliatePostback", "ReviewComment", "ReviewCommentVote",
     "ReviewReadingSession", "ReviewFirstVoteGeoBucket",
+    "Seller", "SellerClaim", "SellerReview",
 ]
