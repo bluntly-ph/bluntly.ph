@@ -15,6 +15,7 @@ import {
   peso,
 } from "@/lib/dashboard";
 import { bpsToPercent, getTiers } from "@/lib/membership";
+import { trustLevel } from "@/lib/trust";
 
 export const metadata: Metadata = {
   title: "Earnings — bluntly",
@@ -58,7 +59,7 @@ export default async function DashboardPage({
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       {/* The approved frame carries its own nav — a back arrow and the
-          Contributor pill — so SiteHeader would be a second one stacked on top
+          trust-level pill — so SiteHeader would be a second one stacked on top
           of it. It returns from `md`, where the frame stops describing the
           layout, matching how the review page handles the same overlap. */}
       <div className="hidden md:block">
@@ -69,6 +70,7 @@ export default async function DashboardPage({
         summary={summary}
         range={range}
         displayName={me.display_name ?? me.username ?? "Your"}
+        trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       />
 
       <main className="mx-auto w-full max-w-[64rem] flex-1 px-6 py-8 lg:px-10 lg:py-10">

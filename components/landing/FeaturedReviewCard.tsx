@@ -68,12 +68,16 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
               <span className="truncate text-[14px] font-semibold text-[var(--text-primary)]">
                 {featured.username ? `@${featured.username}` : featured.author}
               </span>
-              <TrustBadge
-                levelName={featured.trust}
-                stage={featured.trustStage}
-                score={featured.trustScore}
-                plain
-              />
+              {/* Only for a real author: the offline sample has no trust level
+                  to show, and a made-up one is a decorative trust claim. */}
+              {featured.trust ? (
+                <TrustBadge
+                  levelName={featured.trust}
+                  stage={featured.trustStage}
+                  score={featured.trustScore}
+                  plain
+                />
+              ) : null}
             </div>
             <span className="block text-[12px] text-[var(--text-muted)] sm:mt-0.5">
               {featured.ageLabel}

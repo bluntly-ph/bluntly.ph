@@ -108,7 +108,8 @@ export type FeaturedData = {
   /** The reviewer's own photo, when they have one; else a hue placeholder. */
   avatarUrl: string | null;
   authorHue: number;
-  trust: string;
+  /** Null only on the offline sample, which has no real author to rate. */
+  trust: string | null;
   ageLabel: string;
   /** Trust level name and its 0..100 score, rendered together by TrustBadge. */
   trustStage: number;
@@ -243,7 +244,9 @@ const SAMPLE_FEATURED: FeaturedData = {
   username: null,
   avatarUrl: null,
   authorHue: hueOf(FEATURED_REVIEW.author),
-  trust: "Community Expert",
+  // No trust level either. This read "Community Expert" at stage 3 — a level
+  // nobody earned, and not even stage 3's name. The card draws no badge for it.
+  trust: null,
   // No score on the sample: it stands in when the backend is unreachable, and a
   // fabricated trust number is exactly the kind of thing this site exists to
   // not do. TrustBadge renders the level name alone when the score is null.

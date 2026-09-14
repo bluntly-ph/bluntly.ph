@@ -47,10 +47,13 @@ export function ReviewerDashboard({
   summary,
   range,
   displayName,
+  trustLevel,
 }: {
   summary: DashboardSummary | null;
   range: string;
   displayName: string;
+  /** The account's computed level; see DashboardScreen's `trustLevel`. */
+  trustLevel: string;
 }) {
   const rangeLabel =
     DASHBOARD_RANGES.find((r) => r.key === range)?.label ?? "This week";
@@ -59,6 +62,7 @@ export function ReviewerDashboard({
     <div className="mx-auto w-full max-w-[430px] lg:max-w-[46rem]">
       <EarningsHero
         amount={summary ? peso(summary.estimated_commission) : peso(0)}
+        trustLevel={trustLevel}
       />
       <ActionBar />
       <EstCommCard summary={summary} rangeLabel={rangeLabel} range={range} />
@@ -67,8 +71,8 @@ export function ReviewerDashboard({
   );
 }
 
-/** Orange gradient, back arrow, Contributor pill, and the headline figure. */
-function EarningsHero({ amount }: { amount: string }) {
+/** Orange gradient, back arrow, the trust-level pill, and the headline figure. */
+function EarningsHero({ amount, trustLevel }: { amount: string; trustLevel: string }) {
   return (
     // The gradient is the hero's OWN background, not an absolutely positioned
     // overlay. As an overlay it painted above the later, non-positioned card
@@ -101,7 +105,7 @@ function EarningsHero({ amount }: { amount: string }) {
               className="h-4 w-4"
             />
             <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-              Contributor
+              {trustLevel}
             </span>
           </span>
         </div>

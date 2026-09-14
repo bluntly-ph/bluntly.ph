@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { INTERESTS, REQUIRED_INTERESTS } from "@/lib/interests";
 import { prepareImageForUpload } from "@/lib/image";
+import { trustLevelName } from "@/lib/trust";
 
 const EMPTY: ProfileState = {};
 
@@ -513,8 +514,9 @@ function StepDone({
           </span>
         </div>
         <p className="mt-3 text-[13px] text-[var(--text-secondary)]">
-          Post your first verified review to become a Contributor and unlock
-          earnings.
+          {/* A first verified review makes a Verified Buyer (stage 2) — which is
+              what unlocks earning. Contributor (stage 1) is any first review. */}
+          {`Post your first verified review to become a ${trustLevelName(2)} and unlock earnings.`}
         </p>
         <div
           role="progressbar"
@@ -529,7 +531,7 @@ function StepDone({
           />
         </div>
         <p className="mt-2 text-[11px] text-[var(--text-muted)]">
-          {`${user.verifiedReviewCount} of ${target} verified review to become Contributor`}
+          {`${user.verifiedReviewCount} of ${target} verified review to become a ${trustLevelName(2)}`}
         </p>
       </div>
     </div>

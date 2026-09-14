@@ -5,6 +5,7 @@ import { CaretRight, Info } from "@phosphor-icons/react/dist/ssr";
 
 import { DashboardScreen } from "@/components/dashboard/DashboardScreen";
 import { requireOnboardedUser } from "@/lib/dal";
+import { trustLevel } from "@/lib/trust";
 import {
   EARNING_LABEL,
   EARNING_TABS,
@@ -36,13 +37,14 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireOnboardedUser();
+  const me = await requireOnboardedUser();
   const status = (await searchParams).status ?? "all";
   const history = await getEarnings(status);
 
   return (
     <DashboardScreen
       heroHeight={208}
+      trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       hero={
         <div className="px-4 pb-14 pt-2">
           {/* The frame's floating card, straddling the gradient. */}

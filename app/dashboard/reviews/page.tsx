@@ -5,6 +5,7 @@ import { ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import { DashboardScreen } from "@/components/dashboard/DashboardScreen";
 import { requireOnboardedUser } from "@/lib/dal";
+import { trustLevel } from "@/lib/trust";
 import { compactCount, getDashboardSummary, pesoWhole } from "@/lib/dashboard";
 
 export const metadata: Metadata = { title: "Your reviews — bluntly" };
@@ -29,6 +30,7 @@ export default async function DashboardReviewsPage() {
   return (
     <DashboardScreen
       heroHeight={118}
+      trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       /* The frame's hero IS the nav row: its sheet begins 86px below it, with
          nothing in between. The count used to sit here in a 150px orange band
          the design does not have, which pushed the sheet to 235. It now opens

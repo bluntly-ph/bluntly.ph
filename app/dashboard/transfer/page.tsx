@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DashboardScreen, HeroAmount } from "@/components/dashboard/DashboardScreen";
 import { PayoutAccountForm } from "@/components/dashboard/PayoutAccountForm";
 import { requireOnboardedUser } from "@/lib/dal";
+import { trustLevel } from "@/lib/trust";
 import { getDashboard, PAYOUT_MIN_PHP, peso } from "@/lib/dashboard";
 
 export const metadata: Metadata = { title: "Transfer — bluntly" };
@@ -31,6 +32,7 @@ export default async function TransferPage() {
   return (
     <DashboardScreen
       heroHeight={401}
+      trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       hero={
         <HeroAmount label="Est. Comm" amount={peso(wallet)}>
           {/* Disabled rather than hidden when under the threshold: the frame

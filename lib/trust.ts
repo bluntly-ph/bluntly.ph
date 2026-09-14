@@ -35,6 +35,29 @@ export function trustLevel(
 }
 
 /**
+ * The six level names in stage order, exactly as the database expression on
+ * `users.trust_level_name` writes them. Pinned on both sides
+ * (`tests/frontend/trust-display.test.mjs`, `backend/tests/test_trust_level_names.py`)
+ * so copy that names a level reads it from here rather than typing it — the
+ * onboarding card once promised "Contributor" for the step that makes a
+ * Verified Buyer.
+ */
+export const TRUST_LEVEL_NAMES = [
+  "Newcomer",
+  "Contributor",
+  "Verified Buyer",
+  "Established Reviewer",
+  "Trusted Reviewer",
+  "Community Expert",
+] as const;
+
+/** A stage number's level name, or null for a stage that does not exist. */
+export function trustLevelName(stage: number | null | undefined): string | null {
+  if (stage === null || stage === undefined || !Number.isInteger(stage)) return null;
+  return TRUST_LEVEL_NAMES[stage] ?? null;
+}
+
+/**
  * The spoken form, for `aria-label` and `title`.
  *
  * Sighted readers get "Verified Buyer · 62", which is compact but relies on the

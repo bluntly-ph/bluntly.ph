@@ -19,10 +19,17 @@ export function DashboardScreen({
   backHref = "/dashboard",
   hero,
   heroHeight = 402,
+  trustLevel,
   children,
 }: {
   backHref?: string;
   hero: React.ReactNode;
+  /**
+   * The account's computed level (`users.trust_level_name`). The frame's pill
+   * reads "Contributor"; drawing that text for every account would be a
+   * decorative trust level (contract §9), so the pill carries the real one.
+   */
+  trustLevel: string;
   heroHeight?: number;
   children?: React.ReactNode;
 }) {
@@ -46,7 +53,7 @@ export function DashboardScreen({
           <span className="inline-flex h-8 items-center gap-2 rounded-[var(--radius-pill)] bg-white pl-3 pr-4">
             <Image src="/icon.svg" alt="" width={16} height={16} className="h-4 w-4" />
             <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-              Contributor
+              {trustLevel}
             </span>
           </span>
         </div>

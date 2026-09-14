@@ -165,7 +165,7 @@ moderator console screen and deployment are still to come.
 | 7.5 | Probation ⇒ gate vote weight 0 | COMPLETE | — | COMPLETE | COMPLETE | PROVISIONAL | — | `users.is_on_probation` |
 | 7.6 | Strikes | COMPLETE | — | COMPLETE | COMPLETE | PROVISIONAL | — | `users.strikes` |
 | 7.7 | Best Answer count feeding Stage 4 | PARTIAL | — | — | PARTIAL | PROVISIONAL | Depends on 5.5 | — |
-| 7.8 | Frontend trust display matches computed state | PARTIAL | PARTIAL | — | MISSING | MISSING | — | contract §9 requires an audit for decorative trust levels; not yet done |
+| 7.8 | Frontend trust display matches computed state | COMPLETE | COMPLETE | — | COMPLETE | MISSING | — | **Audit done.** Every `TrustBadge` already reads the database's `trust_level_name` / `trust_stage` / `reputation_score`, so the badge could not diverge. Three decorative claims found and fixed off-production: (1) the dashboard pill on four screens read "Contributor" for every account — it now shows the account's level; (2) onboarding promised "Contributor" for a first verified review, which `determine_stage` makes a Verified Buyer (stage 2, the earning unlock); (3) the offline sample featured card claimed "Community Expert" at stage 3 — it now shows no trust badge. Level names pinned in stage order on both sides (`trust-display.test.mjs`, `test_trust_level_names`) |
 | 7.9 | `reputation_score` computation formula | BLOCKED | — | — | — | — | **PRODUCT_DECISION_REQUIRED** — PRD FR-7 marks the trust-score percentage `[AMBIGUOUS]`, no formula defined; Stage 4 "relaxed proof" and Stage 5 "highest multiplier" unquantified | PRD §4 FR-7 |
 
 ## FR-8 Fraud Deterrence (seven layers)
