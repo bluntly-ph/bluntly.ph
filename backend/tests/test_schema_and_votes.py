@@ -18,9 +18,11 @@ from app.models.enums import Verdict, VoteDirection
 from tests.conftest import requires_db
 
 # The M0 core. `seller_reviews` was here until `0024_drop_seller_reviews`
-# removed it: FR-4 was descoped by the owner, so the table is gone by decision
-# rather than by accident. The test kept asserting it for as long as it kept
-# being skipped, and failed the first time it ran against a real database.
+# removed it when FR-4 was descoped. The completion contract reinstated FR-4, and
+# 0042 brought the seller tables back in a new shape (sellers are their own
+# rows, not users), so they are asserted separately below.
+SELLER_TABLES = {"sellers", "seller_claims", "seller_reviews"}
+
 EXPECTED_TABLES = {
     "users", "badges", "user_badges", "products", "product_platforms",
     "price_history", "reviews", "questions", "answers",
@@ -35,8 +37,9 @@ def test_the_core_tables_are_present():
     missing = EXPECTED_TABLES - tables
     assert not missing, f"Missing tables: {missing}"
     assert len(EXPECTED_TABLES) == 14
-    assert "seller_reviews" not in tables, (
-        "seller_reviews is back; FR-4 was descoped and 0024 dropped it")
+    missing_seller = SELLER_TABLES - tables
+    assert not missing_seller, (
+        f"FR-4 is reinstated (0042) but seller tables are missing: {missing_seller}")
 
 
 @requires_db

@@ -26,9 +26,19 @@ SECRET = "test-scheduler-secret-not-used-anywhere-else"
 
 @pytest.fixture
 def scheduler_credential(db):
-    """A live credential row, rolled back with the fixture."""
+    """A live credential row, deleted again when the test ends.
+
+    `name` is unique and the isolated CI database is cumulative. A run that is
+    cancelled mid-test (any push cancels the one in progress) never reaches the
+    teardown below, and the row it leaves makes every later insert here a
+    UniqueViolation — 58 setup errors in run 34761871674. So a leftover is
+    cleared first; this is the test database only (BLUNTLY_TEST_ENV).
+    """
     from app.models.maintenance import CronCredential
 
+    db.query(CronCredential).filter(
+        CronCredential.name == internal_cron.CREDENTIAL_NAME).delete()
+    db.commit()
     row = CronCredential(
         name=internal_cron.CREDENTIAL_NAME,
         secret_sha256=hashlib.sha256(SECRET.encode()).hexdigest(),

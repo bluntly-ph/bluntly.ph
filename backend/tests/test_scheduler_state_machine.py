@@ -33,6 +33,11 @@ SECRET = "state-machine-secret-not-used-anywhere-else"
 
 @pytest.fixture
 def scheduler_credential(db):
+    # A cancelled run skips the teardown and leaves this uniquely-named row in
+    # the cumulative CI database; clear it first (see test_internal_cron).
+    db.query(CronCredential).filter(
+        CronCredential.name == internal_cron.CREDENTIAL_NAME).delete()
+    db.commit()
     row = CronCredential(
         name=internal_cron.CREDENTIAL_NAME,
         secret_sha256=hashlib.sha256(SECRET.encode()).hexdigest(),
