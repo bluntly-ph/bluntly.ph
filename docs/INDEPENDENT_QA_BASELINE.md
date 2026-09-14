@@ -99,7 +99,18 @@ in. Exact tool text:
 > The "plugin:figma:figma" MCP server (http at https://mcp.figma.com) is
 > installed but requires authentication.
 
-`authenticate` issued an OAuth authorization URL, handed to the owner. Until the
+**Update, same day, after the owner approved OAuth:** `whoami` (exempt from
+limits) and the page list succeeded — seat **View**, one page `0:1`. The first
+node read (`get_metadata` on `0:1`) was refused:
+
+> You've reached the Figma MCP tool call limit for your View seat on the
+> Professional plan. Upgrade your seat or plan for more tool calls.
+
+Figma allows a View seat on a Professional plan up to 6 read calls a month.
+Status: **FIGMA_SOURCE_ACCESS_BLOCKED**, not retried; unblocking needs a Dev or
+Full seat. The UI pass proceeds from the owner screenshot pack.
+
+Original note: `authenticate` issued an OAuth authorization URL, handed to the owner. Until the
 owner completes it (HUMAN_AUTH_REQUIRED) — and, if the View-seat limit still
 applies after sign-in, until a Dev or Full seat exists — the status stays
 **FIGMA_SOURCE_ACCESS_BLOCKED**. Not retried. No UI in this branch is
