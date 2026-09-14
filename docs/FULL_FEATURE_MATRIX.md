@@ -101,20 +101,22 @@ moderator console screen and deployment are still to come.
 
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| 4.1 | Seller entity / profile | COMPLETE | MISSING | — | PARTIAL | MISSING | — | `models/seller.py`, migration 0042, `GET /sellers/{id}`. Sellers are their own rows, so an unclaimed store exists before anyone signs up. DB tests run in CI; no page yet; not deployed |
-| 4.2 | Seller registration | PARTIAL | MISSING | — | PARTIAL | MISSING | — | `POST /sellers` adds a store (find-or-create, deduplicated by normalised name). A seller *account* is reached through an approved claim, not a separate signup |
-| 4.3 | Claimed / unclaimed profiles + claim workflow | COMPLETE | MISSING | PARTIAL | PARTIAL | MISSING | — | `POST /sellers/{id}/claims`; `/admin/seller-claims` queue and decision. Pending until a moderator decides; self-decision refused (422). Moderator API exists, no console screen yet |
-| 4.4 | Seller review — accuracy (binary) | COMPLETE | MISSING | — | COMPLETE | MISSING | **Verified-buyer link not representable** | `SellerReviewCreate`, `test_seller_rules`. FR-4 says seller reviews are "linked to verified transactions"; nothing links a seller to a purchase yet, so any signed-in account can rate a store |
-| 4.5 | Seller review — order completeness (binary) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | `SellerReviewCreate`, `test_seller_rules` |
-| 4.6 | Seller review — service responsiveness (1–5) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | CHECK constraint in 0042 and Field(ge=1, le=5) |
-| 4.7 | Seller review — packaging quality (1–5) | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | CHECK constraint in 0042 and Field(ge=1, le=5) |
-| 4.8 | Seller review — overall rating + would-recommend | COMPLETE | MISSING | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | `SellerReviewCreate`, `test_seller_rules` |
-| 4.9 | One seller review per (seller, reviewer) | COMPLETE | — | — | PARTIAL | MISSING | — | `uq_seller_review_once` plus a service check (409 `seller_review_exists`); the constraint wins the race. DB test runs in CI |
-| 4.10 | Seller dashboard (aggregates, trends, volume, Q&A) | MISSING | MISSING | MISSING | MISSING | MISSING | — | — |
-| 4.11 | Seller responds to seller-directed Q&A | MISSING | MISSING | MISSING | MISSING | MISSING | — | — |
-| 4.12 | Public seller rating summary | COMPLETE | MISSING | — | COMPLETE | MISSING | — | `summarize_reviews` on `GET /sellers/{id}` — null figures for an unrated store, not zeroes |
-| 4.13 | Action Menu "Rate a Seller" state | N/A | PARTIAL | — | COMPLETE | N/A | Deliberately disabled until 4.4–4.8 ship | `action-menu-model.ts`, tested as visible-and-disabled |
-| 4.14 | Seller verification by store-name cross-check | MISSING | — | PARTIAL | — | MISSING | — | The moderator decision is the check FR-4 describes; nothing yet shows the claimant's proof beside the public listing |
+| 4.1 | Seller entity / profile | COMPLETE | COMPLETE | — | PARTIAL | MISSING | — | `models/seller.py`, 0042; `/sellers/[id]` (claim status, rating card, reviews). DB tests in CI; route-table tests local; build passes. Not deployed: production needs 0042/0043 applied first |
+| 4.2 | Seller registration | COMPLETE | COMPLETE | — | PARTIAL | MISSING | — | `POST /sellers` find-or-create, deduplicated by normalised name + marketplace; "Add a seller" in `/sellers/rate`. A seller *account* is reached through an approved claim (4.3), not a separate signup |
+| 4.3 | Claimed / unclaimed profiles + claim workflow | COMPLETE | COMPLETE | COMPLETE | PARTIAL | MISSING | — | `ClaimSellerForm` on the store page; `/moderate/sellers` queue with evidence, two-step approve, reject with note. Self-decision 422, claimant 403, late claim 409 — `test_sellers_api` (CI) |
+| 4.4 | Seller review — accuracy (binary) | COMPLETE | COMPLETE | — | COMPLETE | MISSING | **Verified-buyer link not representable** | `SellerReviewCreate`, `seller-model.test.mjs`. FR-4 says seller reviews are "linked to verified transactions"; nothing links a seller to a purchase, so any onboarded account can rate a store |
+| 4.5 | Seller review — order completeness (binary) | COMPLETE | COMPLETE | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | "Exact order / Missing item" in the composer; `false` counts as an answer (tested) |
+| 4.6 | Seller review — service responsiveness (1–5) | COMPLETE | COMPLETE | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | CHECK constraint in 0042, Field(ge=1, le=5), 1–5 circles in the composer |
+| 4.7 | Seller review — packaging quality (1–5) | COMPLETE | COMPLETE | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | as 4.6 |
+| 4.8 | Seller review — overall rating + would-recommend | COMPLETE | COMPLETE | — | COMPLETE | MISSING | Verified-buyer link not representable — see 4.4 | stars + recommend cards; title (30 UI / 200 API), prose ≥15, up to 4 owned photos (0043, `photo_not_owned`) |
+| 4.9 | One seller review per (seller, reviewer) | COMPLETE | COMPLETE | — | PARTIAL | MISSING | — | `uq_seller_review_once` + 409 `seller_review_exists`, surfaced by the composer. DB test in CI |
+| 4.10 | Seller dashboard (aggregates, trends, volume, Q&A) | MISSING | MISSING | MISSING | MISSING | MISSING | — | Next: a claimed owner's view of their store's summary and review volume |
+| 4.11 | Seller responds to seller-directed Q&A | MISSING | MISSING | MISSING | MISSING | MISSING | — | Questions are product-scoped with `directed_to=seller`; no link from a question to a store yet |
+| 4.12 | Public seller rating summary | COMPLETE | COMPLETE | — | COMPLETE | MISSING | — | `summarize_reviews` + `rating_distribution`; `SellerRatingSummary` omits rates for an unrated store; `overall_average` in search |
+| 4.13 | Action Menu "Rate a Seller" state | N/A | COMPLETE | — | COMPLETE | MISSING | — | Enabled → `/sellers/rate` now that 4.4–4.8 exist; `action-menu-model.test.mjs` |
+| 4.14 | Seller verification by store-name cross-check | COMPLETE | COMPLETE | COMPLETE | PARTIAL | MISSING | — | The moderator decision is FR-4's check: `/moderate/sellers` shows the claimant's evidence beside a link to the store page, which links the public listing |
+| 4.15 | Seller Sellers tab on /search | COMPLETE | COMPLETE | — | COMPLETE | MISSING | — | `GET /sellers?q=`, `SellerResultRow`, `search-tabs.test.mjs` |
+| 4.16 | Seller review moderation (removal) | COMPLETE | COMPLETE | COMPLETE | PARTIAL | MISSING | — | Seller reviews publish without the product gate; `POST /admin/seller-reviews/{id}/removal` (0043), moderator control on the store page; removed rows leave list, summary and count (CI test) |
 
 ## FR-5 Community Q&A
 
@@ -251,6 +253,17 @@ these rails as blocked rather than simulated.
 **C-4 — Title length.** Reference pack: 30 characters. API: 1–200. Contract §27
 says keep 30 on the client and leave the API permissive. Implemented that way;
 tests should pin both so the difference stays intentional.
+
+**C-5 — Seller features: descoped, then required.** The owner descoped FR-4 on
+2026-07-28 (reaffirmed 2026-08-07) and 0024 dropped `seller_reviews`; the
+console rail, the search tabs and the action menu all said so. The completion
+contract lists seller review, claimed/unclaimed profiles, moderated claims and
+review monitoring as P1 required. Resolution taken: the later, explicit
+instruction wins. FR-4 was rebuilt in a different shape (sellers are their own
+rows, so an unclaimed store is representable; claims are moderator-approved
+only), and the tests that pinned the descope were changed to pin the
+reinstatement. Seller reviews still publish without the product gate, as
+DEVIATIONS §37 always said, with moderator removal as the check.
 
 ---
 
