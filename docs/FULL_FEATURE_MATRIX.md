@@ -53,7 +53,7 @@ last fully CI-green application SHA.
 | 1.3 | Profile management | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PROVISIONAL | — | `routes/users.py`, `app/profile`, `test_username`, `test_avatar` |
 | 1.4 | Roles + RBAC at API level | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PROVISIONAL | — | `models/enums.py` (user/seller/moderator), `test_trust_boundaries` |
 | 1.5 | Language preference en/fil/tl-x-taglish | PARTIAL | MISSING | — | MISSING | MISSING | — | enum exists on users; no UI selector, no i18n framework |
-| 1.6 | **Notifications** (generation, persistence, unread/read, mark-as-read) | MISSING | MISSING | MISSING | MISSING | MISSING | — | no `models/notification.py`, no route, no surface |
+| 1.6 | **Notifications** (generation, persistence, unread/read, mark-as-read) | COMPLETE | COMPLETE | — | PARTIAL | MISSING | — | Off-production: 0047 `notifications`; `GET /notifications`, `/unread-count`, `POST /read-all`, `/{id}/read` (another account's is 404). Written in the event's own transaction for: review published / rejected with reason / taken down, question answered (as the store when it was), best answer, store claim decided, seller review removed, price report decided. Same-site links only, excerpted bodies (`test_notification_rules`). `/notifications` page with mark-read and mark-all-read; the avatar menu shows the unread count (`notification-model.test.mjs`). DB tests in CI. No email or push delivery — in-app only |
 | 1.7 | **User-to-user messaging** | MISSING | MISSING | MISSING | MISSING | MISSING | — | no model/route/service; contract §21 |
 
 ## FR-2 Product Discovery & Consolidation
@@ -86,7 +86,7 @@ last fully CI-green application SHA.
 | 3.9 | **Receipt / order screenshot** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PENDING DEPLOY | — | `reviews.receipt_key`, `test_receipt_privacy`; restored to step 6 in `b2f1e29`. **INTENTIONAL PRODUCT DIFFERENCE** |
 | 3.10 | Price-paid capture | COMPLETE | COMPLETE | — | COMPLETE | COMPLETE | — | `reviews.price_paid`; the "Let's talk money" card. Feeds 2.4 |
 | 3.11 | Post-submission completion state | COMPLETE | COMPLETE | — | MISSING | PENDING DEPLOY | — | truthful wording landed in `468627c`; see conflict C-1 |
-| 3.12 | Rejection notifications with reason + resubmit | PARTIAL | MISSING | PARTIAL | MISSING | MISSING | Depends on 1.6 | moderation records a reason; no delivery surface |
+| 3.12 | Rejection notifications with reason + resubmit | PARTIAL | PARTIAL | COMPLETE | PARTIAL | MISSING | — | Off-production: `reject` notifies the author with the moderator's reason, linking `/dashboard/history` (1.6). PARTIAL: there is no resubmit action for a rejected review — the author writes a new one |
 | 3.13 | Draft persistence across the 7 steps | COMPLETE | COMPLETE | — | COMPLETE | COMPLETE | — | `bluntly:review-drafts:v2`; `composer-gate-model.test.mjs` |
 
 ## FR-4 Seller Reviews & Seller Accounts

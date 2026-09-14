@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import {
+  Bell,
   ChatCenteredDots,
   Compass,
   List,
@@ -20,6 +21,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 
 import { setTheme } from "@/app/actions/auth";
+import { badgeLabel } from "@/components/site/notification-model";
 
 /**
  * The navigation panel behind the header avatar.
@@ -73,6 +75,7 @@ const GROUPS: Item[][] = [
   [
     { href: "/profile", icon: UserCircle, label: "Profile" },
     { href: "/dashboard", icon: Gauge, label: "Dashboard" },
+    { href: "/notifications", icon: Bell, label: "Notifications" },
   ],
   [
     { href: "/reviews/new", icon: PencilSimpleLine, label: "Write a review" },
@@ -108,6 +111,27 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // The unread count, for a signed-in reader only. Keyed on the username rather
+  // than the `user` object, which is a new object on every server render; the
+  // count is refreshed when the account changes and on each full page load.
+  const [unread, setUnread] = useState(0);
+  const username = user?.username ?? null;
+  const signedIn = user !== null;
+  useEffect(() => {
+    if (!signedIn) return;
+    let alive = true;
+    fetch("/api/bff/api/v1/notifications/unread-count")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { count?: number } | null) => {
+        if (alive && typeof data?.count === "number") setUnread(data.count);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [signedIn, username]);
+  const badge = signedIn ? badgeLabel(unread) : null;
 
   const close = useCallback(() => {
     setOpenedOn(null);
@@ -160,7 +184,13 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         aria-haspopup="dialog"
-        aria-label={user ? "Menu and profile" : "Menu"}
+        aria-label={
+          user
+            ? badge
+              ? `Menu and profile, ${unread} unread notification${unread === 1 ? "" : "s"}`
+              : "Menu and profile"
+            : "Menu"
+        }
         className="relative grid h-10 w-10 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full bg-[var(--base-gray-200)] ring-1 ring-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
       >
         {user ? (
@@ -248,6 +278,12 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                     >
                       <Icon size={20} className="shrink-0 text-[var(--text-secondary)]" />
                       {label}
+                      {href === "/notifications" && badge ? (
+                        <span className="ml-auto rounded-full bg-[var(--accent-primary)] px-2 py-0.5 text-[11px] font-semibold text-white">
+                          {badge}
+                          <span className="sr-only"> unread</span>
+                        </span>
+                      ) : null}
                     </Link>
                   ))}
                 </div>
