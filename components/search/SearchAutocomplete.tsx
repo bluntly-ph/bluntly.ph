@@ -27,6 +27,10 @@ import { comboKeyAction } from "./search-combobox-model";
  * It stays a real `<form action="/search">`: with JavaScript unavailable, or
  * before hydration, submitting still searches. The listbox is an enhancement on
  * top of that, not a replacement for it.
+ *
+ * `tone="strong"` is the search page's own field: the frames draw its magnifier
+ * and clear glyph at 24px in the ink colour, where the compact header and
+ * landing fields use a muted 20px glyph.
  */
 
 const MIN_QUERY = 2;
@@ -39,11 +43,13 @@ export function SearchAutocomplete({
   placeholder = "Search or ask anything",
   inputClassName,
   showClear = false,
+  tone = "muted",
 }: {
   defaultValue?: string;
   placeholder?: string;
   inputClassName: string;
   showClear?: boolean;
+  tone?: "muted" | "strong";
 }) {
   const router = useRouter();
   const listId = useId();
@@ -75,6 +81,7 @@ export function SearchAutocomplete({
   const items = eligible && result.q === trimmed ? result.items : [];
   const active = highlight.q === trimmed && highlight.i < items.length ? highlight.i : -1;
   const open = !dismissed && items.length > 0;
+  const strong = tone === "strong";
 
   const setActive = (i: number) => setHighlight({ q: trimmed, i });
 
@@ -158,8 +165,12 @@ export function SearchAutocomplete({
     <div ref={rootRef} className="relative">
       <form action="/search" role="search" className="relative">
         <MagnifyingGlass
-          size={20}
-          className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+          size={strong ? 24 : 20}
+          className={
+            strong
+              ? "pointer-events-none absolute left-[18px] top-1/2 -translate-y-1/2 text-[var(--text-primary)]"
+              : "pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+          }
         />
         <input
           type="search"
@@ -195,9 +206,13 @@ export function SearchAutocomplete({
                 router.push("/search");
               }
             }}
-            className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
+            className={
+              strong
+                ? "absolute right-[5px] top-1/2 grid h-11 w-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]"
+                : "absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
+            }
           >
-            <X size={20} />
+            <X size={strong ? 24 : 20} />
           </button>
         ) : null}
       </form>

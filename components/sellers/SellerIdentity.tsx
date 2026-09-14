@@ -28,7 +28,7 @@ export function SellerAvatar({
   return (
     <span
       aria-hidden="true"
-      className={`grid shrink-0 place-items-center bg-[var(--surface-card)] ${FACE} text-[var(--text-muted)] shadow-[var(--shadow-hairline-inset)] ${
+      className={`grid shrink-0 place-items-center bg-[var(--surface-card)] ${FACE} text-[var(--text-muted)] ${
         shape === "circle" ? "rounded-full" : "rounded-[var(--radius-md)]"
       }`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.28) }}
@@ -56,10 +56,13 @@ export function ClaimStatusLine({ status }: { status: string }) {
 export function StarRow({
   value,
   size = 20,
+  gap = 2,
   className = "",
 }: {
   value: number | null;
   size?: number;
+  /** Pixels between stars. The search row's frame spaces them wider. */
+  gap?: number;
   className?: string;
 }) {
   const filled = value === null ? 0 : Math.round(value);
@@ -67,7 +70,8 @@ export function StarRow({
     <span
       role="img"
       aria-label={value === null ? "Not rated yet" : `Rated ${value} out of 5`}
-      className={`inline-flex gap-[2px] ${className}`}
+      className={`inline-flex ${className}`}
+      style={{ gap }}
     >
       {[1, 2, 3, 4, 5].map((n) => (
         <Star

@@ -1,23 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ImageSquare } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { ReviewCardData } from "@/lib/landing-data";
 import { splitHeadline } from "@/lib/reviews";
 
 /**
- * A search result, as the Page 1 frame draws it.
+ * A search result, as "Mobile Search Page for Buyers.png" draws it.
  *
  * Search is a list, not the grid the landing rail uses: an author line, the
  * split title, the stats, and a 100px square thumbnail pinned right, with a
- * full-bleed hairline between rows. The distinction is deliberate in the design
- * and worth keeping — a grid is for browsing by picture, a list is for scanning
- * results you asked for, and search is the second thing.
+ * full-bleed rule between rows. A grid is for browsing by picture, a list is
+ * for scanning results you asked for, and search is the second thing.
  *
- * The stats read "14.8k helped · 3.2k comments" rather than bare numbers beside
- * icons. On a results page the words carry the meaning; on a dense grid card
- * the icons do.
+ * Phone values measured from the frame (390 wide): rows on a 144px pitch with
+ * 20px above and 24px below the content, a 2px --base-gray-150 rule, a 24px
+ * avatar, the author at 13px, a 16/22px title — the product bold with its
+ * hyphen, the rest regular — a green up-arrow with the helpful count and the
+ * comment count at 13px, and a 100px thumbnail at radius 16.
  */
 export function ReviewListRow({
   review,
@@ -39,10 +40,10 @@ export function ReviewListRow({
   const headline = splitHeadline(review.title, review.product);
 
   return (
-    <li className="border-b border-[var(--line-hairline-10)]">
+    <li className="border-b-2 border-[var(--base-gray-150)] md:border-b md:border-[var(--line-hairline-10)]">
       <Link
         href={`/reviews/${review.id}`}
-        className="flex items-start gap-4 py-4 transition-colors hover:bg-[var(--line-hairline-10)] lg:gap-6 lg:py-5"
+        className="flex items-start gap-3 px-4 pb-6 pt-5 transition-colors hover:bg-[var(--line-hairline-10)] md:gap-4 md:px-0 md:py-4 lg:gap-6 lg:py-5"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -63,8 +64,8 @@ export function ReviewListRow({
                 {review.author.slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span className="truncate text-[12px] font-light text-[var(--text-primary)]">
-              {review.username ? `@${review.username}` : review.author}
+            <span className="truncate text-[13px] text-[var(--text-primary)]">
+              {review.username ?? review.author}
             </span>
             <TrustBadge
               levelName={review.trustLevel}
@@ -73,26 +74,31 @@ export function ReviewListRow({
               plain
               compact
             />
-            <span className="text-[12px] font-extralight text-[var(--text-muted)]">
-              · {review.ageLabel}
-            </span>
+            <span className="text-[13px] text-[var(--text-muted)]">· {review.ageLabel}</span>
           </div>
 
-          <h2 className="mt-2 text-[14px] leading-snug text-[var(--text-primary)] lg:text-[16px]">
+          <h2 className="mt-3 text-[16px] leading-[22px] text-[var(--text-primary)]">
             {headline.product ? (
               <>
-                <span className="font-bold">{headline.product}</span>
-                <span className="text-[var(--text-muted)]"> — </span>
-                <span className="italic">{headline.rest}</span>
+                <span className="font-bold">{headline.product} -</span> {headline.rest}
               </>
             ) : (
               <span className="font-bold">{review.title}</span>
             )}
           </h2>
 
-          <p className="mt-2 text-[12px] font-light text-[var(--text-secondary)]">
-            {review.upvotes} helped
-            <span className="mx-1.5 opacity-50">·</span>
+          <p className="mt-2.5 flex items-center text-[13px] text-[var(--text-primary)]">
+            <ArrowFatUp
+              size={14}
+              weight="fill"
+              aria-hidden="true"
+              className="mr-1.5 shrink-0 text-[var(--accent-success)]"
+            />
+            {review.upvotes}
+            <span className="sr-only"> found this helpful</span>
+            <span aria-hidden="true" className="mx-1.5 text-[var(--text-muted)]">
+              •
+            </span>
             {/* "1 comments" is the kind of thing that reads as machine output.
                 upvotes/comments are pre-formatted strings ("14.8k"), so the
                 singular only applies to a literal "1". */}
@@ -101,7 +107,7 @@ export function ReviewListRow({
         </div>
 
         {/* 100px square, radius 16, pinned right. */}
-        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] lg:h-[120px] lg:w-[120px]">
+        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] bg-[var(--surface-card)] lg:h-[120px] lg:w-[120px]">
           {review.imageUrl ? (
             /* `sizes` is a WIDTH, but this box is cropped with object-cover:
                a 1200x630 source scaled to the box width has only ~62px of

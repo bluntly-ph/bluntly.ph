@@ -66,7 +66,9 @@ export default async function SearchPage({
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={user} />
+      {/* The search frames draw the wordmark and avatar only: this page is the
+          search, so the phone header's search icon would lead back to itself. */}
+      <SiteHeader user={user} showSearch={false} />
       {/* `flex flex-col` so the empty state below can claim the leftover height.
           Without it a no-results page leaves a tall blank band and the footer
           reads as having "ridden up" into the middle of the screen (BUG-005). */}
@@ -74,8 +76,9 @@ export default async function SearchPage({
           not scanned by picture: at full width the title sat hard left and its
           thumbnail was stranded ~600px away at the right edge, and nothing tied
           the two together. Narrowing the column is what stops this reading as a
-          phone layout stretched to fill a monitor. */}
-      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-6 py-8 lg:py-10">
+          phone layout stretched to fill a monitor.
+          Phone: the frames' 16px gutter, and rows that run edge to edge. */}
+      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-4 pb-8 pt-[19px] md:px-6 md:py-8 lg:py-10">
         {fromCategories ? (
           <Link
             href="/categories"
@@ -92,7 +95,8 @@ export default async function SearchPage({
             defaultValue={q}
             placeholder="Search products, reviews, or ask a question"
             showClear
-            inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-12 pr-12 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
+            tone="strong"
+            inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[52px] pr-12 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
           />
         </div>
 
@@ -109,7 +113,7 @@ export default async function SearchPage({
         {/* Categories narrow reviews. They have no meaning for questions, so
             the row is not rendered on that tab rather than shown inert. */}
         {activeTab === "reviews" ? (
-        <div className="-mx-6 mt-5 overflow-x-auto px-6 [scrollbar-width:none] lg:mx-0 lg:overflow-x-visible lg:px-0">
+        <div className="-mx-4 mt-5 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 lg:mx-0 lg:overflow-x-visible lg:px-0">
           <ul className="flex w-max gap-2 lg:w-auto lg:flex-wrap lg:gap-y-2.5">
             <li>
               <Link
@@ -133,7 +137,9 @@ export default async function SearchPage({
         </div>
         ) : null}
 
-        <h1 className="mt-8 text-[20px] font-bold text-[var(--text-primary)]">
+        {/* The phone frames go straight from the tabs to the results, so the
+            heading is kept for screen readers and hidden below `md`. */}
+        <h1 className="mt-8 text-[20px] font-bold text-[var(--text-primary)] max-md:sr-only">
           {heading}
         </h1>
 
@@ -141,7 +147,7 @@ export default async function SearchPage({
           sellers === null ? (
             <Unavailable what="sellers" />
           ) : sellers.length > 0 ? (
-            <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
+            <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
               {sellers.map((seller) => (
                 <SellerResultRow key={seller.id} seller={seller} />
               ))}
@@ -161,7 +167,7 @@ export default async function SearchPage({
           questions === null ? (
             <Unavailable what="questions" />
           ) : questions.length > 0 ? (
-            <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
+            <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
               {questions.map((question) => (
                 <QuestionResultRow key={question.id} question={question} />
               ))}
@@ -182,7 +188,7 @@ export default async function SearchPage({
         ) : results.length > 0 ? (
           // A list, not a grid — see ReviewListRow. Each row's title is an h2,
           // following the page h1 directly with no section heading between.
-          <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
+          <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
             {results.map((r, i) => (
               <ReviewListRow key={r.id} review={r} priority={i === 0} />
             ))}

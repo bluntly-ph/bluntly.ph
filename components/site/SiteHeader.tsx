@@ -15,10 +15,16 @@ export type HeaderUser = {
  * avatar or a log-in affordance. Mobile is the frame (wordmark + search icon +
  * avatar); at `lg` it widens into a real top bar with an inline search field and
  * a "Write a review" call to action.
+ *
+ * `showSearch={false}` drops the phone's search icon. The search page passes it:
+ * its frames draw the wordmark and avatar only, because the page itself is the
+ * search.
  */
-export function SiteHeader({ user }: { user: HeaderUser }) {
+export function SiteHeader({ user, showSearch = true }: { user: HeaderUser; showSearch?: boolean }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface-app)_85%,transparent)] backdrop-blur-md">
+    // No rule under the phone header: neither the landing nor the search frames
+    // draw one. Tablet and desktop keep it.
+    <header className="sticky top-0 z-30 border-b border-transparent bg-[color-mix(in_srgb,var(--surface-app)_85%,transparent)] backdrop-blur-md md:border-[var(--border-subtle)]">
       <div className="mx-auto flex h-16 w-full max-w-[72rem] items-center gap-4 px-6 md:h-[72px] md:px-10">
         <Link href="/" aria-label="bluntly home" className="text-[var(--accent-primary)]">
           <Logo height={22} label="bluntly" />
@@ -32,13 +38,15 @@ export function SiteHeader({ user }: { user: HeaderUser }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2 md:gap-3">
-          <Link
-            href="/search"
-            aria-label="Search"
-            className="grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] md:hidden"
-          >
-            <MagnifyingGlass size={24} />
-          </Link>
+          {showSearch ? (
+            <Link
+              href="/search"
+              aria-label="Search"
+              className="grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] md:hidden"
+            >
+              <MagnifyingGlass size={24} />
+            </Link>
+          ) : null}
 
           {/* First in the row: for a reader who is already sold, browsing is
               the thing they came to do. `/` stays the landing page. */}
