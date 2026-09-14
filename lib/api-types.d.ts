@@ -1321,14 +1321,15 @@ export interface paths {
         };
         /**
          * List questions
-         * @description List questions, optionally filtered by product or by free text.
+         * @description List questions, optionally filtered by product, by store, or by free text.
          *
-         *     `q` matches the question wording or the product's name, which is what the
-         *     Questions tab on /search needs.
+         *     `q` matches the question wording, the product's name or the store's name,
+         *     which is what the Questions tab on /search needs. `seller_id` is the store
+         *     page's Questions section.
          */
         get: operations["list_questions_api_v1_questions_get"];
         put?: never;
-        /** Ask a question about a product */
+        /** Ask a question about a product or a store */
         post: operations["ask_question_api_v1_questions_post"];
         delete?: never;
         options?: never;
@@ -2118,6 +2119,13 @@ export interface components {
              */
             created_at: string;
             responder?: components["schemas"]["QAAuthor"] | null;
+            /**
+             * Is Seller Answer
+             * @default false
+             */
+            is_seller_answer: boolean;
+            /** Seller Name */
+            seller_name?: string | null;
         };
         /** AssignTierRequest */
         AssignTierRequest: {
@@ -3273,17 +3281,18 @@ export interface components {
              */
             reputation_score: string;
         };
-        /** QuestionCreate */
+        /**
+         * QuestionCreate
+         * @description A question about exactly one subject: a product, or a store (0045).
+         */
         QuestionCreate: {
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
+            /** Product Id */
+            product_id?: string | null;
+            /** Seller Id */
+            seller_id?: string | null;
             /** Body */
             body: string;
-            /** @default buyers */
-            directed_to: components["schemas"]["QuestionDirectedTo"];
+            directed_to?: components["schemas"]["QuestionDirectedTo"] | null;
         };
         /** QuestionDetailOut */
         QuestionDetailOut: {
@@ -3294,13 +3303,14 @@ export interface components {
             id: string;
             /** Question Id */
             question_id?: string | null;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
+            /** Product Id */
+            product_id?: string | null;
             /** Product Name */
             product_name?: string | null;
+            /** Seller Id */
+            seller_id?: string | null;
+            /** Seller Name */
+            seller_name?: string | null;
             /** Body */
             body: string;
             directed_to: components["schemas"]["QuestionDirectedTo"];
@@ -3337,13 +3347,14 @@ export interface components {
             id: string;
             /** Question Id */
             question_id?: string | null;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
+            /** Product Id */
+            product_id?: string | null;
             /** Product Name */
             product_name?: string | null;
+            /** Seller Id */
+            seller_id?: string | null;
+            /** Seller Name */
+            seller_name?: string | null;
             /** Body */
             body: string;
             directed_to: components["schemas"]["QuestionDirectedTo"];
@@ -7166,6 +7177,7 @@ export interface operations {
         parameters: {
             query?: {
                 product_id?: string | null;
+                seller_id?: string | null;
                 q?: string | null;
                 limit?: number;
             };

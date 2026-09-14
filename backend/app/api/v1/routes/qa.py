@@ -1,4 +1,4 @@
-"""Community Q&A routes (FR-5) — product-scoped questions, answers, Best Answer."""
+"""Community Q&A routes (FR-5, FR-4): product or store questions, answers, Best Answer."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/questions", tags=["qa"])
 
 
 @router.post("", response_model=QuestionOut, status_code=201,
-             summary="Ask a question about a product")
+             summary="Ask a question about a product or a store")
 def ask_question(payload: QuestionCreate, db: Session = Depends(get_db),
                  user: User = Depends(get_current_user)) -> QuestionOut:
     return qa_service.create_question(db, user.id, payload)
@@ -32,15 +32,17 @@ def ask_question(payload: QuestionCreate, db: Session = Depends(get_db),
 @router.get("", response_model=list[QuestionOut], summary="List questions")
 def list_questions(db: Session = Depends(get_db),
                    product_id: uuid.UUID | None = None,
+                   seller_id: uuid.UUID | None = None,
                    q: str | None = Query(None, max_length=200),
                    limit: int = Query(30, ge=1, le=100)) -> list[QuestionOut]:
-    """List questions, optionally filtered by product or by free text.
+    """List questions, optionally filtered by product, by store, or by free text.
 
-    `q` matches the question wording or the product's name, which is what the
-    Questions tab on /search needs.
+    `q` matches the question wording, the product's name or the store's name,
+    which is what the Questions tab on /search needs. `seller_id` is the store
+    page's Questions section.
     """
     return qa_service.list_questions(
-        db, product_id=product_id, q=q, limit=min(limit, 100),
+        db, product_id=product_id, seller_id=seller_id, q=q, limit=min(limit, 100),
     )
 
 

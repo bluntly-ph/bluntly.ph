@@ -36,6 +36,8 @@ export type QaAnswer = {
 export type QaQuestion = {
   id: string;
   product_name: string | null;
+  /** Set instead of a product for a question asked of a store (0045). */
+  seller_name?: string | null;
   body: string;
   answer_count: number;
   created_at: string;
@@ -164,6 +166,7 @@ export function questionRows<T extends QaQuestion>(rows: T[], query: string): T[
     (q) =>
       q.body.toLowerCase().includes(needle) ||
       (q.product_name ?? "").toLowerCase().includes(needle) ||
+      (q.seller_name ?? "").toLowerCase().includes(needle) ||
       (q.asker?.display_name ?? "").toLowerCase().includes(needle) ||
       (q.asker?.username ?? "").toLowerCase().includes(needle),
   );

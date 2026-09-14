@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowSquareOut, Info } from "@phosphor-icons/react/dist/ssr";
 
+import { AskSellerQuestionForm } from "@/components/sellers/AskSellerQuestionForm";
 import { ClaimSellerForm } from "@/components/sellers/ClaimSellerForm";
 import { ClaimStatusLine, SellerAvatar } from "@/components/sellers/SellerIdentity";
 import { SellerRatingSummary } from "@/components/sellers/SellerRatingSummary";
@@ -12,6 +13,7 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Unavailable } from "@/components/site/Unavailable";
 import { getUser } from "@/lib/dal";
+import { getQuestions } from "@/lib/qa";
 import { getSeller, getSellerReviews } from "@/lib/sellers";
 
 export const metadata: Metadata = {
@@ -23,16 +25,17 @@ export const metadata: Metadata = {
  *
  * NOT RENDERED, because this product holds no data for them: the store banner
  * and logo, "Responded to N negative reviews", Company Details and Contact
- * Information, "Ask a question" and the seller Questions tab (questions are
- * product-scoped and not linked to stores), and the review filters. Each is a
- * block of invented store content if drawn now.
+ * Information, and the review filters. Each is a block of invented store
+ * content if drawn now. Questions to the store are drawn (migration 0045), as a
+ * list linking to each question rather than the frame's inline replies.
  */
 export default async function SellerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   // Parallel: the store, its reviews and the viewer are independent.
-  const [seller, reviews, me] = await Promise.all([
+  const [seller, reviews, questions, me] = await Promise.all([
     getSeller(id),
     getSellerReviews(id),
+    getQuestions(undefined, { sellerId: id, limit: 20 }),
     getUser().catch(() => null),
   ]);
   if (!seller) notFound();
@@ -68,6 +71,12 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           >
             Rate this seller
           </Link>
+          <a
+            href="#questions"
+            className={`${pill} border-[var(--base-gray-600)] text-[var(--text-primary)] hover:border-[var(--accent-primary)]`}
+          >
+            Ask a question
+          </a>
           {seller.store_url ? (
             <a
               href={seller.store_url}
@@ -107,6 +116,35 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
             ))}
           </ul>
         )}
+
+        <section id="questions" className="mt-12 scroll-mt-24">
+          <h2 className="text-[18px] font-semibold text-[var(--text-primary)]">Questions</h2>
+          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+            {seller.claim_status === "claimed"
+              ? "Ask the store directly. Its replies carry the Claimed Profile mark."
+              : "Nobody has claimed this store yet, so other buyers are the ones who can answer."}
+          </p>
+          <AskSellerQuestionForm sellerId={seller.id} signedIn={Boolean(me)} />
+          {questions === null ? (
+            <Unavailable what="questions" />
+          ) : questions.length === 0 ? (
+            <p className="mt-4 text-[14px] text-[var(--text-secondary)]">No questions yet.</p>
+          ) : (
+            <ul className="mt-4 border-t border-[var(--line-hairline-10)]">
+              {questions.map((q) => (
+                <li key={q.id} className="border-b border-[var(--line-hairline-10)]">
+                  <Link href={`/questions/${q.id}`} className="block py-4 no-underline">
+                    <p className="text-[15px] font-semibold text-[var(--text-primary)]">{q.body}</p>
+                    <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                      {q.answer_count} {q.answer_count === 1 ? "answer" : "answers"}
+                      {q.asker?.username ? ` · asked by ${q.asker.username}` : ""}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {seller.claim_status !== "claimed" ? (
           <section className="mt-12 border-t border-[var(--line-hairline-10)] pt-8">

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChatCircle, PlusCircle, SealCheck } from "@phosphor-icons/react/dist/ssr";
 
+import { questionSubject } from "@/components/qa/question-subject-model";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
@@ -62,8 +63,10 @@ export default async function QuestionsPage() {
                     {q.body}
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--text-muted)]">
-                    {q.product_name ? (
-                      <span className="text-[var(--text-secondary)]">{q.product_name}</span>
+                    {q.product_name || q.seller_id ? (
+                      <span className="text-[var(--text-secondary)]">
+                        {questionSubject(q).label}
+                      </span>
                     ) : null}
                     <span className="inline-flex items-center gap-1">
                       <ChatCircle size={13} /> {q.answer_count} answer

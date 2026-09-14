@@ -4070,7 +4070,7 @@
         "tags": [
           "qa"
         ],
-        "summary": "Ask a question about a product",
+        "summary": "Ask a question about a product or a store",
         "operationId": "ask_question_api_v1_questions_post",
         "security": [
           {
@@ -4115,7 +4115,7 @@
           "qa"
         ],
         "summary": "List questions",
-        "description": "List questions, optionally filtered by product or by free text.\n\n`q` matches the question wording or the product's name, which is what the\nQuestions tab on /search needs.",
+        "description": "List questions, optionally filtered by product, by store, or by free text.\n\n`q` matches the question wording, the product's name or the store's name,\nwhich is what the Questions tab on /search needs. `seller_id` is the store\npage's Questions section.",
         "operationId": "list_questions_api_v1_questions_get",
         "parameters": [
           {
@@ -4133,6 +4133,23 @@
                 }
               ],
               "title": "Product Id"
+            }
+          },
+          {
+            "name": "seller_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seller Id"
             }
           },
           {
@@ -6786,6 +6803,22 @@
                 "type": "null"
               }
             ]
+          },
+          "is_seller_answer": {
+            "type": "boolean",
+            "title": "Is Seller Answer",
+            "default": false
+          },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Name"
           }
         },
         "type": "object",
@@ -9780,9 +9813,28 @@
       "QuestionCreate": {
         "properties": {
           "product_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Product Id"
+          },
+          "seller_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Id"
           },
           "body": {
             "type": "string",
@@ -9791,16 +9843,22 @@
             "title": "Body"
           },
           "directed_to": {
-            "$ref": "#/components/schemas/QuestionDirectedTo",
-            "default": "buyers"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestionDirectedTo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
-          "product_id",
           "body"
         ],
-        "title": "QuestionCreate"
+        "title": "QuestionCreate",
+        "description": "A question about exactly one subject: a product, or a store (0045)."
       },
       "QuestionDetailOut": {
         "properties": {
@@ -9821,8 +9879,15 @@
             "title": "Question Id"
           },
           "product_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Product Id"
           },
           "product_name": {
@@ -9835,6 +9900,29 @@
               }
             ],
             "title": "Product Name"
+          },
+          "seller_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Id"
+          },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Name"
           },
           "body": {
             "type": "string",
@@ -9887,7 +9975,6 @@
         "type": "object",
         "required": [
           "id",
-          "product_id",
           "body",
           "directed_to",
           "created_at"
@@ -9921,8 +10008,15 @@
             "title": "Question Id"
           },
           "product_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Product Id"
           },
           "product_name": {
@@ -9935,6 +10029,29 @@
               }
             ],
             "title": "Product Name"
+          },
+          "seller_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Id"
+          },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Name"
           },
           "body": {
             "type": "string",
@@ -9979,7 +10096,6 @@
         "type": "object",
         "required": [
           "id",
-          "product_id",
           "body",
           "directed_to",
           "created_at"

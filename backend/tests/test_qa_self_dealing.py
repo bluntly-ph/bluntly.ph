@@ -34,12 +34,18 @@ def source_of(fn) -> str:
 class TestTheFirstResponderBadge:
 
     def test_create_answer_excludes_the_asker(self):
+        # The rule moved into `first_responder_eligible` (seller Q&A, 0045),
+        # which `test_seller_questions_rules.TestFirstResponder` exercises
+        # directly. This keeps both halves pinned: create_answer still decides
+        # with it and still passes whether the responder is the asker.
         src = source_of(qa_service.create_answer)
         assert "answering_own" in src, (
             "create_answer no longer distinguishes the asker, so asking and "
             "immediately answering awards the first-responder badge")
-        assert re.search(r"is_first\s*=.*not answering_own", src), (
-            "is_first no longer excludes the asker")
+        assert re.search(r"is_first\s*=\s*first_responder_eligible\(", src), (
+            "is_first is no longer decided by the tested rule")
+        assert "not answering_own" in source_of(qa_service.first_responder_eligible), (
+            "first_responder_eligible no longer excludes the asker")
 
     def test_the_comparison_is_against_the_asker(self):
         src = source_of(qa_service.create_answer)

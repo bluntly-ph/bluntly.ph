@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { AnswerForm } from "@/components/qa/AnswerForm";
 import { BestAnswerButton } from "@/components/qa/BestAnswerButton";
+import { answerByline, questionSubject } from "@/components/qa/question-subject-model";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { TrustBadge } from "@/components/ui/TrustBadge";
@@ -27,6 +28,7 @@ export default async function QuestionPage({
     getUser().catch(() => null),
   ]);
   if (!question) notFound();
+  const subject = questionSubject(question);
 
   let user: HeaderUser = null;
   let isAsker = false;
@@ -49,7 +51,14 @@ export default async function QuestionPage({
         </Link>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
-          {question.product_name ? (
+          {subject.href ? (
+            <Link
+              href={subject.href}
+              className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-2.5 py-1 text-[var(--text-secondary)] no-underline shadow-[var(--shadow-hairline-inset)] hover:text-[var(--accent-primary)]"
+            >
+              {subject.label}
+            </Link>
+          ) : question.product_name ? (
             <span className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-2.5 py-1 text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
               {question.product_name}
             </span>
@@ -82,9 +91,13 @@ export default async function QuestionPage({
             >
               <div className="flex flex-wrap items-center gap-2 text-[12px]">
                 <span className="font-semibold text-[var(--text-primary)]">
-                  {a.responder?.display_name ?? a.responder?.username ?? "someone"}
+                  {answerByline(a).name}
                 </span>
-                {a.responder ? (
+                {answerByline(a).seller ? (
+                  <span className="inline-flex items-center gap-1 text-[var(--text-muted)]">
+                    <SealCheck size={12} aria-hidden="true" /> Claimed Profile
+                  </span>
+                ) : a.responder ? (
                   <TrustBadge
                     levelName={a.responder.trust_level_name}
                     stage={a.responder.trust_stage}

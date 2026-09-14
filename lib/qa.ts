@@ -17,6 +17,10 @@ export type Answer = {
   body: string;
   is_best_answer: boolean;
   is_first_responder: boolean;
+  /** Written by the store's claimed owner, on a store question. */
+  is_seller_answer: boolean;
+  /** The store's name, set only on a seller answer. */
+  seller_name: string | null;
   helpful_votes: number;
   created_at: string;
   responder: QAAuthor | null;
@@ -24,8 +28,11 @@ export type Answer = {
 
 export type Question = {
   id: string;
-  product_id: string;
+  /** Null for a question asked of a store (0045). */
+  product_id: string | null;
   product_name: string | null;
+  seller_id: string | null;
+  seller_name: string | null;
   body: string;
   directed_to: "buyers" | "seller";
   best_answer_id: string | null;
@@ -39,11 +46,12 @@ export type QuestionDetail = Question & { answers: Answer[] };
 /** Open community questions. Public — no token needed. */
 export async function getQuestions(
   productId?: string,
-  options: { q?: string; limit?: number } = {},
+  options: { q?: string; limit?: number; sellerId?: string } = {},
 ): Promise<Question[] | null> {
   try {
     const params = new URLSearchParams({ limit: String(options.limit ?? 30) });
     if (productId) params.set("product_id", productId);
+    if (options.sellerId) params.set("seller_id", options.sellerId);
     // Free text, for the Questions tab on /search. The API matches the question
     // wording and the product name; a blank string is not a query, so it is
     // omitted rather than sent as an empty filter.

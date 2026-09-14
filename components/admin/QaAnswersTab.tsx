@@ -120,7 +120,7 @@ export function QaAnswersTab({
                     }`}
                   >
                     <span className="block text-[10px] font-bold text-[var(--text-primary)]">
-                      {q.product_name ?? "Unlisted product"}
+                      {q.product_name ?? q.seller_name ?? "Unlisted product"}
                     </span>
                     <span className="mt-0.5 block line-clamp-2 text-[12px] text-[var(--text-primary)]">
                       {q.body}
@@ -233,7 +233,7 @@ function QuestionDetail({
 
       <div>
         <p className="text-[10px] font-bold text-[var(--text-primary)]">
-          {detail.product_name ?? "Unlisted product"}
+          {detail.product_name ?? detail.seller_name ?? "Unlisted product"}
         </p>
         <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-[var(--text-primary)]">
           {detail.body}

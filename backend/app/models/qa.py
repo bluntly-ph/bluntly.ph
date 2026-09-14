@@ -10,7 +10,17 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,10 +30,22 @@ from app.models.enums import QuestionDirectedTo
 
 class Question(Base, UUIDPrimaryKey, Timestamps):
     __tablename__ = "questions"
+    __table_args__ = (
+        # A question is about a product or a store (0045). The schema refuses
+        # both-or-neither too; this is the guard that survives a direct write.
+        CheckConstraint("product_id IS NOT NULL OR seller_id IS NOT NULL",
+                        name="ck_question_subject"),
+        Index("ix_questions_seller", "seller_id", "created_at"),
+    )
 
     question_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
-    product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    #: Null for a question asked of a store.
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE")
+    )
+    #: The store asked, from its seller page (0045). Null for a product question.
+    seller_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sellers.id", ondelete="CASCADE")
     )
     asker_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
@@ -60,6 +82,9 @@ class Answer(Base, UUIDPrimaryKey, Timestamps):
 
     is_best_answer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_first_responder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    #: Written by the moderator-approved owner of the store the question was
+    #: asked of (0045). Set once, from the claim as it stood when answering.
+    is_seller_answer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     helpful_votes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     unhelpful_votes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

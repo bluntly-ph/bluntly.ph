@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Medal, Question as QuestionMark } from "@phosphor-icons/react/dist/ssr";
 
+import { questionSubject } from "@/components/qa/question-subject-model";
 import type { Question } from "@/lib/qa";
 
 /**
@@ -56,7 +57,7 @@ export function QuestionResultRow({ question }: { question: Question }) {
         </p>
 
         <h2 className="text-[15px] font-bold text-[var(--text-primary)]">
-          {question.product_name ?? "Unnamed product"}
+          {questionSubject(question).label}
         </h2>
 
         <p className="text-[14px] italic text-[var(--text-primary)]">
