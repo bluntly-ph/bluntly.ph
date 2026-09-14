@@ -67,7 +67,8 @@ def make_click(client, author_headers, mod_headers, *, name: str) -> tuple[str, 
     """Monetized review + one click. Returns (review_id, click_ref, author_id)."""
     author_id = client.get("/api/v1/auth/me", headers=author_headers).json()["id"]
     pid = client.post("/api/v1/products", headers=author_headers,
-                      json={"name": name, "category": "electronics"}).json()["id"]
+                      json={"name": f"{name} {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Great", "discussion": f"{name} held up well.",
             "verdict": "yes_absolutely", "star_rating": 4,
             "photo_url": owned_photo_url(author_headers)}

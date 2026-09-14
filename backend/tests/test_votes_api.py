@@ -18,7 +18,8 @@ def make_published_review(client, author_headers, mod_headers, *, stars: int = 4
                           name: str = "VoteWidget") -> tuple[str, str]:
     """Create a verified review and publish it without a link. Returns (rid, pid)."""
     pid = client.post("/api/v1/products", headers=author_headers,
-                      json={"name": name, "category": "electronics"}).json()["id"]
+                      json={"name": f"{name} {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Solid", "discussion": f"Weeks of use; {name}.",
             "verdict": "yes_absolutely", "star_rating": stars,
             "photo_url": owned_photo_url(author_headers)}
@@ -105,7 +106,8 @@ def test_wilson_sort_and_author_helpfulness(client):
 
     # Two published reviews on the SAME product; one gets 3 up-votes.
     pid = client.post("/api/v1/products", headers=ah,
-                      json={"name": "SortWidget", "category": "electronics"}).json()["id"]
+                      json={"name": f"SortWidget {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
 
     def make(title: str) -> str:
         body = {"product_id": pid, "title": title, "discussion": f"Story of {title}.",

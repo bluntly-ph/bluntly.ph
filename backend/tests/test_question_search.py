@@ -31,7 +31,7 @@ def asked(client):
     def make(product_name: str, body: str) -> str:
         product = client.post(
             "/api/v1/products",
-            json={"name": product_name, "source_url": f"https://shopee.ph/{marker}"},
+            json={"name": product_name, "source_url": f"https://shopee.ph/{marker}-{uuid.uuid4().hex[:6]}"},
             headers=headers,
         )
         assert product.status_code == 201, product.text

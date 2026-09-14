@@ -7,6 +7,7 @@ slice, its `counts`, server filters, and stable policy ordering.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from app.services.moderation_priority import PriorityBand, PriorityLane, SlaState
@@ -22,7 +23,8 @@ def _auth(token: str) -> dict:
 def _make_review(client, headers, *, stars: int = 4, photo: bool = True,
                  name: str = "Widget") -> tuple[str, str]:
     pid = client.post("/api/v1/products", headers=headers,
-                      json={"name": name, "category": "electronics"}).json()["id"]
+                      json={"name": f"{name} {uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Great", "discussion": "Used it for weeks; solid.",
             "verdict": "yes_absolutely", "star_rating": stars}
     if photo:

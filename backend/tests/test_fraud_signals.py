@@ -150,7 +150,8 @@ def test_duplicate_content_flags_with_duplicate_of(client):
                  "suction strong on hardwood, weaker on thick carpet. The dust bin "
                  "is small but easy to empty. Highly recommended for small flats.")
     pid = client.post("/api/v1/products", headers=ah,
-                      json={"name": "DupWidget", "category": "electronics"}).json()["id"]
+                      json={"name": f"DupWidget {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
 
     def make(discussion: str) -> str:
         body = {"product_id": pid, "title": "Review", "discussion": discussion,
@@ -231,7 +232,8 @@ def test_signals_in_queue_payload_but_not_public(client):
     ah, mh = _auth(author_token), _auth(mod_token)
 
     pid = client.post("/api/v1/products", headers=ah,
-                      json={"name": "QueueSigWidget", "category": "electronics"}).json()["id"]
+                      json={"name": f"QueueSigWidget {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Pending", "discussion": "Queued for review.",
             "verdict": "it_depends", "star_rating": 3}
     rid = client.post("/api/v1/reviews", headers=ah, json=body).json()["id"]
@@ -266,7 +268,8 @@ def test_fraud_signals_never_mutate_review_state(client):
     body_text = ("Identical body used twice on purpose so the trigram duplicate "
                  "signal fires for certain on this fixture review text.")
     pid = client.post("/api/v1/products", headers=ah,
-                      json={"name": "AdvisoryWidget", "category": "electronics"}).json()["id"]
+                      json={"name": f"AdvisoryWidget {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
 
     def make(discussion: str) -> str:
         return client.post("/api/v1/reviews", headers=ah, json={

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -31,7 +31,7 @@ from app.schemas.product import (
     ProductCreate,
     ProductOut,
 )
-from app.services import price_service
+from app.services import price_service, product_matching
 from app.services.trust_rating_service import product_low_trust
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -92,8 +92,10 @@ def _product_out(product: Product) -> ProductOut:
     return out
 
 
-@router.post("", response_model=ProductOut, status_code=201, summary="Create a product")
-def create_product(payload: ProductCreate, db: Session = Depends(get_db),
+@router.post("", response_model=ProductOut, status_code=201,
+             summary="Create a product, or return the existing one it duplicates")
+def create_product(payload: ProductCreate, response: Response,
+                   db: Session = Depends(get_db),
                    user: User = Depends(get_current_user)) -> ProductOut:
     """Submit a product.
 
@@ -115,7 +117,18 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db),
     products by name alone — to re-state a rule the only human-facing path
     already applies. The status is what protects the catalogue: an unnamed
     submission stays `pending` whether or not a link came with it.
+
+    Duplicate detection (FR-2 2.8): the same listing link without its tracking
+    parameters, or the same name once case, spacing and punctuation are set
+    aside, returns the existing product with 200 instead of creating another.
+    Only exact matches on those keys — see services/product_matching.py.
     """
+    existing = product_matching.find_existing_product(
+        db, name=payload.name, source_url=payload.source_url)
+    if existing is not None:
+        response.status_code = 200
+        return ProductOut.model_validate(existing)
+
     is_moderator = user.role == MemberRole.moderator
     product = Product(
         canonical_name=payload.name, category=payload.category, brand=payload.brand,

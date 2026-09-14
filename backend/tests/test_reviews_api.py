@@ -15,7 +15,7 @@ def test_review_submission_and_versioning(client):
     headers = _auth(token)
 
     prod = client.post("/api/v1/products", headers=headers,
-                       json={"name": "Test Earbuds", "category": "electronics"})
+                       json={"name": f"Test Earbuds {token[-10:]}", "category": "electronics"})
     assert prod.status_code == 201, prod.text
     product_id = prod.json()["id"]
 
@@ -60,7 +60,7 @@ def test_unverified_without_photo(client):
     _, token, _ = register_and_token(client)
     headers = _auth(token)
     product_id = client.post("/api/v1/products", headers=headers,
-                             json={"name": "No Photo Product"}).json()["id"]
+                             json={"name": f"No Photo Product {token[-10:]}"}).json()["id"]
     r = client.post("/api/v1/reviews", headers=headers, json={
         "product_id": product_id, "title": "Meh", "discussion": "No proof attached.",
         "verdict": "it_depends", "star_rating": 3})
@@ -74,7 +74,7 @@ def test_only_author_or_moderator_can_edit(client):
     ah = _auth(author_token)
 
     product_id = client.post("/api/v1/products", headers=ah,
-                             json={"name": "Owned Product"}).json()["id"]
+                             json={"name": f"Owned Product {author_token[-10:]}"}).json()["id"]
     review_id = client.post("/api/v1/reviews", headers=ah, json={
         "product_id": product_id, "title": "Mine", "discussion": "My review.",
         "verdict": "hard_pass", "star_rating": 2}).json()["id"]

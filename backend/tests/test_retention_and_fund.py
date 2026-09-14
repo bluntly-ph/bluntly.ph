@@ -83,7 +83,8 @@ def _honesty_review(client, mod_headers, *, price: str, name: str) -> tuple[str,
     ah = _auth(author_token)
     author_id = client.get("/api/v1/auth/me", headers=ah).json()["id"]
     pid = client.post("/api/v1/products", headers=ah,
-                      json={"name": name, "category": "electronics"}).json()["id"]
+                      json={"name": f"{name} {_uuid.uuid4().hex[:8]}",
+                            "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": "Disappointing", "price_paid": price,
             "discussion": f"{name}: broke fast; honest warning.",
             "verdict": "hard_pass", "star_rating": 2,

@@ -134,7 +134,7 @@ export interface paths {
         get: operations["list_products_api_v1_products_get"];
         put?: never;
         /**
-         * Create a product
+         * Create a product, or return the existing one it duplicates
          * @description Submit a product.
          *
          *     A reviewer submits a *marketplace link* and the row lands `pending`, which
@@ -155,6 +155,11 @@ export interface paths {
          *     products by name alone — to re-state a rule the only human-facing path
          *     already applies. The status is what protects the catalogue: an unnamed
          *     submission stays `pending` whether or not a link came with it.
+         *
+         *     Duplicate detection (FR-2 2.8): the same listing link without its tracking
+         *     parameters, or the same name once case, spacing and punctuation are set
+         *     aside, returns the existing product with 200 instead of creating another.
+         *     Only exact matches on those keys — see services/product_matching.py.
          */
         post: operations["create_product_api_v1_products_post"];
         delete?: never;

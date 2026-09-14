@@ -400,7 +400,8 @@ def concurrency(base_url: str, at: str, mt: str) -> None:
     ah = {"Authorization": f"Bearer {at}"}
     c = _client(base_url)
     pid = c.post("/api/v1/products", headers=ah,
-                 json={"name": "Burst", "category": "electronics-tech"}).json()["id"]
+                 json={"name": f"Burst {uuid.uuid4().hex[:8]}",
+                       "category": "electronics-tech"}).json()["id"]
     c.close()
 
     def hit(kind: str) -> int:
