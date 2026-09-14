@@ -204,7 +204,7 @@ moderator console screen and deployment are still to come.
 
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| X.1 | **Disclosure of material relationship** | PARTIAL | MISSING | PARTIAL | COMPLETE | MISSING | — | `tests/frontend/privacy-disclosure.test.mjs` covers a different disclosure; no reviewer-facing declaration in the composer. Contract §13 |
+| X.1 | **Disclosure of material relationship** | COMPLETE | COMPLETE | PARTIAL | COMPLETE | MISSING | — | Off-production: 0046 `reviews.material_relationship` (none / free_or_discounted / connected; NULL = never asked, not defaulted); versioned with every edit. Composer step 7 asks it and Submit waits — **INTENTIONAL PRODUCT DIFFERENCE**, the frame draws the title only. The review page shows a declared relationship beside "Verified purchase"; the moderation queue card shows it. Admin PARTIAL: the current review-queue screen does not surface it yet. `test_material_relationship_rules`, `disclosure-model.test.mjs`, `composer-gate-model.test.mjs`; DB tests in CI. Contract §13 |
 | X.2 | **Trust badge gated on real verification state** | COMPLETE | PARTIAL | — | PARTIAL | PROVISIONAL | — | `verification_status` drives it; needs the §15 audit that it is never awarded on trust level or photo presence alone |
 | X.3 | **3D / 360 product experience** | MISSING | MISSING | MISSING | MISSING | MISSING | — | contract §20; not in the PRD. No asset metadata, no viewer, no honest-unavailable state |
 | X.4 | **Simulated GCash / Maya payout flow** | MISSING | MISSING | MISSING | MISSING | MISSING | See conflict C-3 | contract §16 |

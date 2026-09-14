@@ -187,10 +187,96 @@ six, gzip; open in the Lighthouse viewer). HTML copies were not committed.
 - `color-contrast`: 8 failing nodes on mobile, 11 on desktop (the supplied run
   had 10). Brand-token decision; recorded above, not changed.
 
+## Network activity after load (no loop found)
+
+A first memory-probe pass could not start: `page.goto('/', { waitUntil:
+'networkidle' })` timed out at 45 s. Measured instead of assumed:
+
+- In the 20 s after `load` (760 ms) the homepage makes 31 requests, **all
+  within ~1.2 s**: Next.js link prefetches (`/search` ×6 for its distinct
+  query strings, `/login` ×3, `/feed`, `/categories`, `/questions`,
+  `/requests`, several `/reviews/<id>`) and the chunks they need. **Zero
+  requests in the last 10 s.** No polling, beacon, or refetch loop.
+- Exactly one request never completes in the browser: the prefetch of
+  `/login?next=%2Freviews%2Fnew`, reached because the "Write a review" link's
+  prefetch of `/reviews/new` answers `307` to logged-out visitors. That open
+  request is why the page never reaches network-idle.
+- The server does not hang: the same URL answers `200` in 0.19–0.23 s with a
+  complete body as a plain GET, as an RSC request, and as an RSC prefetch
+  (`curl`). The stream is held open client-side, consistent with the router
+  not consuming a prefetched redirect target to the end. Recorded as an
+  observation, **not** classified as a product defect; one open request is not
+  a memory cost of any size.
+
 ## Memory
 
-*In progress.* One clean Chromium; heap used/total, DOM nodes, listeners,
-Playwright process working set, long tasks, resources and transfer, captured
-after load, after 30 s idle, across three laps of Home → Search → Review
-detail → Write Review → Seller page (not on the baseline) → Home, and after a
-final idle. No leak is claimed without measurements that show one.
+One headless Playwright Chromium, extensions disabled, 1366×900, against the
+baseline. Heap and DOM figures are taken **after a forced garbage collection**
+(`HeapProfiler.collectGarbage`), so they show retained memory, not garbage
+waiting to be collected. Working set is the sum over the Playwright Chromium
+processes only (never the tester's own Chrome). Navigation is client-side
+through the Next router wherever the app allows it. Script:
+`memory-probe.mjs` (session scratchpad); raw JSONL kept alongside it.
+
+**Tour — 2026-09-14 01:32–01:39Z**, three laps of Home → Search (`?q=fan`) →
+Review detail → Write Review → a seller URL → Home:
+
+| Snapshot | Heap used / total | DOM nodes | Listeners | Docs | Long tasks | Working set |
+|---|---|---|---|---|---|---|
+| home, after load | 3.04 / 3.50 MB | 600 | 364 | 2 | 0 | 291 MB |
+| home, after 30 s idle | 3.09 / 3.75 MB | 600 | 364 | 2 | 0 | 270 MB |
+| lap 1 → review detail | 4.20 / 4.80 MB | 588 | 400 | 2 | 0 | 281 MB |
+| lap 1 → home | 3.41 / 3.75 MB | 544 | 355 | 2 | 0 | 286 MB |
+| lap 2 → review detail | 3.91 / 4.25 MB | 539 | 374 | 2 | 0 | 279 MB |
+| lap 2 → home | 3.41 / 3.75 MB | 544 | 355 | 2 | 0 | 289 MB |
+| lap 3 → review detail | 3.91 / 4.25 MB | 539 | 374 | 2 | 0 | 280 MB |
+| lap 3 → home | 3.40 / 4.00 MB | 544 | 355 | 2 | 0 | 291 MB |
+| home, final after 30 s idle | 3.41 / 4.00 MB | 544 | 355 | 2 | 0 | 282 MB |
+
+- **No growth signal.** Lap 2 and lap 3 are identical at every stop (home
+  3.41 MB / 544 nodes / 355 listeners; review detail 3.91 MB / 539 / 374).
+  Documents stay at 2, so no detached frame or document is accumulating.
+- **No work while idle.** Zero long tasks anywhere; no requests during either
+  30 s idle window (26 during first load are prefetches, see above).
+- **Two limits on this tour, stated rather than smoothed over:**
+  - *Write Review was not measured.* `/reviews/new` redirected to `/login` in
+    both the logged-out and the "signed-in" pass: the saved session had
+    expired. Measuring the composer needs a fresh human sign-in
+    (HUMAN_AUTH_REQUIRED); no credentials are entered by automation.
+  - *The seller URL forces a full document load* (resources reset from 87 to
+    55): `/sellers/*` is not on the baseline and its 404 is a hard navigation.
+    So each lap starts from a fresh document, which would hide slow
+    accumulation across laps. A reload-free soak follows.
+
+**Soak — one document, no reloads.** Client-side Home → Search → Review detail
+→ Home, logged out: 10 laps (01:46–01:50Z), then 40 laps (01:54–02:06Z). At
+each return to Home, after GC (40-lap run):
+
+| Lap | Heap used | DOM nodes | Listeners | Docs | Resource entries | Working set |
+|---|---|---|---|---|---|---|
+| 5 | 4.85 MB | 598 | 389 | 2 | 113 | 302 MB |
+| 10 | 5.10 MB | 598 | 389 | 2 | 158 | 303 MB |
+| 15 | 5.19 MB | 598 | 389 | 2 | 203 | 311 MB |
+| 20 | 5.26 MB | 598 | 389 | 2 | 250 | 325 MB |
+| 25 | 5.35 MB | 598 | 389 | 2 | 250 | 325 MB |
+| 30 | 5.40 MB | 598 | 389 | 2 | 250 | 330 MB |
+| 35 | 5.43 MB | 598 | 389 | 2 | 250 | 330 MB |
+| 40 | 5.47 MB | 598 | 389 | 2 | 250 | 334 MB |
+| final, 30 s idle | 5.47 MB | 598 | 389 | 2 | 250 | 326 MB |
+
+- **DOM nodes, listeners and documents are flat for 40 laps.** No detached
+  DOM, no duplicated listeners, no leaked frames.
+- **Retained heap grows and flattens.** +0.25 MB over laps 5–10, then +0.09,
+  +0.07, +0.09, +0.05, +0.03, +0.04 per five laps; by laps 35–40 about
+  0.01 MB a lap. That shape is a cache filling toward a bound, not a leak — the
+  resource-timing buffer, for one, stops at 250 entries at lap 20, which is
+  where working-set growth slows too. The 10-lap run agreed (4.42 → 5.12 MB).
+- **No work in the background.** Two long tasks, both at first load, none
+  during navigation. Zero requests in either idle window; the 273 requests
+  over 40 laps (~7 a lap) are route payloads, prefetches and search
+  suggestions, all on navigation.
+- **Conclusion from these measurements: no memory leak found, no memory
+  regression established.** Not claimed: that the tester's "RAM usage
+  increased" is wrong for their session. Their browser carried an
+  ad-filtering extension, and these runs are headless, logged out, and do not
+  cover Write Review (session expired, above).
