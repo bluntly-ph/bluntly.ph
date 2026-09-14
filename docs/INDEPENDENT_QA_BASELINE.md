@@ -46,16 +46,65 @@ price moderation are all **not** in production.
 
 Held off-production at the time of recording:
 
-| Commit | What | Where |
+All on the `sellers-reinstatement` branch (head `ab402b1` at 02:42Z); none on
+`main`. CI run `34794562581` covers the branch only up to `198e245`; the rest
+waits for the next dispatch. Full local backend suite at `ab402b1`: 1282 passed,
+382 DB-backed skipped, 0 failed.
+
+| Commit | What | Migration |
 |---|---|---|
-| `5543062` | QA-001..012 harness and results | local + `sellers-reinstatement` |
-| `cb0ed79`, `94d4fd3` | seller rules and API | local + branch |
-| `3f50b4e` | OpenAPI field-for-field contract test | local + branch |
-| `30b17cd` | 0043 seller review content, removal | local + branch |
-| `58b2769`, `72021d9` | seller profile, composer, Sellers tab, claim queue | local + branch |
-| `198e245` | CI harness fixes (tripwire, cron fixture) | local + branch — CI run `34794562581` |
-| `a37d0ca` | matrix FR-4 rows, conflict C-5 | local |
-| `a6183cb` | 0044 price moderation, composer price → observation | local |
+| `5543062` | QA-001..012 harness and results | — |
+| `cb0ed79`, `94d4fd3` | seller rules and API | — |
+| `3f50b4e` | OpenAPI field-for-field contract test | — |
+| `30b17cd` | seller review title, photos, star breakdown, removal | 0043 |
+| `58b2769`, `72021d9` | seller profile, composer, Sellers tab, claim queue | — |
+| `198e245` | CI harness fixes (tripwire, cron fixture) | — |
+| `a6183cb` | price moderation; the composer's price feeds it | 0044 |
+| `5e6fdd7` | "Report what you paid" on the review page | — |
+| `6512e43` | questions to a store; the claimed owner answers as the store | 0045 |
+| `14b97d5` | the approved owner's store dashboard | — |
+| `c94c117`, `60dcfac` | disclosure of a material relationship | 0046 |
+| `fed8ae9` | duplicate product detection | — |
+| `4bc6949`, `9576539` | notifications, page and unread count | 0047 |
+| `fe9c0be` | trust badge needs a moderator decision; Date column fix at 1280 | — |
+| `6fab0b4` | trust levels shown as computed, never decorative | — |
+| `ab402b1` | simulated GCash / Maya payout preview (moves no money) | — |
+| `a37d0ca`, `0123497`, `b150d69`, `4ab955f`, `5e02ff8`, `bdfaa3e` | documentation | — |
+
+**Production migrations the candidate will need, in order:** 0042 (if not
+already applied), 0043, 0044, 0045, 0046, 0047 — all additive; 0044 turns
+existing price observations pending (see its docstring).
+
+### Branch CI on `ab402b1` — run `34800415118` (2026-09-14, 02:48–04:39Z)
+
+Production guard, Frontend and Backend (no database) passed. Backend (isolated
+database) **failed**: migrations 0043 → 0047 applied cleanly and the revision
+is at head, but two stages failed. Both are classified, neither is a product
+defect, and neither touched `main` or production:
+
+| Failure | Classification | Cause | Fix |
+|---|---|---|---|
+| `test_fraud_signals::test_signal_batch_preserves_values_with_constant_query_count` — `duplicate_of` named another review (1 failed, 1663 passed) | TEST/HARNESS DEFECT, introduced by `fed8ae9` | The fixture still used the fixed name `BatchSignalWidget`. Since duplicate detection, a repeated name returns the existing product, so in the cumulative CI database the test reused an earlier run's product, whose identical review tied with this run's at similarity 1.0 | unique product name per run |
+| `verify_milestones`: "FR-2: three observations from ONE buyer keep the panel locked" (57/58) | TEST EXPECTATION DEFECT, exposed by `a6183cb` | The script predates price moderation: it expected `observation_count == 3`, but pending observations are no longer counted (`pending_count == 3`) until a moderator approves them | the script now checks the pending state, approves the three as a separate moderator, then asserts the panel stays locked at `independent_count == 1` |
+| (latent, not yet failing) `verify_milestones` and `supabase_verify` product helpers | TEST/HARNESS DEFECT, from `fed8ae9` | both sent the fixed listing `https://shopee.ph/x-i.1.2`, so every verification product would fold into the first one ever created with it | unique listing per product |
+
+The next branch CI dispatch must show these green before the candidate.
+
+### Figma source access — one attempt, 2026-09-14
+
+Tried once before further UI work, as instructed. The failure is **not** the
+earlier View-seat quota error: the Figma MCP plugin is installed but not signed
+in. Exact tool text:
+
+> The "plugin:figma:figma" MCP server (http at https://mcp.figma.com) is
+> installed but requires authentication.
+
+`authenticate` issued an OAuth authorization URL, handed to the owner. Until the
+owner completes it (HUMAN_AUTH_REQUIRED) — and, if the View-seat limit still
+applies after sign-in, until a Dev or Full seat exists — the status stays
+**FIGMA_SOURCE_ACCESS_BLOCKED**. Not retried. No UI in this branch is
+FIGMA SOURCE-VERIFIED; visual work uses the owner screenshot pack and measured
+references.
 
 ## QA issue import — awaiting the tracker
 
