@@ -207,7 +207,7 @@ moderator console screen and deployment are still to come.
 | X.1 | **Disclosure of material relationship** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | MISSING | — | Off-production: 0046 `reviews.material_relationship` (none / free_or_discounted / connected; NULL = never asked, not defaulted); versioned with every edit. Composer step 7 asks it and Submit waits — **INTENTIONAL PRODUCT DIFFERENCE**, the frame draws the title only. The review page shows a declared relationship beside "Verified purchase"; the moderation queue card and the review-queue detail panel show it (a pre-question review reads "Not asked"). `test_material_relationship_rules`, `disclosure-model.test.mjs`, `composer-gate-model.test.mjs`; DB tests in CI. Contract §13 |
 | X.2 | **Trust badge gated on real verification state** | COMPLETE | COMPLETE | — | COMPLETE | MISSING | — | **Audit finding:** the public "Verified purchase" / "Verified" marks read `verification_status`, which is set at submission when the author's photo is attached — before any moderator decision; the desktop aside also called that flag "Proof of purchase provided", which is neither the receipt nor a decision. Off-production fix: `services/trust_badge.py` — proof + a recorded moderator decision (approved / monetized / Honesty Fund) + publication — served as `ReviewOut.has_trust_badge`; review page, aside and feed cards all read it through `showsTrustBadge`, which fails closed. Never on trust level (it does not read the author). See conflict C-6. `test_trust_badge_rules`, `trust-badge-model.test.mjs` |
 | X.3 | **3D / 360 product experience** | MISSING | MISSING | MISSING | MISSING | MISSING | — | contract §20; not in the PRD. No asset metadata, no viewer, no honest-unavailable state |
-| X.4 | **Simulated GCash / Maya payout flow** | MISSING | MISSING | MISSING | MISSING | MISSING | See conflict C-3 | contract §16 |
+| X.4 | **Simulated GCash / Maya payout flow** | COMPLETE | COMPLETE | — | COMPLETE | MISSING | See conflict C-3 | Off-production: `GET /payouts/simulate?rail=gcash\|maya` returns a description of a payout of the caller's balance — timeline, the ₱300 minimum, the gap when short, always `simulated: true` and `real_rail: paypal`. No database session, no payout row, no wallet change, no provider: `services/payout_simulation.py`, checked on its source by `test_payout_simulation_rules`; a DB test confirms wallet and payouts are unchanged. Transfer screen: a dashed "Simulation" card below the real controls (**INTENTIONAL PRODUCT DIFFERENCE**). Contract §16 |
 | X.5 | Supabase backup / PITR configuration | UNVERIFIED | — | — | — | UNVERIFIED | Needs platform-console inspection, not code | contract §24 |
 | X.6 | Supabase Storage access control on verification assets | COMPLETE | — | — | COMPLETE | PROVISIONAL | — | `services/storage.py`, `test_receipt_privacy` |
 | X.7 | Session auth / API RBAC / TLS | COMPLETE | — | — | COMPLETE | PROVISIONAL | — | see 1.2, 1.4 |
@@ -248,7 +248,9 @@ of scope pending business permit, BIR and DTI registration under RA 11967. The
 completion contract §16 asks for *simulated* GCash/Maya. Simulation carries no
 regulatory exposure, so X.4 is planned as a deterministic simulated status flow
 with no real transfer. **Worth the owner confirming**, since the PRD treats
-these rails as blocked rather than simulated.
+these rails as blocked rather than simulated. Implemented as a read-only
+preview: nothing it returns is a payout, and the module is barred, by test, from
+touching payout rows, the wallet, a provider or a database session.
 
 **C-4 — Title length.** Reference pack: 30 characters. API: 1–200. Contract §27
 says keep 30 on the client and leave the API permissive. Implemented that way;

@@ -5396,6 +5396,58 @@
         }
       }
     },
+    "/api/v1/payouts/simulate": {
+      "get": {
+        "tags": [
+          "payouts"
+        ],
+        "summary": "Preview a GCash or Maya payout of your balance (simulation; moves no money)",
+        "description": "Completion contract X.4: GCash and Maya are simulated, never paid.\n\nA GET with no database session at all: the balance is read off the\nauthenticated user, and `payout_simulation.simulate` only describes.",
+        "operationId": "simulate_payout_api_v1_payouts_simulate_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rail",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "gcash",
+                "maya"
+              ],
+              "type": "string",
+              "title": "Rail"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/payouts": {
       "get": {
         "tags": [
@@ -13122,6 +13174,103 @@
         "type": "object",
         "title": "SellerSummary",
         "description": "The public aggregate for one store.\n\nEvery rate and average is nullable, and null when there is nothing to\naggregate. A store nobody has rated has no accuracy rate; reporting 0.0\nwould state that none of its orders matched the listing. The star breakdown\nis counts, not rates, so zeroes there are true."
+      },
+      "SimulationOut": {
+        "properties": {
+          "simulated": {
+            "type": "boolean",
+            "title": "Simulated",
+            "default": true
+          },
+          "rail": {
+            "type": "string",
+            "enum": [
+              "gcash",
+              "maya"
+            ],
+            "title": "Rail"
+          },
+          "real_rail": {
+            "type": "string",
+            "title": "Real Rail",
+            "default": "paypal"
+          },
+          "eligible": {
+            "type": "boolean",
+            "title": "Eligible"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          },
+          "minimum": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum"
+          },
+          "short_by": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Short By"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "PHP"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SimulationStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rail",
+          "eligible",
+          "amount",
+          "minimum",
+          "short_by",
+          "steps",
+          "disclaimer",
+          "as_of"
+        ],
+        "title": "SimulationOut"
+      },
+      "SimulationStep": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "processing",
+              "paid"
+            ],
+            "title": "Status"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "label"
+        ],
+        "title": "SimulationStep"
       },
       "SlaState": {
         "type": "string",

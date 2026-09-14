@@ -10,17 +10,21 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.constants import MANILA
 from app.core.security import get_current_user, require_role
 from app.db.session import get_db
 from app.models.enums import PayoutMethod, PayoutStatus
 from app.models.user import User
 from app.schemas.referral import ReasonRequest
-from app.services import payout_service
+from app.services import payout_service, payout_simulation
+from app.services.payout_simulation import SimulationOut
 
 router = APIRouter(tags=["payouts"])
 
@@ -68,6 +72,20 @@ def set_payout_account(payload: PayoutAccountUpdate, db: Session = Depends(get_d
 def list_own(db: Session = Depends(get_db), user: User = Depends(get_current_user),
              limit: int = Query(50, ge=1, le=100)) -> list[PayoutOut]:
     return [PayoutOut.model_validate(p) for p in payout_service.list_own(db, user.id, limit)]
+
+
+@router.get("/payouts/simulate", response_model=SimulationOut,
+            summary="Preview a GCash or Maya payout of your balance (simulation; moves no money)")
+def simulate_payout(rail: Literal["gcash", "maya"] = Query(...),
+                    user: User = Depends(get_current_user)) -> SimulationOut:
+    """Completion contract X.4: GCash and Maya are simulated, never paid.
+
+    A GET with no database session at all: the balance is read off the
+    authenticated user, and `payout_simulation.simulate` only describes.
+    """
+    return payout_simulation.simulate(user.wallet_balance, rail,
+                                      minimum=settings.payout_min_php,
+                                      today=datetime.now(MANILA).date())
 
 
 @router.get("/admin/payouts", response_model=list[PayoutOut],

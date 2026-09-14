@@ -1668,6 +1668,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payouts/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview a GCash or Maya payout of your balance (simulation; moves no money)
+         * @description Completion contract X.4: GCash and Maya are simulated, never paid.
+         *
+         *     A GET with no database session at all: the balance is read off the
+         *     authenticated user, and `payout_simulation.simulate` only describes.
+         */
+        get: operations["simulate_payout_api_v1_payouts_simulate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payouts": {
         parameters: {
             query?: never;
@@ -4497,6 +4520,56 @@ export interface components {
             rating_distribution?: {
                 [key: string]: number;
             };
+        };
+        /** SimulationOut */
+        SimulationOut: {
+            /**
+             * Simulated
+             * @default true
+             */
+            simulated: boolean;
+            /**
+             * Rail
+             * @enum {string}
+             */
+            rail: "gcash" | "maya";
+            /**
+             * Real Rail
+             * @default paypal
+             */
+            real_rail: string;
+            /** Eligible */
+            eligible: boolean;
+            /** Amount */
+            amount: string;
+            /** Minimum */
+            minimum: string;
+            /** Short By */
+            short_by: string;
+            /**
+             * Currency
+             * @default PHP
+             */
+            currency: string;
+            /** Steps */
+            steps: components["schemas"]["SimulationStep"][];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+        };
+        /** SimulationStep */
+        SimulationStep: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "processing" | "paid";
+            /** Label */
+            label: string;
         };
         /**
          * SlaState
@@ -8130,6 +8203,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PayoutOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_payout_api_v1_payouts_simulate_get: {
+        parameters: {
+            query: {
+                rail: "gcash" | "maya";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationOut"];
                 };
             };
             /** @description Validation Error */

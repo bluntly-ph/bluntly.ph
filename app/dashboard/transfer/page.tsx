@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { DashboardScreen, HeroAmount } from "@/components/dashboard/DashboardScreen";
 import { PayoutAccountForm } from "@/components/dashboard/PayoutAccountForm";
+import { PayoutSimulation } from "@/components/dashboard/PayoutSimulation";
 import { requireOnboardedUser } from "@/lib/dal";
 import { trustLevel } from "@/lib/trust";
 import { getDashboard, PAYOUT_MIN_PHP, peso } from "@/lib/dashboard";
@@ -86,6 +87,8 @@ export default async function TransferPage() {
             <PayoutAccountForm />
           </div>
         </section>
+
+        <PayoutSimulation />
 
         <p className="mt-8 text-[12px] text-[var(--text-muted)]">
           Signed in as {me.username ?? me.display_name}.{" "}
