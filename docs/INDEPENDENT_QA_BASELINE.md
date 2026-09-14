@@ -69,6 +69,16 @@ waits for the next dispatch. Full local backend suite at `ab402b1`: 1282 passed,
 | `fe9c0be` | trust badge needs a moderator decision; Date column fix at 1280 | — |
 | `6fab0b4` | trust levels shown as computed, never decorative | — |
 | `ab402b1` | simulated GCash / Maya payout preview (moves no money) | — |
+| `e738c89` | CI harness: fixtures isolated from duplicate detection and price moderation | — |
+| `3279089` | honest not-configured status for plagiarism and reverse image checks | — |
+| `2c5c0b4` | mobile Action Menu mounted; all three actions reach their real routes | — |
+| `b61eccb`, `0b65070` | search on a phone matches its three frames; category-strip test repaired | — |
+| `d12f778` | store page follows its two frames (filters, tabs, carousel) | — |
+| `ccebd9b` | review page first screen follows its frame on a phone | — |
+| `b032690`, `89da1df`, `ea361a0` | documentation (CI triage, Figma access, stale receipt notes) | — |
+
+Pushed to the branch up to `b032690`; `2c5c0b4`..`ccebd9b` are local, held
+while CI run `34812688685` finishes (a push would cancel it).
 | `a37d0ca`, `0123497`, `b150d69`, `4ab955f`, `5e02ff8`, `bdfaa3e` | documentation | — |
 
 **Production migrations the candidate will need, in order:** 0042 (if not
