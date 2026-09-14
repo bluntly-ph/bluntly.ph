@@ -631,16 +631,16 @@ function TitleField({
  * Continue is grey in 6 and orange in 6.1, so the photo gates the step and
  * Skip is the way past it.
  *
- * WHAT THIS DROPS, deliberately and worth flagging: the separate proof-of-
- * purchase upload. The frame has one upload, its blurb assigns verification
- * to it ("A photo of the actual product verifies your review and is required
- * for earning eligibility"), and step 7 draws that same photo on the public
- * review card — so it is the product photo, and the receipt field is not in
- * this flow. Both are collected. The photo is public and decides
- * *verified* status; the receipt is private, moderator-only, and the only
- * input to the earn_eligible gate, which reads `receipt_key` and nothing
- * else. An earlier pass here mounted only the photo, to match the frame, and
- * left every submission posting receipt_key: null.
+ * The frame has one upload, its blurb assigns verification to it ("A photo of
+ * the actual product verifies your review and is required for earning
+ * eligibility"), and step 7 draws that same photo on the public review card —
+ * so the card is the product photo. The proof-of-purchase upload is ALSO
+ * collected, beneath it: the photo is public and decides *verified* status;
+ * the receipt is private, moderator-only, and the only input to the
+ * earn_eligible gate, which reads `receipt_key` and nothing else. An earlier
+ * pass mounted only the photo, to match the frame, and left every submission
+ * posting receipt_key: null (fixed in b2f1e29; owner confirmed both are
+ * required, 2026-09-14).
  */
 function ProductPhotoCard({
   url,

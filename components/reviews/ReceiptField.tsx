@@ -6,15 +6,12 @@ import { Image as ImageIcon, Trash } from "@phosphor-icons/react/dist/ssr";
 import { prepareImageForUpload } from "@/lib/image";
 
 /**
- * KEPT AND INTENTIONALLY UNMOUNTED.
- *
- * The reviewer pack's step 6 has exactly one upload — the product photo — and
- * assigns verification to it, so the composer no longer renders this field.
- * It is not dead code to delete: the backend's earn_eligible gate reads
- * `receipt_key` and nothing else, so removing the only way to supply one is a
- * product decision for the owner, not a side effect of matching a frame.
- *
- * Mounting it again is a one-line change wherever proof of purchase belongs.
+ * MOUNTED on composer step 6, beneath the product photo card
+ * (`ProductPhotoCard` in app/reviews/new/WriteReviewForm.tsx, restored in
+ * b2f1e29). The reviewer pack's step 6 draws one upload, but the product needs
+ * both: the photo is public and decides *verified*; this is private and is the
+ * only input to the earn_eligible gate, which reads `receipt_key` and nothing
+ * else. The owner confirmed on 2026-09-14 that both are required.
  */
 
 /**
