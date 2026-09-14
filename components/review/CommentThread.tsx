@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import {
+  ArrowBendDownRight,
   ArrowFatDown,
   ArrowFatUp,
   ArrowsDownUp,
-  ChatCircle,
+  DotOutline,
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 
@@ -83,19 +84,25 @@ export function CommentThread({
   const ordered = sortComments(comments, sort);
 
   return (
-    <section className="mt-10 border-t border-[var(--border-subtle)] pt-8">
+    // `comments` is the target of the comment-count pill in the review's action
+    // row. Figma "Review page" (4218:1196): a full-bleed hairline under the
+    // review, then the thread 32px below it.
+    <section
+      id="comments"
+      className="-mx-4 mt-5 scroll-mt-24 border-t border-[var(--line-hairline-10)] px-4 pt-8 lg:mx-0 lg:px-0"
+    >
       <div className="flex items-center gap-3">
-        <h2 className="flex flex-1 items-center gap-2 text-[16px] font-semibold text-[var(--text-primary)]">
-          <ChatCircle size={20} weight="fill" className="text-[var(--text-muted)]" />
+        <h2 className="flex-1 text-[16px] font-semibold leading-none text-[var(--text-primary)]">
           {total === 0 ? "Comments" : `${compact(total)} ${total === 1 ? "comment" : "comments"}`}
         </h2>
         {total > 1 ? (
+          // Figma "Chip/Action" with the ArrowsDownUp glyph, as on /search.
           <button
             type="button"
             onClick={() => setSortOpen(true)}
-            className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-md)] border border-[var(--text-primary)] px-[11px] text-[12px] leading-none text-[var(--text-primary)] hover:border-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
           >
-            <ArrowsDownUp size={16} weight="bold" />
+            <ArrowsDownUp size={16} aria-hidden="true" />
             Sort
           </button>
         ) : null}
@@ -125,11 +132,11 @@ export function CommentThread({
       ) : null}
 
       {comments.length === 0 ? (
-        <p className="mt-8 text-[14px] text-[var(--text-secondary)]">
+        <p className="mt-6 text-[12px] font-light leading-[18px] text-[var(--text-secondary)]">
           No comments yet. Ask the reviewer something, or add what you know.
         </p>
       ) : (
-        <ul className="mt-6 flex flex-col gap-6">
+        <ul className="mt-8 flex flex-col gap-10">
           {ordered.map((c) => (
             <li key={c.id}>
               <CommentRow
@@ -178,7 +185,7 @@ function CommentComposer({
 
   if (!viewerId) {
     return (
-      <p className="mt-4 text-[13px] text-[var(--text-secondary)]">
+      <p className="mt-4 text-[12px] font-light leading-[18px] text-[var(--text-secondary)]">
         <Link
           href={`/login?next=/reviews/${reviewId}`}
           className="font-medium text-[var(--accent-primary)] underline underline-offset-2"
@@ -358,145 +365,157 @@ function CommentRow({
     }
   }
 
+  const level = comment.is_removed ? null : comment.author?.trust_level_name;
+  const control =
+    "inline-flex cursor-pointer items-center gap-1 text-[12px] font-light leading-none disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+
+  // Figma "Review page" (4218:1196), the comment block: a 36px disc with the
+  // byline 8px after it — name and trust level in 12px Light split by a 16px
+  // DotOutline — and the age in 12px ExtraLight; 12px down, the body in 12px
+  // Light on an 18px line; 12px down, the VoteBar (20px arrows, the count with
+  // the upvote) and Reply with its 20px ArrowBendDownRight, 36px apart. Replies
+  // sit 36px in under a curved 30% ink connector.
+  //
+  // NOT RENDERED: the Honesty Score (comment authors carry no score), the
+  // per-comment "..." and Share (no comment has actions or a URL of its own).
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="text-[var(--text-primary)]">
+      <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-[12px] font-semibold text-white"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white"
           style={{ background: comment.is_removed ? "hsl(0 0% 70%)" : "hsl(24 55% 55%)" }}
         >
           {comment.is_removed ? "–" : name.slice(0, 1).toUpperCase()}
         </span>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center text-[12px] font-light leading-4">
             {comment.is_removed ? (
-              <span className="text-[13px] font-semibold text-[var(--text-muted)]">
-                removed
-              </span>
+              <span className="text-[var(--text-muted)]">removed</span>
             ) : comment.author?.id ? (
-              <Link
-                href={`/u/${comment.author.id}`}
-                className="text-[13px] font-semibold text-[var(--text-primary)] hover:text-[var(--accent-primary)]"
-              >
-                {comment.author.username ? `@${comment.author.username}` : name}
+              <Link href={`/u/${comment.author.id}`} className="hover:text-[var(--accent-primary)]">
+                {comment.author.username ?? name}
               </Link>
             ) : (
-              <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-                {name}
-              </span>
+              <span>{name}</span>
             )}
-            <span className="text-[12px] text-[var(--text-muted)]">
-              {ageLabel(comment.created_at)}
-            </span>
+            {level ? (
+              <>
+                <DotOutline size={16} aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
+                <span>{level}</span>
+              </>
+            ) : null}
+          </p>
+          <p className="text-[12px] font-extralight leading-[18px]">{ageLabel(comment.created_at)}</p>
+        </div>
+      </div>
+
+      <p
+        className={`mt-3 whitespace-pre-line text-[12px] font-light leading-[18px] ${
+          comment.is_removed ? "italic text-[var(--text-muted)]" : ""
+        }`}
+      >
+        {comment.body}
+      </p>
+
+      {!comment.is_removed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-9 gap-y-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => vote("up")}
+              disabled={pending}
+              aria-pressed={comment.my_vote === "up"}
+              aria-label={`Helpful, ${compact(comment.helpful_votes)}`}
+              className={control}
+            >
+              <ArrowFatUp
+                size={20}
+                weight="fill"
+                aria-hidden="true"
+                className={comment.my_vote === "up" ? "text-[var(--accent-success)]" : "text-[var(--base-gray-400)]"}
+              />
+              <span aria-hidden="true">{compact(comment.helpful_votes)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => vote("down")}
+              disabled={pending}
+              aria-pressed={comment.my_vote === "down"}
+              aria-label={`Not helpful, ${compact(comment.unhelpful_votes)}`}
+              className={control}
+            >
+              <ArrowFatDown
+                size={20}
+                weight="fill"
+                aria-hidden="true"
+                className={comment.my_vote === "down" ? "text-[var(--accent-danger)]" : "text-[var(--base-gray-400)]"}
+              />
+            </button>
           </div>
 
-          <p
-            className={`mt-1 whitespace-pre-line text-[14px] leading-relaxed ${
-              comment.is_removed
-                ? "italic text-[var(--text-muted)]"
-                : "text-[var(--text-primary)]"
-            }`}
-          >
-            {comment.body}
-          </p>
-
-          {!comment.is_removed ? (
-            <div className="mt-1.5 flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => vote("up")}
-                disabled={pending}
-                aria-pressed={comment.my_vote === "up"}
-                aria-label="Helpful"
-                className={`inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2 py-1 text-[12px] hover:bg-[var(--line-hairline-10)] disabled:opacity-60 ${
-                  comment.my_vote === "up"
-                    ? "text-[var(--accent-success)]"
-                    : "text-[var(--text-secondary)]"
-                }`}
-              >
-                <ArrowFatUp
-                  size={14}
-                  weight={comment.my_vote === "up" ? "fill" : "regular"}
-                />
-                {compact(comment.helpful_votes)}
-              </button>
-              <button
-                type="button"
-                onClick={() => vote("down")}
-                disabled={pending}
-                aria-pressed={comment.my_vote === "down"}
-                aria-label="Not helpful"
-                className={`inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2 py-1 text-[12px] hover:bg-[var(--line-hairline-10)] disabled:opacity-60 ${
-                  comment.my_vote === "down"
-                    ? "text-[var(--accent-danger)]"
-                    : "text-[var(--text-muted)]"
-                }`}
-              >
-                <ArrowFatDown
-                  size={14}
-                  weight={comment.my_vote === "down" ? "fill" : "regular"}
-                />
-                {compact(comment.unhelpful_votes)}
-              </button>
-
-              {/* Replies are one level deep, so a reply offers no reply button. */}
-              {!isReply ? (
-                <button
-                  type="button"
-                  onClick={() => setReplying((v) => !v)}
-                  className="rounded-[var(--radius-pill)] px-2 py-1 text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
-                >
-                  Reply
-                </button>
-              ) : null}
-
-              {isMine ? (
-                <button
-                  type="button"
-                  onClick={remove}
-                  disabled={pending}
-                  className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2 py-1 text-[12px] text-[var(--text-muted)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--accent-danger)] disabled:opacity-60"
-                >
-                  <Trash size={14} />
-                  Delete
-                </button>
-              ) : null}
-            </div>
+          {/* Replies are one level deep, so a reply offers no reply button. */}
+          {!isReply ? (
+            <button
+              type="button"
+              onClick={() => setReplying((v) => !v)}
+              aria-expanded={replying}
+              className={`${control} hover:text-[var(--accent-primary)]`}
+            >
+              <ArrowBendDownRight size={20} aria-hidden="true" className="text-[var(--base-gray-400)]" />
+              Reply
+            </button>
           ) : null}
 
-          {replying && onReplied ? (
-            <CommentComposer
-              reviewId={reviewId}
-              viewerId={viewerId}
-              parentId={comment.id}
-              autoFocus
-              onPosted={(reply) => {
-                onReplied(reply);
-                setReplying(false);
-              }}
-              onError={onError}
-              onCancel={() => setReplying(false)}
-            />
+          {isMine ? (
+            <button
+              type="button"
+              onClick={remove}
+              disabled={pending}
+              className={`${control} text-[var(--text-muted)] hover:text-[var(--accent-danger)]`}
+            >
+              <Trash size={20} aria-hidden="true" />
+              Delete
+            </button>
           ) : null}
+        </div>
+      ) : null}
 
-          {comment.replies.length > 0 ? (
-            <ul className="mt-4 flex flex-col gap-4 border-l border-[var(--border-subtle)] pl-4">
-              {comment.replies.map((r) => (
-                <li key={r.id}>
-                  <CommentRow
-                    comment={r}
-                    reviewId={reviewId}
-                    viewerId={viewerId}
-                    isReply
-                    onChange={onChange}
-                    onError={onError}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-      </div>
+      {replying && onReplied ? (
+        <CommentComposer
+          reviewId={reviewId}
+          viewerId={viewerId}
+          parentId={comment.id}
+          autoFocus
+          onPosted={(reply) => {
+            onReplied(reply);
+            setReplying(false);
+          }}
+          onError={onError}
+          onCancel={() => setReplying(false)}
+        />
+      ) : null}
+
+      {comment.replies.length > 0 ? (
+        <ul className="mt-5 flex flex-col gap-5">
+          {comment.replies.map((r) => (
+            <li key={r.id} className="relative pl-9">
+              <span
+                aria-hidden="true"
+                className="absolute left-[18px] top-[-12px] h-[30px] w-3 rounded-bl-[12px] border-b border-l border-[var(--line-hairline-30)]"
+              />
+              <CommentRow
+                comment={r}
+                reviewId={reviewId}
+                viewerId={viewerId}
+                isReply
+                onChange={onChange}
+                onError={onError}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

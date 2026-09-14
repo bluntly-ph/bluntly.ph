@@ -5,41 +5,37 @@ import { ReviewCard } from "@/components/review/ReviewCard";
 import { CATEGORIES, type ReviewCardData } from "@/lib/landing-data";
 
 /**
- * "What people are reading" — the discover eyebrow, the horizontally scrolling
- * category tabs, and a rail of review cards (a horizontal scroll-snap strip on
- * mobile; a grid on desktop). Set on its own band with generous space so it
- * reads as a distinct screen from the hero.
+ * "What people are reading", built to Figma "SectionHeader" (6884:871) and the
+ * rail in "Mobile Landing Page" (1902:1504). Read 2026-09-14.
+ *
+ * Phone: 52px under the hero group; "Discover" and "Browse all" in 12px
+ * Regular trust blue (the link at 90%, with a 12px arrow), the heading 4px
+ * below in 20px Medium; 20px down, the category tabs — 20px glyphs with 12px
+ * Light labels 4px after them, 24px apart, the current one in brand orange;
+ * 24px down, 188x280 cards 8px apart. From `md` up there is no frame, so the
+ * cards become a grid.
  */
 export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
   return (
-    <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
-      <div className="mx-auto w-full max-w-[72rem] px-4 py-16 sm:px-6 lg:px-10 lg:py-24">
-        {/* Blue here is --accent-trust, the existing token behind the trust
-            shield and verified badge (BUG-006) — not a new colour. Reusing it
-            keeps "this is navigation you can rely on" reading as the same blue
-            the rest of the site already means it with. */}
+    <section className="bg-[var(--surface-app)] md:border-t md:border-[var(--border-subtle)]">
+      <div className="mx-auto w-full max-w-[72rem] px-4 pt-[52px] sm:px-6 md:py-16 lg:px-10 lg:py-24">
         <div className="flex items-center justify-between">
-          <span className="text-[12px] font-medium uppercase tracking-[0.1em] text-[var(--accent-trust)]">
-            Discover
-          </span>
-          {/* -my-2.5 py-2.5 grows the touch target to 44px without moving
-              anything: the padding is added and then pulled back out of flow,
-              so the row reads exactly as drawn while the tappable area clears
-              WCAG 2.5.8. It was 20px tall. */}
+          <span className="text-[12px] leading-none text-[var(--accent-trust)]">Discover</span>
+          {/* -my-2.5 py-2.5 grows the touch target to 32px without moving
+              anything: the padding is added and pulled back out of flow. */}
           <Link
             href="/search"
-            className="-my-2.5 inline-flex items-center gap-1 py-2.5 text-[13px] font-medium text-[var(--accent-trust)] hover:underline"
+            className="-my-2.5 inline-flex items-center gap-1 py-2.5 text-[12px] leading-none text-[color-mix(in_srgb,var(--accent-trust)_90%,transparent)] hover:underline"
           >
             Browse all
-            <ArrowRight size={14} />
+            <ArrowRight size={12} />
           </Link>
         </div>
-        <h2 className="mt-1 text-[20px] font-medium text-[var(--text-primary)]">
+        <h2 className="mt-1 text-[20px] font-medium leading-none text-[var(--text-primary)]">
           What people are reading
         </h2>
 
-        {/* Category tabs — horizontal scroll on any width. */}
-        <div className="-mx-4 mt-6 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+        <div className="-mx-4 mt-5 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
           <ul className="flex w-max gap-6">
             {CATEGORIES.map((c, i) => {
               const Icon = c.icon;
@@ -49,17 +45,17 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
                   <Link
                     href={active ? "/search" : `/search?category=${c.slug}`}
                     className={[
-                      // Same -my/py trick as Browse all: these were 21px tall
-                      // and are the primary way to browse on a phone, so they
-                      // were the worst offenders on the page.
-                      "-my-3 inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap py-3 text-[14px]",
-                      // Selected tab: orange, medium weight (BUG-006).
+                      // The row is 20px as drawn; -my-3 py-3 gives each tab a
+                      // 44px target without moving it.
+                      // `flex`, not `inline-flex`: an inline box sat on the li's
+                      // line box and pushed the cards 7px down.
+                      "-my-3 flex min-h-[44px] items-center gap-1 whitespace-nowrap py-3 text-[12px] font-light leading-none",
                       active
-                        ? "font-medium text-[var(--accent-primary)]"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+                        ? "text-[var(--accent-primary)]"
+                        : "text-[var(--text-primary)] hover:text-[var(--accent-primary)]",
                     ].join(" ")}
                   >
-                    <Icon size={20} weight={active ? "fill" : "regular"} />
+                    <Icon size={20} />
                     {c.label}
                   </Link>
                 </li>
@@ -68,13 +64,14 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
           </ul>
         </div>
 
-        {/* Cards: scroll-snap strip on mobile, grid from md up. */}
-        <div className="-mx-4 mt-8 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:-mx-6 sm:px-6 md:mx-0 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-5">
+        {/* scroll-px keeps snapping on the 16px gutter; without it the first
+            card snapped flush to the screen edge. */}
+        <div className="-mx-4 mt-6 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:scroll-px-6 sm:px-6 md:mx-0 md:mt-8 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-5">
           {reviews.map((r) => (
             <ReviewCard
               key={r.id}
               review={r}
-              className="w-[62vw] max-w-[200px] shrink-0 snap-start md:w-auto md:max-w-none"
+              className="w-[188px] shrink-0 snap-start md:w-auto"
             />
           ))}
         </div>

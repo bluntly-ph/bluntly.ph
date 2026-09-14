@@ -9,7 +9,6 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { FeedCard } from "@/components/feed/FeedCard";
-import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { INTERESTS } from "@/lib/interests";
@@ -225,7 +224,6 @@ export default async function FeedPage({
         </div>
       </main>
 
-      <ActionMenu />
       <SiteFooter />
     </div>
   );

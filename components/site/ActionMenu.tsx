@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { PencilSimpleLine, Plus, QuestionMark, Star, X } from "@phosphor-icons/react";
+import { PencilLine, QuestionMark, Star } from "@phosphor-icons/react";
 import type { Icon, IconWeight } from "@phosphor-icons/react";
 
 import {
@@ -16,23 +16,26 @@ import {
 /**
  * The floating action menu from "Action Menu.png" — phones only.
  *
- * MOUNTED on the discovery surfaces (home, feed, search, categories, questions,
- * a review, a store) at the owner's direction on 2026-09-14, so QA can start all
- * three workflows from a phone. The frames draw it on the search page's
- * Questions tab (live canvas), the questions index and both seller-page tabs.
- * Hidden from `md` (768px) up: no reference places it on tablet or desktop,
- * where the header already carries these actions. Never mounted on the
- * composers it opens.
+ * MOUNTED ONLY WHERE THE FIGMA FILE DRAWS IT (lso4Ri4hDaZxvCebhUqlY5, read
+ * 2026-09-14): /search, where instance 7224:4943 sits exactly on "Mobile Search
+ * Page for Reviewers" (3481:1894), and /sellers/[id], whose frames contain it
+ * (4797:16411 in "Seller Page - Review", 4797:16440 / 4797:16469 in "Seller Page
+ * - Questions"). The "Question Page" frames also carry it, but that product page
+ * has no route. No other screen in the file has it, so home, feed, categories,
+ * the questions index and review pages do not mount it. Hidden from `md` (768px)
+ * up: every frame that draws it is a 390px phone frame.
  *
  * Measured from the frame at 390x844 (.bluntly-autopilot/figma-reference/
  * ACTION-MENU.md):
  *   collapsed  60x60 disc in --brand-600, 32px from the right and bottom edges,
- *              a 27px plus drawn with a 2px stroke, --shadow-card
+ *              a 24.75px plus in a 3px round-capped stroke, --shadow-fab
+ *              (the disc artwork's 5px drop with a 4px blur)
  *   expanded   black scrim at 25%; action discs on an 80px pitch (20px gaps)
  *              with the close disc, in --brand-400, taking the FAB's place;
  *              label pills 40px tall, 12px radius, --surface-app, 12px from
- *              their disc, 16px type with an 11px cap height; glyphs in
- *              --surface-app: a bare question mark, a star, a pencil on a line
+ *              their disc, 16px type with an 11px cap height, 16px in and
+ *              6px out (151 / 131 / 149 wide); glyphs in --surface-app: a
+ *              bare question mark, a star, Phosphor PencilLine
  *
  * INTENTIONAL PRODUCT DIFFERENCE: the frame draws the "Rate a Seller" star in
  * grey, because it was drawn while no seller entity existed. The owner has since
@@ -46,7 +49,7 @@ import {
 const GLYPHS: Record<string, { icon: Icon; size: number; weight: IconWeight }> = {
   ask: { icon: QuestionMark, size: 28, weight: "regular" },
   seller: { icon: Star, size: 28, weight: "fill" },
-  review: { icon: PencilSimpleLine, size: 28, weight: "regular" },
+  review: { icon: PencilLine, size: 28, weight: "regular" },
 };
 
 /** The frame's 32px corner, kept clear of a notch or home indicator. */
@@ -54,10 +57,32 @@ const CORNER =
   "bottom-[calc(32px_+_env(safe-area-inset-bottom))] right-[calc(32px_+_env(safe-area-inset-right))]";
 
 const DISC =
-  "grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full text-[var(--surface-app)] shadow-[var(--shadow-card)]";
+  "grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full text-[var(--surface-app)] shadow-[var(--shadow-fab)]";
 
 const FOCUS =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+
+/**
+ * The plus and close marks exactly as the Figma disc artwork draws them (Action
+ * Menu 4417:751, exported 2026-09-14): 3px round-capped strokes in a 36px box —
+ * a 24.75px plus, and an X reaching 8.75px from centre. Phosphor's Plus and X
+ * are longer and thinner at any weight that exists.
+ */
+function PlusGlyph() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <path d="M5.625 18h24.75M18 5.625v24.75" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <path d="M9.25 26.75l17.5-17.5M9.25 9.25l17.5 17.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export function ActionMenu() {
   const [open, setOpen] = useState(false);
@@ -92,7 +117,7 @@ export function ActionMenu() {
     const content = (
       <>
         <span
-          className={`flex h-10 items-center rounded-[var(--radius-sm)] bg-[var(--surface-app)] pl-4 pr-[5px] text-[16px] tracking-[0.05em] ${
+          className={`flex h-10 items-center rounded-[var(--radius-sm)] bg-[var(--surface-app)] pl-4 pr-[6px] text-[16px] tracking-[0.05em] ${
             actionable ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
           }`}
         >
@@ -151,7 +176,7 @@ export function ActionMenu() {
         aria-label="Actions"
         className={`fixed z-30 ${CORNER} ${DISC} cursor-pointer bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-strong)] md:hidden ${FOCUS}`}
       >
-        <Plus size={39} weight="light" aria-hidden="true" />
+        <PlusGlyph />
       </button>
 
       {open
@@ -183,7 +208,7 @@ export function ActionMenu() {
                   aria-label="Close actions"
                   className={`${DISC} cursor-pointer bg-[var(--brand-400)] ${FOCUS}`}
                 >
-                  <X size={36} weight="regular" aria-hidden="true" />
+                  <CloseGlyph />
                 </button>
               </div>
             </div>,

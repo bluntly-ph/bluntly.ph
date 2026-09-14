@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ChatCircle, PlusCircle, SealCheck } from "@phosphor-icons/react/dist/ssr";
 
 import { questionSubject } from "@/components/qa/question-subject-model";
-import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
@@ -99,7 +98,6 @@ export default async function QuestionsPage() {
           </div>
         )}
       </main>
-      <ActionMenu />
       <SiteFooter />
     </div>
   );

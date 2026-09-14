@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { searchTabHref, type SearchTab } from "./search-tabs-model";
+import { searchTabHref, type ReviewSort, type SearchTab } from "./search-tabs-model";
 
 /**
  * The Reviews / Questions / Sellers tab strip on /search.
@@ -10,10 +10,12 @@ import { searchTabHref, type SearchTab } from "./search-tabs-model";
  * contract reinstated sellers (migration 0042, GET /sellers), so all three are
  * drawn and each is backed by a real search.
  *
- * Phone, measured from the three "Mobile Search Page" frames: 13px regular
- * labels about 32px apart, the current tab in brand orange with no underline,
- * and a 2px full-bleed rule 20px below the field's bottom edge plus the label
- * line. From `md` up there is no frame, so the underlined desktop strip stays.
+ * Phone, from the three "Mobile Search Page" frames (3481:1776, 3481:1894,
+ * 3954:650), read 2026-09-14: 12px Poppins Regular labels at x16 / x96 / x188,
+ * 22px under the field, the current tab in --accent-primary with no underline,
+ * and a full-bleed 1px rule 13px under the labels, drawn at #202020 with 30%
+ * opacity on a 30% stroke (--line-hairline-10). From `md` up there is no frame,
+ * so the underlined desktop strip stays.
  *
  * Real links, not client state: each tab is a distinct set of server-rendered
  * results, so they are `<Link>`s that carry the query across. That keeps them
@@ -32,19 +34,21 @@ export function SearchTabs({
   active,
   q,
   category,
+  sort,
   from,
 }: {
   active: SearchTab;
   q?: string;
   category?: string;
+  sort?: ReviewSort;
   from?: string;
 }) {
-  const href = (tab: SearchTab) => searchTabHref(tab, { q, category, from });
+  const href = (tab: SearchTab) => searchTabHref(tab, { q, category, sort, from });
 
   return (
     <nav
       aria-label="Search results type"
-      className="-mx-4 mt-[15px] border-b-2 border-[var(--base-gray-150)] px-4 md:mx-0 md:mt-5 md:border-b md:border-[var(--line-hairline-10)] md:px-0"
+      className="-mx-4 mt-[22px] border-b border-[var(--line-hairline-10)] px-4 md:mx-0 md:mt-5 md:px-0"
     >
       <ul className="flex gap-8 md:gap-6">
         {TABS.map(({ key, label }) => {
@@ -60,11 +64,11 @@ export function SearchTabs({
                 // its own document.
                 aria-current={current ? "page" : undefined}
                 className={[
-                  // Phone labels are set in the frames' grotesque, not Poppins:
-                  // "Reviews" measures 46px wide with a 9px cap height, which is
-                  // 13px Arial, where 13px Poppins renders it 50px wide.
-                  "inline-flex pb-[9px] font-[family-name:var(--font-system)] text-[13px] leading-5 no-underline transition-colors",
-                  "md:-mb-px md:border-b-2 md:pb-2.5 md:font-[family-name:inherit] md:text-[14px]",
+                  // `flex`, not `inline-flex`: an inline box sits on the li's
+                  // 24px line box and dropped the 12px labels 7px below the
+                  // frame's y.
+                  "flex pb-[13px] text-[12px] leading-none no-underline transition-colors",
+                  "md:-mb-px md:border-b-2 md:pb-2.5 md:text-[14px] md:leading-5",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
                   "focus-visible:outline-[var(--accent-primary)]",
                   current

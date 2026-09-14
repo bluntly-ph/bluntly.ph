@@ -4,15 +4,18 @@ import { StarRow } from "./SellerIdentity";
 import { distributionBars, ratingWord } from "./seller-model";
 
 /**
- * The seller page's rating card, measured from "Seller Page - Review.png":
- * a 1px #b3b3b3 border at radius 12 on the page's own grey with the card
- * shadow; the average at 20px, its word at 12px, 20px stars and the count at
- * 10px in a 116px column; then five 136px-wide, 12px bars on a 27px pitch with
- * their "5 star" labels at 11px. No counts beside the bars — the frame draws
- * none — so each bar carries its count for screen readers only.
+ * The seller page's rating card: Figma "Group 670" (4298:2359) in "Seller Page -
+ * Review", read 2026-09-14.
  *
- * The FR-4 figures that used to sit inside this card now render beneath it as
- * `SellerFigures`: they are required, and the frame's card has no room for them.
+ * 358x171 at radius 16 on the page's own grey with a 1px outline at 30% ink and
+ * no shadow; 24px in. The average in 20px SemiBold, 10px to its word in 12px
+ * Light, 10px to 20px stars, 4px to the count in 10px Light. Beside them five
+ * 136x12 bars at radius 10 on a 27px pitch, their "5 star" labels in 10px
+ * Light, 34px clear of the right edge. No counts beside the bars — the frame
+ * draws none — so each bar carries its count for screen readers only.
+ *
+ * The FR-4 figures render beneath the card as `SellerFigures`: they are
+ * required, and the frame's card has no room for them.
  */
 
 /** The frame's bar colours, top to bottom. Only the first has a token. */
@@ -24,8 +27,6 @@ export const STAR_BAR_COLOUR: Record<number, string> = {
   1: "#ff4500",
 };
 
-const FACE = "font-[family-name:var(--font-system)]";
-
 export function SellerRatingSummary({ summary }: { summary: SellerSummary }) {
   const bars = distributionBars(summary.rating_distribution);
   const average = summary.overall_average;
@@ -34,39 +35,36 @@ export function SellerRatingSummary({ summary }: { summary: SellerSummary }) {
   return (
     <section
       aria-label="Seller rating"
-      className="rounded-[var(--radius-sm)] border border-[#b3b3b3] bg-[var(--surface-app)] py-6 pl-6 pr-[33px] shadow-[var(--shadow-card)]"
+      className="rounded-[16px] border border-[var(--line-hairline-30)] bg-[var(--surface-app)] py-6 pl-6 pr-[33px] text-[var(--text-primary)]"
     >
-      {/* Top-aligned: the frame's average starts on the card's inner top edge,
-          level with the first bar, not centred against the bar stack. */}
-      <div className="flex items-start gap-3">
+      {/* Top-aligned: the average starts on the card's inner top edge, level
+          with the first bar, not centred against the bar stack. */}
+      {/* 10px to the labels puts them at x167 and the bars at x204, 136 wide. */}
+      <div className="flex items-start gap-[10px]">
         <div className="w-[116px] shrink-0">
           {average === null ? (
-            <p className="text-[15px] font-medium leading-5 text-[var(--text-primary)]">No ratings yet</p>
+            <p className="text-[16px] font-medium leading-5">No ratings yet</p>
           ) : (
             <>
-              <p className="text-[20px] font-semibold leading-5 text-[var(--text-primary)]">
-                {average.toFixed(1)}
-              </p>
-              <p className={`mt-2 ${FACE} text-[12px] leading-4 text-[var(--text-primary)]`}>
-                {ratingWord(average)}
-              </p>
+              <p className="text-[20px] font-semibold leading-none">{average.toFixed(1)}</p>
+              <p className="mt-2.5 text-[12px] font-light leading-none">{ratingWord(average)}</p>
             </>
           )}
-          <StarRow value={average} size={20} className="mt-[7px]" />
-          <p className={`mt-[3px] ${FACE} text-[10px] leading-[14px] text-[var(--text-primary)]`}>
+          <StarRow value={average} size={20} gap={0} className="mt-2.5" />
+          <p className="mt-1 text-[10px] font-light leading-none">
             {count} {count === 1 ? "review" : "reviews"}
           </p>
         </div>
 
-        <ul className="mt-px flex flex-1 flex-col gap-[15px]">
+        <ul className="mt-0.5 flex flex-1 flex-col gap-[15px]">
           {bars.map((bar) => (
-            <li key={bar.star} className="flex items-center gap-3">
-              <span className={`w-[23px] shrink-0 whitespace-nowrap ${FACE} text-[11px] leading-3 text-[var(--text-primary)]`}>
+            <li key={bar.star} className="flex items-center gap-2">
+              <span className="w-[29px] shrink-0 whitespace-nowrap text-[10px] font-light leading-3">
                 {bar.star} star
               </span>
-              <span className="h-3 flex-1 overflow-hidden rounded-full bg-[var(--base-gray-200)]">
+              <span className="h-3 flex-1 overflow-hidden rounded-[10px] bg-[var(--base-gray-200)]">
                 <span
-                  className="block h-full rounded-full"
+                  className="block h-full rounded-[10px]"
                   style={{ width: `${bar.share * 100}%`, background: STAR_BAR_COLOUR[bar.star] }}
                 />
               </span>

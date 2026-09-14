@@ -17,6 +17,14 @@ function compact(n: number): string {
  * Helpfulness voting on a published review. Client-side because it mutates on
  * click, going through the BFF (`/api/bff/...`) so the session token stays on the
  * server. Signed-out visitors are sent to log in; you cannot vote your own review.
+ *
+ * Drawn as the Review page frame's vote pill (4218:1196) with the "VoteBar"
+ * component's states (6958:944): a 32px pill with a 1px outline at 30% ink,
+ * a 20px ArrowFatUp and its 12px Light count, a 26px hairline, then a 20px
+ * ArrowFatDown. "The count belongs to the upvote", so the down arrow carries
+ * none on screen; its count stays in the button's accessible name. Neutral
+ * arrows are --base-gray-400, an upvote is the success green and a downvote the
+ * danger red — the file adds Neutral so a voter can tell their vote registered.
  */
 export function ReviewVoteBar({
   reviewId,
@@ -85,39 +93,43 @@ export function ReviewVoteBar({
     }
   }
 
+  const half =
+    "inline-flex h-full cursor-pointer items-center transition-colors hover:bg-[var(--line-hairline-10)] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="inline-flex items-center rounded-[var(--radius-pill)] bg-[var(--surface-card)] shadow-[var(--shadow-hairline-inset)]">
+    <div className="flex shrink-0 flex-col gap-1">
+      <div className="inline-flex h-8 items-center rounded-[20px] border border-[var(--line-hairline-30)]">
         <button
           type="button"
           onClick={() => vote("up")}
           disabled={pending}
           aria-pressed={mine === "up"}
-          aria-label="Helpful"
-          className={`inline-flex items-center gap-1.5 rounded-l-[var(--radius-pill)] px-4 py-2 text-[13px] font-medium transition-colors disabled:opacity-60 ${
-            mine === "up"
-              ? "text-[var(--accent-success)]"
-              : "text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]"
-          }`}
+          aria-label={`Helpful, ${compact(counts.helpful)}`}
+          className={`${half} gap-1 rounded-l-[20px] pl-3 pr-[5px] text-[12px] font-light leading-none text-[var(--text-primary)]`}
         >
-          <ArrowFatUp size={16} weight={mine === "up" ? "fill" : "regular"} className="text-[var(--accent-success)]" />
-          {compact(counts.helpful)}
+          <ArrowFatUp
+            size={20}
+            weight="fill"
+            aria-hidden="true"
+            className={mine === "up" ? "text-[var(--accent-success)]" : "text-[var(--base-gray-400)]"}
+          />
+          <span aria-hidden="true">{compact(counts.helpful)}</span>
         </button>
-        <span className="h-5 w-px bg-[var(--line-hairline-10)]" />
+        <span aria-hidden="true" className="h-[26px] w-px shrink-0 bg-[var(--line-hairline-30)]" />
         <button
           type="button"
           onClick={() => vote("down")}
           disabled={pending}
           aria-pressed={mine === "down"}
-          aria-label="Not helpful"
-          className={`inline-flex items-center gap-1.5 rounded-r-[var(--radius-pill)] px-4 py-2 text-[13px] transition-colors disabled:opacity-60 ${
-            mine === "down"
-              ? "text-[var(--accent-danger)]"
-              : "text-[var(--text-muted)] hover:bg-[var(--line-hairline-10)]"
-          }`}
+          aria-label={`Not helpful, ${compact(counts.unhelpful)}`}
+          className={`${half} rounded-r-[20px] pl-1 pr-3`}
         >
-          <ArrowFatDown size={16} weight={mine === "down" ? "fill" : "regular"} />
-          {compact(counts.unhelpful)}
+          <ArrowFatDown
+            size={20}
+            weight="fill"
+            aria-hidden="true"
+            className={mine === "down" ? "text-[var(--accent-danger)]" : "text-[var(--base-gray-400)]"}
+          />
         </button>
       </div>
       {error ? (

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { searchTabHref } from "../../components/search/search-tabs-model.ts";
+import {
+  clearCategoryHref,
+  parseReviewSort,
+  searchTabHref,
+} from "../../components/search/search-tabs-model.ts";
 
 /**
  * The tabs are links to real URLs, so what they carry across is the contract:
@@ -53,4 +57,36 @@ test("a query with spaces and symbols is encoded", () => {
     searchTabHref("questions", { q: "jisulife fan & noise" }),
     "/search?q=jisulife+fan+%26+noise&tab=questions",
   );
+});
+
+// The "Sort" pill (Figma 1591:5408) writes the review order into the URL. The
+// feed serves two orders, most helpful (`wilson`, the default) and latest.
+
+test("a chosen review order is carried with the reviews", () => {
+  assert.equal(
+    searchTabHref("reviews", { q: "fan", category: "audio", sort: "newest" }),
+    "/search?q=fan&category=audio&sort=newest",
+  );
+});
+
+test("the default order is not written into the URL", () => {
+  assert.equal(searchTabHref("reviews", { q: "fan", sort: "wilson" }), "/search?q=fan");
+});
+
+test("the order is not carried to questions or sellers, which serve none", () => {
+  assert.equal(searchTabHref("questions", { q: "fan", sort: "newest" }), "/search?q=fan&tab=questions");
+  assert.equal(searchTabHref("sellers", { sort: "newest" }), "/search?tab=sellers");
+});
+
+test("an order the feed does not serve falls back to most helpful", () => {
+  assert.equal(parseReviewSort("newest"), "newest");
+  assert.equal(parseReviewSort("wilson"), "wilson");
+  assert.equal(parseReviewSort("oldest"), "wilson");
+  assert.equal(parseReviewSort(undefined), "wilson");
+});
+
+test("resetting the category sends a categories visitor back to /categories", () => {
+  // BUG-011: clearing the filter must not strand them on /search.
+  assert.equal(clearCategoryHref({ q: "fan", sort: "newest", from: "categories" }), "/categories");
+  assert.equal(clearCategoryHref({ q: "fan", sort: "newest" }), "/search?q=fan&sort=newest");
 });

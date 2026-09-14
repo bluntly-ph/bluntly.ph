@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CaretRight, MagnifyingGlass, Star } from "@phosphor-icons/react/dist/ssr";
 
-import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getUser } from "@/lib/dal";
@@ -15,17 +14,18 @@ export const metadata: Metadata = {
 /**
  * Browse categories.
  *
- * Phone, built to "Categories.png" (390): its own 72px bar — back arrow, a
- * centred 16px "Categories", search — over a full-width #b4b4b4 rule, then a
- * list of 72px rows inset 24px: a 22px icon, the label in 16px bold 11px after
- * it, and #b4b4b4 dividers. From `md` up there is no frame, and the tile grid
- * stays.
+ * Phone, built to Figma "Categories" (2355:939), read 2026-09-14: the NavBar
+ * "Searchable" type — 72px, 28px back and search glyphs 24px from either edge,
+ * "Categories" in 16px Regular at 0.8px tracking, a full-width 1px rule at 30%
+ * ink — then rows on a 72px pitch inset 24px: a 24px glyph, the label in 16px
+ * Bold 8px after it, and 30% ink dividers. From `md` up there is no frame, and
+ * the tile grid stays.
  *
  * INTENTIONAL PRODUCT DIFFERENCES:
- *  - The frame ends each row with "+", an expander. No category has
- *    subcategories in this product, and "Subcategory.png" draws none, so a
- *    "+" would open nothing. Each row links to its category instead, with a
- *    trailing arrow that says so.
+ *  - The frame ends each row with a 24px "+", an expander for "Category/
+ *    Browser" subcategories. No category has subcategories in this product, so
+ *    a "+" would open nothing. Each row links to its category instead, with a
+ *    24px trailing arrow that says so.
  *  - Labels follow the product's taxonomy, which reviews are stored against by
  *    slug: "Kids & Toys" and "Sports & Outdoors" where the frame writes "Kids &
  *    Baby" and "Outdoor & Sports", and "Audio", which the frame omits.
@@ -43,7 +43,7 @@ export default async function CategoriesPage() {
 
   const categories = CATEGORIES.filter((c) => c.slug !== "trending");
   const bar = "grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]";
-  const row = "flex h-[71px] items-center gap-[11px] pr-1 no-underline focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+  const row = "flex h-[71px] items-center gap-2 no-underline focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
@@ -53,34 +53,34 @@ export default async function CategoriesPage() {
 
       <nav
         aria-label="Categories"
-        className="sticky top-0 z-30 grid h-[72px] grid-cols-[40px_1fr_40px] items-center border-b border-[#b4b4b4] bg-[var(--surface-app)] px-4 md:hidden"
+        className="sticky top-0 z-30 grid h-[72px] grid-cols-[40px_1fr_40px] items-center border-b border-[var(--line-hairline-30)] bg-[var(--surface-app)] px-[18px] md:hidden"
       >
         <Link href="/" aria-label="Back" className={bar}>
-          <ArrowLeft size={26} />
+          <ArrowLeft size={28} />
         </Link>
-        <h1 className="text-center text-[16px] text-[var(--text-primary)]">Categories</h1>
+        <h1 className="text-center text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">Categories</h1>
         <Link href="/search" aria-label="Search" className={bar}>
-          <MagnifyingGlass size={26} />
+          <MagnifyingGlass size={28} />
         </Link>
       </nav>
 
       <main className="mx-auto w-full max-w-[72rem] flex-1 pb-8 md:px-6 md:py-8 lg:px-10 lg:py-10">
         <ul className="md:hidden">
-          <li className="mx-6 border-b border-[#b4b4b4]">
+          <li className="mx-6 border-b border-[var(--line-hairline-30)]">
             <Link href="/feed" className={row}>
-              <Star size={22} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
-              <span className="text-[16px] font-bold text-[var(--text-primary)]">Recommended for you</span>
-              <CaretRight size={18} aria-hidden="true" className="ml-auto shrink-0 text-[var(--text-primary)]" />
+              <Star size={24} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
+              <span className="text-[16px] font-bold leading-none text-[var(--text-primary)]">Recommended for you</span>
+              <CaretRight size={24} aria-hidden="true" className="ml-auto shrink-0 text-[var(--text-primary)]" />
             </Link>
           </li>
           {categories.map((c) => {
             const Icon = c.icon;
             return (
-              <li key={c.slug} className="mx-6 border-b border-[#b4b4b4]">
+              <li key={c.slug} className="mx-6 border-b border-[var(--line-hairline-30)]">
                 <Link href={`/search?category=${c.slug}&from=categories`} className={row}>
-                  <Icon size={22} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
-                  <span className="text-[16px] font-bold text-[var(--text-primary)]">{c.label}</span>
-                  <CaretRight size={18} aria-hidden="true" className="ml-auto shrink-0 text-[var(--text-primary)]" />
+                  <Icon size={24} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
+                  <span className="text-[16px] font-bold leading-none text-[var(--text-primary)]">{c.label}</span>
+                  <CaretRight size={24} aria-hidden="true" className="ml-auto shrink-0 text-[var(--text-primary)]" />
                 </Link>
               </li>
             );
@@ -118,7 +118,6 @@ export default async function CategoriesPage() {
           </ul>
         </div>
       </main>
-      <ActionMenu />
       <SiteFooter />
     </div>
   );

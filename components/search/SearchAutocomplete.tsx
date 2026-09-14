@@ -165,10 +165,10 @@ export function SearchAutocomplete({
     <div ref={rootRef} className="relative">
       <form action="/search" role="search" className="relative">
         <MagnifyingGlass
-          size={strong ? 24 : 20}
+          size={strong ? 28 : 20}
           className={
             strong
-              ? "pointer-events-none absolute left-[18px] top-1/2 -translate-y-1/2 text-[var(--text-primary)]"
+              ? "pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-primary)]"
               : "pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
           }
         />
@@ -208,11 +208,11 @@ export function SearchAutocomplete({
             }}
             className={
               strong
-                ? "absolute right-[5px] top-1/2 grid h-11 w-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]"
+                ? "absolute right-2 top-1/2 grid h-11 w-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]"
                 : "absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)]"
             }
           >
-            <X size={strong ? 24 : 20} />
+            <X size={strong ? 28 : 20} />
           </button>
         ) : null}
       </form>

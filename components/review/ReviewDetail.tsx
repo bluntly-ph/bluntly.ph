@@ -3,17 +3,15 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ChartLine,
-  ChatText,
+  ChatCenteredText,
+  Chats,
   Check,
+  DotOutline,
   ImageSquare,
   Info,
   MagnifyingGlass,
   SealCheck,
-  ShieldCheck,
-  ShoppingBag,
-  Star,
-  ThumbsDown,
-  ThumbsUp,
+  ShoppingBagOpen,
   UserCircle,
   X,
 } from "@phosphor-icons/react/dist/ssr";
@@ -22,10 +20,12 @@ import { ReadingTelemetry } from "@/components/review/ReadingTelemetry";
 import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import { disclosureLabel } from "@/components/reviews/disclosure-model";
 import { ReportDialog } from "@/components/review/ReportDialog";
-import { TrustBadge } from "@/components/ui/TrustBadge";
 import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
 import { ReviewVoteBar } from "@/components/review/ReviewVoteBar";
 import { ShareButton } from "@/components/review/ShareButton";
+import type { HeaderUser } from "@/components/site/SiteHeader";
+import { StarRow } from "@/components/sellers/SellerIdentity";
+import { HonestyScore } from "@/components/ui/HonestyScore";
 import {
   ageLabel,
   splitHeadline,
@@ -33,61 +33,83 @@ import {
   type ReviewFull,
   type Verdict,
 } from "@/lib/reviews";
-
-const VERDICT: Record<Verdict, { label: string; className: string; Icon: typeof ThumbsUp }> = {
-  yes_absolutely: {
-    label: "Yes, absolutely",
-    className: "bg-[color-mix(in_srgb,var(--accent-success)_14%,transparent)] text-[var(--accent-success)]",
-    Icon: ThumbsUp,
-  },
-  it_depends: {
-    label: "It depends",
-    className: "bg-[color-mix(in_srgb,var(--accent-star)_18%,transparent)] text-[var(--base-ink-700)]",
-    Icon: ShieldCheck,
-  },
-  hard_pass: {
-    label: "Hard pass",
-    className: "bg-[color-mix(in_srgb,var(--accent-danger)_12%,transparent)] text-[var(--accent-danger)]",
-    Icon: ThumbsDown,
-  },
-};
+import { trustScore } from "@/lib/trust";
 
 /**
- * The reviewer's photo, or a clean branded placeholder when none.
+ * A published review, built to Figma "Review page" (4218:1196), read from the
+ * file on 2026-09-14.
  *
- * Phone: "Review page.png" draws a 358px square white card at radius 16 with the
- * product contained in it. The frame's "1/3" badge and dots belong to a
- * carousel; a review carries one photo, so neither is drawn. From `md` the
- * wide crop stays: a square at tablet width would be 672px tall.
+ * Phone values from the frame (status bar excluded): a 72px --accent-primary
+ * bar with 28px glyphs — back at x16; search, bag and overflow on a 48px pitch;
+ * a 40px avatar at the right gutter. 20px down, a 24px avatar with the byline 8px
+ * after it in 12px Poppins Light, split by 12px DotOutline glyphs around the
+ * Honesty Score. 12px down, the title in 20px SemiBold on a 30px line with the
+ * rest in regular italic; 16px to a 1px rule at 30% ink; 12px to 32px pills in
+ * 12px Light with 20px glyphs; 10px to a 358px square photo on #e1e1e1. Sections
+ * are a 16px SemiBold heading, 20px to 14px Light on a 21px line, 26px apart.
+ * Pros & Cons share one heading over two 158px columns of 44px white discs with
+ * 32px light glyphs. "Rating" is five 28px stars. 20px down, the action row: a
+ * vote pill, a comment-count pill, "Shop" in the brand outline, and a round
+ * Share, then a full-bleed hairline.
  *
- * The hero is this page's LCP element, so it is the one image that loads
+ * INTENTIONAL PRODUCT DIFFERENCES:
+ *  - "General Info" and "Experience" are one field here (`discussion`), shown
+ *    under one heading; "Best for" is kept because the composer collects it.
+ *  - The verdict (yes / it depends / hard pass) leads the "Verdict" section,
+ *    and verification (X.2) and disclosure (X.1) sit under the photo: both
+ *    qualify everything below them.
+ *  - "3D Model" is not drawn: no product carries 3D or 360 assets (X.3). The
+ *    carousel's "1/3" badge and dots are not drawn: a review carries one photo.
+ *  - Pros and cons carry no aspect ("Price", "Portability"), so each point is
+ *    its label alone.
+ *  - From `md` up there is no frame: the page renders SiteHeader instead of the
+ *    orange bar and the photo takes a wide crop.
+ */
+
+const VERDICT_LABEL: Record<Verdict, string> = {
+  yes_absolutely: "Yes, absolutely.",
+  it_depends: "It depends.",
+  hard_pass: "Hard pass.",
+};
+
+const PILL =
+  "inline-flex h-8 shrink-0 items-center gap-1 rounded-[var(--radius-md)] border border-[var(--text-primary)] px-[11px] text-[12px] font-light leading-none text-[var(--text-primary)] no-underline hover:border-[var(--accent-primary)]";
+
+const BAR_BUTTON = "grid h-10 w-10 place-items-center rounded-full hover:bg-white/15";
+
+const Dot = ({ className = "" }: { className?: string }) => (
+  <DotOutline size={12} aria-hidden="true" className={`shrink-0 text-[var(--base-gray-400)] ${className}`} />
+);
+
+function compact(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+}
+
+/**
+ * The reviewer's photo on the frame's #e1e1e1 media ground, cropped to fill as
+ * drawn. The hero is this page's LCP element, so it is the one image that loads
  * eagerly.
  */
 function ReviewHero({ review }: { review: ReviewFull["review"] }) {
   const photo = usablePhoto(review.photo_url);
-  if (photo) {
-    return (
-      <div className="relative mt-[11px] aspect-square w-full overflow-hidden rounded-[16px] bg-[var(--surface-card)] md:mt-6 md:aspect-[16/10] md:rounded-[var(--radius-sm)] lg:max-h-[22rem]">
+  return (
+    <div className="relative mt-2.5 aspect-square w-full overflow-hidden rounded-[16px] bg-[#e1e1e1] md:mt-6 md:aspect-[16/10] md:rounded-[var(--radius-sm)] lg:max-h-[22rem]">
+      {photo ? (
         <Image
           src={photo}
           alt={review.title}
           fill
           sizes="(min-width: 1024px) 50rem, 100vw"
           priority
-          className="object-contain md:object-cover"
+          className="object-cover"
         />
-      </div>
-    );
-  }
-  return (
-    <div
-      aria-hidden="true"
-      className="mt-[11px] grid aspect-square w-full place-items-center rounded-[16px] md:mt-6 md:aspect-[16/10] md:rounded-[var(--radius-sm)] lg:aspect-[16/7]"
-      style={{
-        background: `linear-gradient(150deg, hsl(20 42% 74%), hsl(30 38% 55%))`,
-      }}
-    >
-      <ImageSquare size={40} weight="light" className="text-white/55" />
+      ) : (
+        <div aria-hidden="true" className="absolute inset-0 grid place-items-center">
+          <ImageSquare size={40} weight="light" className="text-[var(--base-gray-400)]" />
+        </div>
+      )}
     </div>
   );
 }
@@ -96,18 +118,26 @@ export function ReviewDetail({
   data,
   canVote,
   isOwnReview = false,
+  viewer = null,
 }: {
   data: ReviewFull;
   canVote: boolean;
   /** The author can't report their own review — the API rejects self-reports. */
   isOwnReview?: boolean;
+  /** The signed-in reader, for the bar's avatar. */
+  viewer?: HeaderUser;
 }) {
   const { review, author, product } = data;
-  const verdict = VERDICT[review.verdict] ?? VERDICT.it_depends;
   const authorName = author?.display_name || author?.username || "reviewer";
+  const authorAvatar = usablePhoto(author?.avatar_url);
+  const viewerAvatar = usablePhoto(viewer?.avatarUrl);
+  const hasScore = trustScore(author?.reputation_score) !== null;
   const hasPros = (review.pros?.length ?? 0) > 0;
   const hasCons = (review.cons?.length ?? 0) > 0;
   const headline = splitHeadline(review.title, product?.canonical_name);
+  const verified = showsTrustBadge(review);
+  const disclosure = disclosureLabel(review.material_relationship);
+  const commentCount = data.comment_count ?? 0;
 
   return (
     <>
@@ -116,40 +146,21 @@ export function ReviewDetail({
           lifecycle as a fresh impression. */}
       <ReadingTelemetry reviewId={review.id} />
 
-      {/* MOBILE chrome only. The frame gives the review its own brand-orange
-          bar, and on a phone it is right: it replaces the site header rather
-          than stacking under it, and the back control is the way out. Sticky so
-          that survives a 2,273px scroll. The five controls are the BUG-012 set.
-          The #d9d9d9 strip above it in the mockup is the phone status bar, i.e.
-          device chrome, so it is deliberately not built.
-
-          Hidden from `md` up, where the page renders SiteHeader instead: a
-          768px tablet showing a phone's back-arrow bar is the same mistake as
-          the desktop one, just less obvious. Carrying
-          the phone bar onto a 1440px desktop was the whole reason that width
-          read as a blown-up mobile layout: no wordmark, no nav, no search, and
-          a back arrow where the site's own navigation belongs. */}
+      {/* Phone chrome only: it replaces the site header rather than stacking
+          under it, and sticks through a long read. The #d9d9d9 strip above it in
+          the frame is the phone status bar, device chrome, so it is not built.
+          Hidden from `md` up, where the page renders SiteHeader instead. */}
       <nav
         aria-label="Review"
-        className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-white md:hidden"
+        className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-[var(--text-on-brand)] md:hidden"
       >
-        {/* "Review page.png": a full back arrow, then search, bag, "..." and
-            the account, in that order, about 48px apart. */}
-        <Link
-          href="/"
-          aria-label="Back"
-          className="grid h-10 w-10 place-items-center rounded-full hover:bg-white/15"
-        >
-          <ArrowLeft size={26} />
+        <Link href="/" aria-label="Back" className={`-ml-1.5 ${BAR_BUTTON}`}>
+          <ArrowLeft size={28} />
         </Link>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/search"
-            aria-label="Search reviews"
-            className="grid h-10 w-10 place-items-center rounded-full hover:bg-white/15"
-          >
-            <MagnifyingGlass size={24} />
+          <Link href="/search" aria-label="Search reviews" className={BAR_BUTTON}>
+            <MagnifyingGlass size={28} />
           </Link>
           {review.referral_redirect_url ? (
             <a
@@ -159,9 +170,9 @@ export function ReviewDetail({
               aria-label="Buy this product"
               data-telemetry-outlink
               data-telemetry-review-id={review.id}
-              className="grid h-10 w-10 place-items-center rounded-full hover:bg-white/15"
+              className={BAR_BUTTON}
             >
-              <ShoppingBag size={24} />
+              <ShoppingBagOpen size={28} />
             </a>
           ) : null}
           <ReviewOverflowMenu
@@ -170,297 +181,262 @@ export function ReviewDetail({
             canReport={!isOwnReview}
             onBar
           />
-          {/* The frame leaves a wider gap before the account than between the
-              other three controls. */}
+          {/* The 40px avatar ends on the 16px gutter, 14px past the overflow. */}
           <Link
             href="/profile"
             aria-label="Your profile"
-            className="ml-[10px] grid h-10 w-10 place-items-center rounded-full hover:bg-white/15"
+            className="ml-1.5 grid h-10 w-10 place-items-center overflow-hidden rounded-full hover:opacity-90"
           >
-            <UserCircle size={28} />
+            {viewerAvatar ? (
+              <Image src={viewerAvatar} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
+            ) : (
+              <UserCircle size={40} weight="light" />
+            )}
           </Link>
         </div>
       </nav>
 
       <article className="mx-auto w-full max-w-[44rem] px-4 pb-6 pt-5 md:py-6 lg:mx-0 lg:max-w-[42rem] lg:px-0 lg:py-0">
-      {/* Product context. Not in the phone frame, which goes straight to the
-          author; kept from `md` up, where it orients a reader arriving cold. */}
-      {product ? (
-        <div className="mt-5 hidden flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)] md:flex">
-          {product.category ? (
-            <span className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-2.5 py-1 capitalize text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-              {product.category}
-            </span>
-          ) : null}
-          {product.canonical_name ? <span>{product.canonical_name}</span> : null}
-        </div>
-      ) : null}
-
-      {/* Author, as the frame draws it: a 24px disc 20px under the bar, then
-          "name • shield score • level" at 13px. The age is kept from `md` up. */}
-      <div className="flex items-center gap-[9px] md:mt-4 md:gap-2">
-        <span
-          aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white md:h-9 md:w-9 md:text-[13px]"
-          style={{ background: "hsl(24 55% 55%)" }}
-        >
-          {authorName.slice(0, 1).toUpperCase()}
-        </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 font-[family-name:var(--font-system)] text-[13px] text-[var(--text-primary)]">
-          {author?.id ? (
-            <Link href={`/u/${author.id}`} className="hover:text-[var(--accent-primary)]">
-              {author.username ?? authorName}
-            </Link>
-          ) : (
-            <span>{authorName}</span>
-          )}
-          {author ? (
-            <>
-              <span aria-hidden="true" className="text-[var(--text-muted)]">
-                •
-              </span>
-              <TrustBadge
-                levelName={author.trust_level_name}
-                stage={author.trust_stage}
-                score={author.reputation_score}
-                plain
-                compact
-              />
-              {author.trust_level_name ? (
-                <>
-                  <span aria-hidden="true" className="text-[var(--text-muted)]">
-                    •
-                  </span>
-                  <span aria-hidden="true">{author.trust_level_name}</span>
-                </>
-              ) : null}
-            </>
-          ) : null}
-          <span className="hidden text-[12px] text-[var(--text-muted)] md:inline">
-            · {ageLabel(review.created_at)}
-          </span>
-        </span>
-      </div>
-
-      {/* The product in bold with its hyphen, the rest in italic — the frame's
-          split. splitHeadline honours the reviewer's own dash and falls back to
-          the canonical product name. */}
-      <h1 className="mt-[14px] text-[20px] font-normal leading-[25px] text-[var(--text-primary)] md:mt-5 lg:text-[26px] lg:leading-[normal]">
-        {headline.product ? (
-          <>
-            <span className="font-bold">{headline.product} -</span>{" "}
-            <span className="italic">{headline.rest}</span>
-          </>
-        ) : (
-          <span className="font-bold">{review.title}</span>
-        )}
-      </h1>
-
-      {/* A 2px rule, then the frame's pill row. "Price History" jumps to the
-          price panel and "Ask a question" opens the question composer.
-          "3D Model" is not drawn: no product carries 3D or 360 assets (X.3). */}
-      <hr className="mt-[23px] border-0 border-t-2 border-[#d3d3d3]" />
-      <div className="-mx-4 mt-[11px] flex gap-[6px] overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0">
+        {/* Product context. Not in the phone frame, which goes straight to the
+            author; kept from `md` up, where it orients a reader arriving cold. */}
         {product ? (
-          <a
-            href="#price-history"
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-pill)] border border-[var(--text-primary)] px-3 font-[family-name:var(--font-system)] text-[13px] text-[var(--text-primary)] no-underline hover:border-[var(--accent-primary)] lg:hidden"
-          >
-            <ChartLine size={16} aria-hidden="true" /> Price History
-          </a>
+          <div className="mt-5 hidden flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)] md:flex">
+            {product.category ? (
+              <span className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-2.5 py-1 capitalize text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
+                {product.category}
+              </span>
+            ) : null}
+            {product.canonical_name ? <span>{product.canonical_name}</span> : null}
+          </div>
         ) : null}
-        <Link
-          href="/questions/new"
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-pill)] border border-[var(--text-primary)] px-3 font-[family-name:var(--font-system)] text-[13px] text-[var(--text-primary)] no-underline hover:border-[var(--accent-primary)]"
-        >
-          <ChatText size={16} aria-hidden="true" /> Ask a question
-        </Link>
-      </div>
 
-      <ReviewHero review={review} />
-
-      {/* Verdict, stars, verification (X.2) and disclosure (X.1). The frame
-          places verdict and rating further down; these stay directly under the
-          photo because the verification and the disclosure qualify everything
-          a reader is about to read. */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] font-semibold ${verdict.className}`}
-        >
-          <verdict.Icon size={16} weight="fill" />
-          {verdict.label}
-        </span>
-        <Stars rating={review.star_rating} />
-        {/* X.2: proof + moderator decision + publication, decided by the API. */}
-        {showsTrustBadge(review) ? (
-          <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-success)]">
-            <SealCheck size={15} weight="fill" />
-            Verified purchase
-          </span>
-        ) : null}
-        {/* Disclosure (X.1): shown whenever the reviewer declared a relationship,
-            next to the verification it qualifies. */}
-        {disclosureLabel(review.material_relationship) ? (
-          <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-primary)]">
-            <Info size={14} aria-hidden="true" className="text-[var(--accent-trust)]" />
-            {disclosureLabel(review.material_relationship)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Body. `id="review-body"` is the element ReadingTelemetry observes for
-          both "is the discussion in view" (IntersectionObserver) and the
-          scroll read-through fraction — design §4.3/§4.4. */}
-      <Section title="The review">
-        <p id="review-body" className="whitespace-pre-line">{review.discussion}</p>
-      </Section>
-
-      {review.verdict_explanation ? (
-        <Section title="Verdict">
-          <p className="whitespace-pre-line">{review.verdict_explanation}</p>
-        </Section>
-      ) : null}
-
-      {review.target_audience ? (
-        <Section title="Best for">
-          <p>{review.target_audience}</p>
-        </Section>
-      ) : null}
-
-      {review.anti_target_audience ? (
-        <Section title="This is not for">
-          <p>{review.anti_target_audience}</p>
-        </Section>
-      ) : null}
-
-      {hasPros || hasCons ? (
-        <div className="mt-8 grid gap-6 sm:grid-cols-2">
-          {hasPros ? (
-            <ProsCons kind="pro" items={review.pros ?? []} />
-          ) : null}
-          {hasCons ? (
-            <ProsCons kind="con" items={review.cons ?? []} />
-          ) : null}
+        <div className="flex items-start gap-2 md:mt-4">
+          {authorAvatar ? (
+            <Image src={authorAvatar} alt="" width={24} height={24} className="h-6 w-6 shrink-0 rounded-full object-cover" />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white"
+              style={{ background: "hsl(24 55% 55%)" }}
+            >
+              {authorName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <p className="mt-[3px] flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-[12px] font-light leading-4 text-[var(--text-primary)]">
+            {author?.id ? (
+              <Link href={`/u/${author.id}`} className="hover:text-[var(--accent-primary)]">
+                {author.username ?? authorName}
+              </Link>
+            ) : (
+              <span>{authorName}</span>
+            )}
+            {author && hasScore ? (
+              <>
+                <Dot />
+                <HonestyScore
+                  score={author.reputation_score}
+                  levelName={author.trust_level_name}
+                  stage={author.trust_stage}
+                />
+              </>
+            ) : null}
+            {author?.trust_level_name ? (
+              <>
+                <Dot />
+                <span>{author.trust_level_name}</span>
+              </>
+            ) : null}
+            <Dot className="hidden md:block" />
+            <span className="hidden font-extralight md:inline">{ageLabel(review.created_at)}</span>
+          </p>
         </div>
-      ) : null}
 
-      {review.price_paid ? (
-        <p className="mt-6 text-[13px] text-[var(--text-secondary)]">
-          Paid <span className="font-semibold text-[var(--text-primary)]">₱{review.price_paid}</span>
-        </p>
-      ) : null}
+        {/* The product in SemiBold with its hyphen, the rest in regular italic —
+            the frame's split. splitHeadline honours the reviewer's own dash and
+            falls back to the canonical product name. */}
+        <h1 className="mt-3 text-[20px] font-semibold leading-[30px] text-[var(--text-primary)] md:mt-5 lg:text-[26px] lg:leading-[normal]">
+          {headline.product ? (
+            <>
+              {headline.product} - <span className="font-normal italic">{headline.rest}</span>
+            </>
+          ) : (
+            review.title
+          )}
+        </h1>
 
-      {/* Action bar */}
-      <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-6">
-        <ReviewVoteBar
-          reviewId={review.id}
-          helpful={review.helpful_votes}
-          unhelpful={review.unhelpful_votes}
-          canVote={canVote}
-          myVote={review.my_vote}
-        />
+        {/* "Price History" jumps to the price panel and "Ask a question" opens
+            the question composer. */}
+        <hr className="mt-4 border-0 border-t border-[var(--line-hairline-30)]" />
+        <div className="-mx-4 mt-[11px] flex gap-3 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0">
+          {product ? (
+            <a href="#price-history" className={`${PILL} lg:hidden`}>
+              <ChartLine size={20} aria-hidden="true" /> Price History
+            </a>
+          ) : null}
+          <Link href="/questions/new" className={PILL}>
+            <ChatCenteredText size={20} aria-hidden="true" /> Ask a question
+          </Link>
+        </div>
 
-        {/* Hidden at `lg`: the sidebar's product card carries the Buy action on
-            desktop, and two identical primary CTAs on one screen is a choice
-            the reader has to make for no reason. */}
-        {review.referral_redirect_url ? (
+        <ReviewHero review={review} />
+
+        {verified || disclosure ? (
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            {/* X.2: proof + moderator decision + publication, decided by the API. */}
+            {verified ? (
+              <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-success)]">
+                <SealCheck size={16} weight="fill" />
+                Verified purchase
+              </span>
+            ) : null}
+            {/* X.1: shown whenever the reviewer declared a relationship. */}
+            {disclosure ? (
+              <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-primary)]">
+                <Info size={14} aria-hidden="true" className="text-[var(--accent-trust)]" />
+                {disclosure}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex flex-col gap-[26px]">
+          {/* `id="review-body"` is the element ReadingTelemetry observes for both
+              "is the discussion in view" and the scroll read-through fraction —
+              design §4.3/§4.4. */}
+          <Section title="The review">
+            <p id="review-body" className="whitespace-pre-line">{review.discussion}</p>
+          </Section>
+
+          {hasPros || hasCons ? (
+            <Section title="Pros & Cons">
+              <div className="grid grid-cols-2">
+                <PointList kind="pro" items={review.pros ?? []} />
+                <PointList kind="con" items={review.cons ?? []} />
+              </div>
+            </Section>
+          ) : null}
+
+          {review.target_audience ? (
+            <Section title="Best for">
+              <p>{review.target_audience}</p>
+            </Section>
+          ) : null}
+
+          {review.anti_target_audience ? (
+            <Section title="This is not for">
+              <p>{review.anti_target_audience}</p>
+            </Section>
+          ) : null}
+
+          <Section title="Verdict">
+            <p className="whitespace-pre-line">
+              <span className="font-semibold">{VERDICT_LABEL[review.verdict] ?? VERDICT_LABEL.it_depends}</span>
+              {review.verdict_explanation ? <> {review.verdict_explanation}</> : null}
+            </p>
+          </Section>
+
+          <Section title="Rating">
+            <StarRow value={review.star_rating} size={28} gap={0} />
+            {review.price_paid ? (
+              <p className="mt-3 text-[12px]">
+                Paid <span className="font-semibold">₱{review.price_paid}</span>
+              </p>
+            ) : null}
+          </Section>
+        </div>
+
+        <div className="mt-5 flex items-center gap-2">
+          <ReviewVoteBar
+            reviewId={review.id}
+            helpful={review.helpful_votes}
+            unhelpful={review.unhelpful_votes}
+            canVote={canVote}
+            myVote={review.my_vote}
+          />
           <a
-            href={review.referral_redirect_url}
-            target="_blank"
-            rel="noopener noreferrer nofollow sponsored"
-            data-telemetry-outlink
-            data-telemetry-review-id={review.id}
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[var(--accent-primary-strong)] lg:hidden"
+            href="#comments"
+            aria-label={`${commentCount} ${commentCount === 1 ? "comment" : "comments"}`}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[20px] border border-[var(--line-hairline-30)] px-3 text-[12px] leading-none text-[var(--text-primary)] no-underline hover:bg-[var(--line-hairline-10)]"
           >
-            <ShoppingBag size={16} weight="fill" />
-            Buy it here
+            <Chats size={16} aria-hidden="true" />
+            <span aria-hidden="true">{compact(commentCount)}</span>
           </a>
-        ) : (
-          <span
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--line-hairline-30)] px-5 py-2.5 text-[13px] font-semibold text-[var(--text-muted)] lg:hidden"
-            title="An affiliate link is added once a moderator approves this review."
-          >
-            <ShoppingBag size={16} />
-            Buy link pending
-          </span>
-        )}
 
-        <div className="ml-auto flex items-center gap-1">
-          <ShareButton title={review.title} reviewId={review.id} />
+          {/* Hidden at `lg`: the sidebar's product card carries the Buy action
+              on desktop, and two identical CTAs on one screen is a choice the
+              reader has to make for no reason. */}
+          {review.referral_redirect_url ? (
+            <a
+              href={review.referral_redirect_url}
+              target="_blank"
+              rel="noopener noreferrer nofollow sponsored"
+              data-telemetry-outlink
+              data-telemetry-review-id={review.id}
+              className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-[20px] border border-[var(--accent-primary)] px-[11px] text-[12px] font-light leading-none text-[var(--accent-primary)] no-underline hover:bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)] lg:hidden"
+            >
+              <ShoppingBagOpen size={20} aria-hidden="true" />
+              Shop
+            </a>
+          ) : (
+            <span
+              title="An affiliate link is added once a moderator approves this review."
+              className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-[20px] border border-[var(--line-hairline-30)] px-[11px] text-[12px] font-light leading-none text-[var(--text-muted)] lg:hidden"
+            >
+              <ShoppingBagOpen size={20} aria-hidden="true" />
+              Shop
+              <span className="sr-only"> — the link appears once a moderator approves this review</span>
+            </span>
+          )}
+
+          <div className="lg:ml-auto">
+            <ShareButton title={review.title} reviewId={review.id} variant="icon" />
+          </div>
 
           {!isOwnReview ? (
-            <ReportDialog reviewId={review.id} canReport={canVote} />
+            <ReportDialog reviewId={review.id} canReport={canVote} hideTrigger />
           ) : null}
         </div>
-      </div>
       </article>
     </>
   );
 }
 
-function Stars({ rating }: { rating: number }) {
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <Star
-          key={i}
-          size={18}
-          weight={i < rating ? "fill" : "regular"}
-          className={i < rating ? "text-[var(--accent-star)]" : "text-[var(--base-gray-300)]"}
-        />
-      ))}
-    </span>
-  );
-}
-
 /**
- * A titled block of the review body.
- *
- * The frame writes these as 16px SemiBold in full ink over 14px/22px Light —
- * a plain sentence-case heading, not the 13px uppercase muted label this used.
- * Uppercase tracking reads as a form field; these are section titles in a piece
- * of writing.
+ * A titled block of the review body: a 16px SemiBold heading, 20px down to
+ * 14px Light on a 21px line.
  */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-8">
-      <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
-        {title}
-      </h2>
-      <div className="mt-3 text-[14px] font-light leading-[22px] text-[var(--text-primary)]">
-        {children}
-      </div>
+    <section>
+      <h2 className="text-[16px] font-semibold leading-none text-[var(--text-primary)]">{title}</h2>
+      <div className="mt-5 text-[14px] font-light leading-[21px] text-[var(--text-primary)]">{children}</div>
     </section>
   );
 }
 
-function ProsCons({ kind, items }: { kind: "pro" | "con"; items: string[] }) {
+/**
+ * One column of Pros & Cons: 44px white discs 16px apart holding a 32px
+ * Phosphor Check or X at light weight (the frame's 1.5px stroke), each with its
+ * point in 12px Regular 8px to the right.
+ */
+function PointList({ kind, items }: { kind: "pro" | "con"; items: string[] }) {
   const isPro = kind === "pro";
+  if (items.length === 0) return <div />;
   return (
-    <div>
-      <h3 className="text-[16px] font-semibold text-[var(--text-primary)]">
-        {isPro ? "Pros" : "Cons"}
-      </h3>
-      <ul className="mt-3 flex flex-col gap-2.5">
-        {items.map((item, i) => (
-          <li key={i} className="flex items-center gap-3 text-[12px] text-[var(--text-primary)]">
-            {/* 44px ringed circle, as drawn — the frame gives each point a
-                substantial marker rather than a small inline tick, which is
-                what makes the pro/con columns scannable at a glance. */}
-            <span
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ring-1 ${
-                isPro
-                  ? "text-[var(--accent-success)] ring-[color-mix(in_srgb,var(--accent-success)_35%,transparent)]"
-                  : "text-[var(--accent-danger)] ring-[color-mix(in_srgb,var(--accent-danger)_35%,transparent)]"
-              }`}
-            >
-              {isPro ? <Check size={22} weight="bold" /> : <X size={22} weight="bold" />}
-            </span>
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul aria-label={isPro ? "Pros" : "Cons"} className="flex flex-col gap-4 pr-2">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-2 text-[12px] font-normal leading-4">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--surface-card)] text-[var(--base-black)]">
+            {isPro ? (
+              <Check size={32} weight="light" aria-label="Pro" />
+            ) : (
+              <X size={32} weight="light" aria-label="Con" />
+            )}
+          </span>
+          <span className="mt-0.5 min-w-0">{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

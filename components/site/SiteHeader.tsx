@@ -22,12 +22,16 @@ export type HeaderUser = {
  */
 export function SiteHeader({ user, showSearch = true }: { user: HeaderUser; showSearch?: boolean }) {
   return (
-    // No rule under the phone header: neither the landing nor the search frames
-    // draw one. Tablet and desktop keep it.
-    <header className="sticky top-0 z-30 border-b border-transparent bg-[color-mix(in_srgb,var(--surface-app)_85%,transparent)] backdrop-blur-md md:border-[var(--border-subtle)]">
-      <div className="mx-auto flex h-16 w-full max-w-[72rem] items-center gap-4 px-6 md:h-[72px] md:px-10">
-        <Link href="/" aria-label="bluntly home" className="text-[var(--accent-primary)]">
-          <Logo height={22} label="bluntly" />
+    // The phone bar is Figma "NavBar" Type=Landing (6884:817): 72px including a
+    // 1px rule at 10% ink, the 78x24 wordmark 24px in, a 28px search glyph, and
+    // the 40px avatar 24px from the right edge. Tablet and desktop keep their
+    // full-width rule on the header itself.
+    <header className="sticky top-0 z-30 bg-[color-mix(in_srgb,var(--surface-app)_85%,transparent)] backdrop-blur-md md:border-b md:border-[var(--border-subtle)]">
+      <div className="mx-auto flex h-[72px] w-full max-w-[72rem] items-center gap-4 border-b border-[var(--line-hairline-10)] px-6 md:border-b-0 md:px-10">
+        {/* `flex`: an inline link sits the 24px mark on a taller line box, 4px
+            above the frame's y. */}
+        <Link href="/" aria-label="bluntly home" className="flex text-[var(--accent-primary)]">
+          <Logo height={24} label="bluntly" />
         </Link>
 
         {/* Desktop inline search */}
@@ -37,14 +41,16 @@ export function SiteHeader({ user, showSearch = true }: { user: HeaderUser; show
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2 md:gap-3">
+        {/* 14px between the search glyph's 40px target and the avatar puts the
+            glyph at x278 and the avatar at x326, as drawn. */}
+        <div className="ml-auto flex items-center gap-3.5 md:gap-3">
           {showSearch ? (
             <Link
               href="/search"
               aria-label="Search"
               className="grid h-10 w-10 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] md:hidden"
             >
-              <MagnifyingGlass size={24} />
+              <MagnifyingGlass size={28} />
             </Link>
           ) : null}
 

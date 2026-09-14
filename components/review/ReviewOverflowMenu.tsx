@@ -72,11 +72,12 @@ export function ReviewOverflowMenu({
         aria-haspopup="menu"
         className={
           onBar
-            ? "grid h-9 w-9 place-items-center rounded-full text-white hover:bg-white/15"
+            ? "grid h-10 w-10 place-items-center rounded-full text-[var(--text-on-brand)] hover:bg-white/15"
             : "grid h-9 w-9 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]"
         }
       >
-        <DotsThree size={22} weight="bold" />
+        {/* The bar draws Phosphor DotsThree at 28px (Review page 4218:1196). */}
+        <DotsThree size={onBar ? 28 : 22} weight={onBar ? "regular" : "bold"} />
       </button>
 
       {open ? (

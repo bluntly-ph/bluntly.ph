@@ -1,54 +1,68 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 
 /**
- * The "Stop guessing. Start knowing." conversion screen.
+ * The "Stop guessing. Start knowing." card, built to "Mobile Landing Page"
+ * (1902:1504), read 2026-09-14.
  *
- * Type aligned to the frame (BUG-008): the eyebrow, both headline lines, and
- * the button labels were each a weight and a size heavier than drawn, which
- * turned a quiet closing note into a second hero. Routing was already correct
- * and is untouched.
+ * Phone: 40px under the trust list, a 358x268 brand card at radius 12 carrying
+ * the frame's two decorative ellipses (#de8463 at 20%, exported as assets).
+ * "READY?" in 12px Regular 16px down; "Stop guessing." in 24px Regular and
+ * "Start knowing." in 20px italic on their natural lines; the invitation in
+ * 12px Light on an 18px line within 326px; then two 42px pills right-aligned
+ * 20px from the card edge — "Find a review" on --surface-app with a 16px brand
+ * arrow, and "Write & Earn" outlined — both 12px Light.
+ *
+ * The frame's own footer overlaps this card, a layout slip in the artwork, so
+ * the card keeps 40px clear above the footer instead.
  */
 export function LandingCta() {
   return (
-    <section className="border-t border-[var(--border-subtle)] bg-[var(--surface-app)]">
-      <div className="mx-auto flex w-full max-w-[72rem] items-center px-4 py-16 sm:px-6 lg:min-h-[60vh] lg:px-10 lg:py-24">
-        <div className="relative w-full overflow-hidden rounded-[var(--radius-md)] bg-[var(--accent-primary)] px-6 py-10 text-white lg:px-14 lg:py-16">
-          {/* Decorative soft circles, echoing the frame. */}
-          <div
+    <section className="bg-[var(--surface-app)] md:border-t md:border-[var(--border-subtle)]">
+      <div className="mx-auto flex w-full max-w-[72rem] items-center px-4 pb-10 pt-10 sm:px-6 md:py-16 lg:min-h-[60vh] lg:px-10 lg:py-24">
+        <div className="relative w-full overflow-hidden rounded-[12px] bg-[var(--accent-primary)] px-4 pb-[42px] pt-4 text-[var(--text-on-brand)] md:px-10 md:py-12 lg:px-14 lg:py-16">
+          <Image
+            src="/figma/landing/cta-ellipse-90.svg"
+            alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-white/10"
+            width={170}
+            height={119}
+            unoptimized
+            className="pointer-events-none absolute left-[21px] top-[149px] h-[119px] w-[170px]"
           />
-          <div
+          <Image
+            src="/figma/landing/cta-ellipse-91.svg"
+            alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-black/5"
+            width={163}
+            height={56}
+            unoptimized
+            className="pointer-events-none absolute left-[185px] top-0 h-14 w-[163px]"
           />
 
           <div className="relative max-w-[40rem]">
-            <span className="text-[12px] font-normal uppercase tracking-[0.12em] text-white/80">
-              Ready?
-            </span>
-            <h2 className="mt-2 text-[24px] font-normal leading-[1.2]">
-              Stop guessing.
-              <br />
-              <span className="text-[20px] font-normal italic">Start knowing.</span>
+            <span className="block pl-[3px] text-[12px] leading-none md:pl-0">READY?</span>
+            <h2 className="mt-[14px] font-normal text-white">
+              <span className="block text-[24px] leading-[36px]">Stop guessing.</span>
+              <span className="block text-[20px] italic leading-[30px]">Start knowing.</span>
             </h2>
-            <p className="mt-4 max-w-[32rem] text-[15px] text-white/90">
+            <p className="mt-3 max-w-[326px] text-[12px] font-light leading-[18px] md:max-w-[32rem] md:text-[15px] md:leading-normal">
               Join Filipinos making smarter purchases and the reviewers earning from
               honest opinions.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap justify-end gap-2 pr-1 md:justify-start md:pr-0">
               <Link
                 href="/search"
-                className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-white px-6 py-3 text-[12px] font-light text-[var(--text-primary)] hover:bg-[var(--base-gray-100)]"
+                className="inline-flex h-[42px] items-center gap-3 rounded-[32px] bg-[var(--surface-app)] pl-4 pr-[13px] text-[12px] font-light leading-none text-[var(--text-primary)] no-underline hover:bg-white"
               >
                 Find a review
-                <ArrowRight size={16} weight="bold" />
+                <ArrowRight size={16} className="text-[var(--accent-primary)]" />
               </Link>
               <Link
                 href="/reviews/new"
-                className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-white/70 px-6 py-3 text-[12px] font-light text-white hover:bg-white/10"
+                className="inline-flex h-[42px] items-center rounded-[32px] border border-[var(--text-on-brand)] px-4 text-[12px] font-light leading-none text-[var(--text-on-brand)] no-underline hover:bg-white/10"
               >
                 Write &amp; Earn
               </Link>

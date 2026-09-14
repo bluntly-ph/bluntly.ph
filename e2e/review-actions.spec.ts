@@ -78,18 +78,21 @@ test.describe("BUG-011 — categories round trip", () => {
       page.getByRole("link", { name: /all categories/i }),
     ).toBeVisible();
 
-    // "All" returns to /categories rather than dead-ending on /search.
-    await page.getByRole("link", { name: /^all$/i }).first().click();
+    // Clearing the category returns to /categories rather than dead-ending on
+    // /search. The category lives in the All filters sheet (Figma 1587:4658).
+    await page.getByRole("button", { name: "All filters", exact: true }).click();
+    await page.getByRole("dialog", { name: "All filters" }).getByRole("button", { name: "Reset" }).click();
     await expect(page).toHaveURL(/\/categories$/);
   });
 
-  test("plain search still treats All as 'clear the filter'", async ({ page }) => {
+  test("plain search still treats Reset as 'clear the filter'", async ({ page }) => {
     // The fix must not hijack /search reached any other way.
     await page.goto("/search?category=beauty");
     await expect(
       page.getByRole("link", { name: /all categories/i }),
     ).toHaveCount(0);
-    await page.getByRole("link", { name: /^all$/i }).first().click();
+    await page.getByRole("button", { name: "All filters", exact: true }).click();
+    await page.getByRole("dialog", { name: "All filters" }).getByRole("button", { name: "Reset" }).click();
     await expect(page).toHaveURL(/\/search$/);
   });
 });
@@ -125,48 +128,53 @@ test.describe("BUG-005 — the footer stays put on an empty result set", () => {
   });
 });
 
-test.describe("category strip — desktop must not clip it", () => {
+test.describe("search filters and sort — Figma Chip/Action and sheets", () => {
   /**
-   * The strip is `overflow-x-auto` + `w-max`: right on a phone, wrong on a
-   * desktop, where it kept running past the container edge and clipped the last
-   * four of fourteen categories mid-word. They were reachable only by dragging
-   * a strip with a hidden scrollbar.
+   * The category strip is replaced by the file's own controls (3481:1776):
+   * "All filters" and "Sort" pills opening their sheets (1587:4658, 1591:5408).
+   * The sheets offer only what GET /reviews/feed serves — a category and two
+   * orders — so each choice is proven to reach the URL the results are read
+   * from, at a phone and a desktop width.
    */
-  test("every category is reachable at desktop widths", async ({ page }) => {
-    for (const width of [1440, 1280, 1024]) {
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto("/search");
-      const clipped = await page.evaluate(() => {
-        const list = document.querySelector('nav[aria-label="Search results type"] + div ul');
-        if (!list) return null;
-        const chips = [...list.querySelectorAll("li")];
-        const last = chips[chips.length - 1].getBoundingClientRect();
-        return last.right > list.parentElement!.getBoundingClientRect().right + 1;
-      });
-      expect(clipped, `category strip clipped at ${width}px`).toBe(false);
-    }
+  for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    test(`a category applies from the All filters sheet at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await page.goto("/search?q=fan");
+      await page.getByRole("button", { name: "All filters", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "All filters" });
+      await sheet.getByText("Beauty", { exact: true }).click();
+      await sheet.getByRole("button", { name: "Filter Reviews" }).click();
+      await expect(page).toHaveURL(/\/search\?q=fan&category=beauty$/);
+      // Applied, it shows as a filled chip beside the pills.
+      await expect(page.getByRole("button", { name: /^Category: Beauty/ })).toBeVisible();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+      ).toBe(false);
+    });
+  }
+
+  test("Latest applies from the Sort sheet, and Reset restores most helpful", async ({ page }) => {
+    await page.goto("/search?q=fan");
+    await page.getByRole("button", { name: "Sort", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Sort" });
+    await sheet.getByText("Latest", { exact: true }).click();
+    await sheet.getByRole("button", { name: "Sort Reviews" }).click();
+    await expect(page).toHaveURL(/\/search\?q=fan&sort=newest$/);
+
+    await page.getByRole("button", { name: "Sort", exact: true }).click();
+    await page.getByRole("dialog", { name: "Sort" }).getByRole("button", { name: "Reset" }).click();
+    await expect(page).toHaveURL(/\/search\?q=fan$/);
   });
 
-  test("mobile keeps the horizontal scroller", async ({ page }) => {
-    // The fix must not have turned the phone strip into a wrapped block; at
-    // 393px a three-row chip grid would push the results off the first screen.
-    //
-    // Both tests here located the strip as `form + div ul`, which stopped
-    // matching when the result tabs were inserted between the field and the
-    // strip (2187989): the desktop test then failed on `null`, and this one
-    // passed on a height of 0 without looking at anything. The strip is now
-    // found after the tab nav, and it must exist before its height means a thing.
-    await page.setViewportSize({ width: 393, height: 850 });
-    await page.goto("/search");
-    const height = await page.evaluate(
-      () => document.querySelector('nav[aria-label="Search results type"] + div ul')?.getBoundingClientRect().height ?? 0,
-    );
-    expect(height).toBeGreaterThan(0);
-    expect(height).toBeLessThan(60);
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth > window.innerWidth,
-      ),
-    ).toBe(false);
+  test("Escape closes a sheet without applying it and returns focus to its pill", async ({ page }) => {
+    await page.goto("/search?q=fan");
+    const pill = page.getByRole("button", { name: "Sort", exact: true });
+    await pill.click();
+    const sheet = page.getByRole("dialog", { name: "Sort" });
+    await sheet.getByText("Latest", { exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(pill).toBeFocused();
+    await expect(page).toHaveURL(/\/search\?q=fan$/);
   });
 });

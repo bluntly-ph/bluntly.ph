@@ -8,7 +8,8 @@ import { percent } from "./seller-model";
  * INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY. "Seller Page -
  * Review.png" draws stars alone, but FR-4 rates a store on ad accuracy, order
  * completeness, customer service and packaging, and the public page is where a
- * buyer reads them. They sit under the rating card in the page's own type.
+ * buyer reads them. They sit under the rating card in the frame's type: 12px
+ * Light labels over 16px SemiBold values.
  * Omitted, not zeroed, for a store nobody has rated.
  */
 export function SellerFigures({ summary }: { summary: SellerSummary }) {
@@ -37,13 +38,13 @@ export function SellerFigures({ summary }: { summary: SellerSummary }) {
   return (
     <dl
       aria-label="What buyers said"
-      className="grid grid-cols-2 gap-x-4 gap-y-3 px-2 font-[family-name:var(--font-system)] sm:grid-cols-3"
+      className="grid grid-cols-2 gap-x-4 gap-y-3 px-2 text-[var(--text-primary)] sm:grid-cols-3"
     >
       {figures.map((figure) =>
         figure.value === null ? null : (
           <div key={figure.label}>
-            <dt className="text-[12px] text-[var(--text-secondary)]">{figure.label}</dt>
-            <dd className="text-[15px] font-semibold text-[var(--text-primary)]">{figure.value}</dd>
+            <dt className="text-[12px] font-light leading-[18px]">{figure.label}</dt>
+            <dd className="text-[16px] font-semibold leading-6">{figure.value}</dd>
           </div>
         ),
       )}

@@ -57,18 +57,27 @@ export function ReviewerInitial({ name, size = 36 }: { name: string; size?: numb
 /**
  * "Claimed Profile" only after a moderator approved a claim; everything else,
  * including a store with a claim still waiting, is unclaimed.
+ *
+ * Figma "ClaimedBadge" (7159:4840): a 16px SealCheck and 12px Poppins Regular,
+ * 4px apart. The row is drawn at 70% and its parts at 70% again, so the whole
+ * badge reads at 49% ink.
  */
 export function ClaimStatusLine({ status }: { status: string }) {
   const claimed = status === "claimed";
   return (
-    <span className={`flex items-center gap-1 ${FACE} text-[13px] text-[var(--text-muted)]`}>
+    <span className="flex items-center gap-1 text-[12px] leading-none text-[var(--text-primary)] opacity-[0.49]">
       {claimed ? <SealCheck size={16} aria-hidden="true" /> : null}
       {claimed ? "Claimed Profile" : "Unclaimed Profile"}
     </span>
   );
 }
 
-/** Display only. A store with no rating draws grey stars and says so. */
+/**
+ * Display only. A store with no rating draws grey stars and says so.
+ *
+ * Figma "Icon/Star" (6805:431): Filled is the rating green (#34ca43,
+ * --semantic-success-500), Empty a solid #8c8c8c silhouette (--base-gray-400).
+ */
 export function StarRow({
   value,
   size = 20,
@@ -95,7 +104,7 @@ export function StarRow({
           size={size}
           weight="fill"
           aria-hidden="true"
-          className={n <= filled ? "text-[var(--accent-success)]" : "text-[var(--base-gray-300)]"}
+          className={n <= filled ? "text-[var(--semantic-success-500)]" : "text-[var(--base-gray-400)]"}
         />
       ))}
     </span>

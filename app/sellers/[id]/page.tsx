@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowSquareOut, CaretCircleDown } from "@phosphor-icons/react/dist/ssr";
+import { ArrowSquareOut, CaretCircleDown, DotOutline } from "@phosphor-icons/react/dist/ssr";
 
 import { ClaimSellerForm } from "@/components/sellers/ClaimSellerForm";
 import { SellerFigures } from "@/components/sellers/SellerFigures";
@@ -65,9 +65,10 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
   const count = seller.review_count;
   const rateHref = `/sellers/rate?seller=${seller.id}`;
   const newest = (reviews ?? []).slice(0, CAROUSEL);
-  // The frame's 32px pills: 13px type, 1px border, pill radius.
+  // Figma "Frame 701" (4218:4684): 32px on white, a 1px outline, radius 20,
+  // 12px sides and 12px Light type.
   const pill =
-    "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-pill)] border px-[11px] font-[family-name:var(--font-system)] text-[13px] no-underline";
+    "inline-flex h-8 items-center gap-1 rounded-[20px] border bg-[var(--surface-card)] px-3 text-[12px] font-light leading-none no-underline";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
@@ -78,18 +79,24 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
 
       <main className="mx-auto w-full max-w-[44rem] flex-1 px-4 pb-10 pt-5 md:py-10">
         <div className="px-4">
-          <SellerAvatar name={seller.display_name} size={100} />
-          <div className="mt-3">
+          {/* Figma 4218:2148: the 100px logo tile ("Rectangle 256"), the claim
+              row 8px under it, the name 6px lower in 16px SemiBold, the counts
+              8px lower in 12px Light around a 12px DotOutline, and the pills
+              18px under those. */}
+          <SellerAvatar name={seller.display_name} size={100} shape="tile" />
+          <div className="mt-2">
             <ClaimStatusLine status={seller.claim_status} />
           </div>
-          <h1 className="mt-[6px] text-[17px] font-bold leading-6 text-[var(--text-primary)]">
+          <h1 className="mt-1.5 text-[16px] font-semibold leading-none text-[var(--text-primary)]">
             {seller.display_name}
           </h1>
-          <p className="mt-0.5 font-[family-name:var(--font-system)] text-[13px] text-[var(--text-primary)]">
-            {count} {count === 1 ? "review" : "reviews"} • {PLATFORM_LABEL[seller.platform]}
+          <p className="mt-2 flex items-center gap-1 text-[12px] font-light leading-none text-[var(--text-primary)]">
+            {count} {count === 1 ? "review" : "reviews"}
+            <DotOutline size={12} aria-hidden="true" className="text-[var(--base-gray-400)]" />
+            {PLATFORM_LABEL[seller.platform]}
           </p>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-[18px] flex flex-wrap gap-2">
             <Link
               href={rateHref}
               className={`${pill} border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[color-mix(in_srgb,var(--accent-primary)_8%,transparent)]`}
@@ -130,9 +137,9 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           <SellerFigures summary={seller.summary} />
         </div>
 
-        <hr className="mt-6 border-0 border-t-2 border-[#d3d3d3]" />
+        <hr className="mt-6 border-0 border-t border-[var(--line-hairline-30)]" />
 
-        <h2 className="mt-4 text-[17px] font-bold leading-6 text-[var(--text-primary)]">Seller Reviews</h2>
+        <h2 className="mt-5 text-[16px] font-semibold leading-none text-[var(--text-primary)]">Seller Reviews</h2>
         {newest.length > 0 ? (
           <>
             {/* Two rows that scroll together, filled top then bottom, as drawn. */}
@@ -140,7 +147,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
               aria-label="Newest reviews"
               // `scroll-px-4` matches the padding: without it `snap-start` aligns
               // the first card to the scroller's edge and cuts off its border.
-              className={`-mx-4 mt-5 grid snap-x scroll-px-4 auto-cols-[264px] grid-flow-col gap-[13px] overflow-x-auto px-4 pb-1 [scrollbar-width:none] ${
+              className={`-mx-4 mt-6 grid snap-x scroll-px-4 auto-cols-[264px] grid-flow-col gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] ${
                 newest.length > 1 ? "grid-rows-2" : "grid-rows-1"
               }`}
             >
@@ -150,19 +157,19 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
             </ul>
             <a
               href="#all-reviews"
-              className="mt-[17px] flex h-12 items-center justify-center gap-2 rounded-[var(--radius-pill)] bg-[#dfdfdf] font-[family-name:var(--font-system)] text-[14px] text-[var(--text-primary)] no-underline hover:bg-[var(--base-gray-200)]"
+              className="mt-5 flex h-12 items-center justify-center gap-1 rounded-[var(--radius-pill)] bg-[#dfdfdf] text-[14px] leading-none text-[var(--text-primary)] no-underline hover:bg-[var(--base-gray-200)]"
             >
               See all {count} {count === 1 ? "review" : "reviews"}
               <CaretCircleDown size={20} aria-hidden="true" />
             </a>
           </>
         ) : (
-          <p className="mt-3 font-[family-name:var(--font-system)] text-[14px] text-[var(--text-secondary)]">
+          <p className="mt-3 text-[12px] font-light text-[var(--text-secondary)]">
             {reviews === null ? "Reviews could not be loaded right now." : "Nobody has rated this seller yet."}
           </p>
         )}
 
-        <hr className="mt-5 border-0 border-t-2 border-[#d3d3d3]" />
+        <hr className="mt-5 border-0 border-t border-[var(--line-hairline-30)]" />
 
         <div className="mt-6">
           <SellerReviewsSection

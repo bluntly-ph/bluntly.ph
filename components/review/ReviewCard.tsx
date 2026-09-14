@@ -1,14 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowFatUp, ChatCircle, ImageSquare } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, ChatCircle, DotOutline, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import type { ReviewCardData } from "@/lib/landing-data";
 
 /**
- * The review card used on the landing rail, search results and category pages —
- * a square cover with the author floated over its top, then title and the
- * upvote / comment counts. The product image is a hue-tinted placeholder until
- * real photos are wired (see lib/landing-data.ts).
+ * The review card on the landing rail and the profile grids: Figma
+ * "FeaturedReviewCard" (6874:660), 188x280. Read 2026-09-14.
+ *
+ * A 188px square photo on #e1e1e1 with a 48px top scrim (8% black fading out,
+ * 1px blur); the 24px avatar 12px in, with the author and age in 12px Regular
+ * --text-on-brand on the scrim, split by a 12px DotOutline. Under it a 92px body
+ * outlined on three sides at 10% ink: the title in 12px Regular on an 18px line
+ * across two lines, and at the foot the upvote and comment counts in 12px Light
+ * at 70% ink, each followed by its 12px glyph.
+ *
+ * From `md` up the grid sets the width, and the body grows with its content.
  */
 export function ReviewCard({
   review,
@@ -21,9 +28,8 @@ export function ReviewCard({
    * Where this card's title sits in the page outline.
    *
    * Defaults to 3, which is right wherever the grid follows a section heading
-   * ("What people are reading", "Your reviews"). Search puts the grid directly
-   * under the page h1 with nothing in between, so it passes 2 — otherwise the
-   * outline jumps h1 to h3 and heading navigation skips a level.
+   * ("What people are reading", "Your reviews"). A grid directly under the page
+   * h1 passes 2, so heading navigation does not skip a level.
    */
   headingLevel?: 2 | 3;
 }) {
@@ -32,27 +38,20 @@ export function ReviewCard({
     <Link
       href={`/reviews/${review.id}`}
       className={[
-        // A thin outline rather than a shadow (BUG-006): the frame draws these
-        // as bounded tiles, and a drop shadow lifted them off a surface they
-        // are meant to sit flush with.
-        "group flex flex-col overflow-hidden rounded-[var(--radius-sm)]",
-        "bg-[var(--surface-card)]",
-        "outline outline-1 outline-[var(--line-hairline-10)] transition-[outline-color]",
-        "duration-[var(--duration-fast)] hover:outline-[var(--line-hairline-30)]",
-        "focus-visible:outline-[var(--accent-primary)]",
+        // `relative` contains the sr-only labels: absolutely positioned, they
+        // otherwise resolve against the page, escape the rail's scroller from
+        // the off-screen cards, and widen the whole document sideways.
+        "group relative flex flex-col rounded-[12px] text-[var(--text-primary)] no-underline",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]",
         className,
       ].join(" ")}
     >
-      <div className="relative aspect-square w-full overflow-hidden">
+      <div className="relative aspect-square w-full overflow-hidden rounded-t-[12px] bg-[#e1e1e1]">
         {review.imageUrl ? (
           /* A reviewer's own photo; the feed filters out the synthetic seed
-             URLs. Measured on production, this card is 195-224px at every
-             viewport from 390 to 1920 — it is a fixed rail card, not a fluid
-             one, so a viewport-relative `sizes` was wrong and pulled 640px
-             files for a 200px box. 384px is the smallest candidate width that
-             still covers the box after an object-cover crop of a 1.9:1 source
-             (384/1.9 = 202px of height), and it is an exact Next candidate,
-             so nothing rounds up to 640. */
+             URLs. The card is a fixed rail card, so `sizes` is a fixed 24rem:
+             the smallest exact Next candidate that still covers the box after an
+             object-cover crop of a 1.9:1 source. */
           <Image
             src={review.imageUrl}
             alt=""
@@ -61,63 +60,61 @@ export function ReviewCard({
             className="object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
           />
         ) : (
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 grid place-items-center transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
-            style={{
-              background: `linear-gradient(150deg, hsl(${review.imageHue} 42% 74%), hsl(${review.imageHue + 24} 38% 55%))`,
-            }}
-          >
-            <ImageSquare size={30} weight="light" className="text-white/55" />
+          <div aria-hidden="true" className="absolute inset-0 grid place-items-center">
+            <ImageSquare size={30} weight="light" className="text-[var(--base-gray-400)]" />
           </div>
         )}
-        {/* Legibility scrim behind the author, as drawn (Rectangle 233). */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-14 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.35),transparent)]"
+          className="absolute inset-x-0 top-0 h-12 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.08),rgba(0,0,0,0))] backdrop-blur-[1px]"
         />
-        <div className="absolute inset-x-0 top-0 flex items-center gap-2 p-3 text-white">
-          <span
-            aria-hidden="true"
-            className="h-6 w-6 shrink-0 rounded-full ring-1 ring-white/40"
-            style={{ background: `hsl(${review.authorHue} 55% 55%)` }}
-          />
-          <span className="text-[12px] font-medium">{review.author}</span>
-          <span aria-hidden="true" className="text-white/70">
-            ·
+        {/* --text-on-brand reads over a photo under the scrim; over the plain
+            #e1e1e1 placeholder it would vanish, so that case keeps ink. */}
+        <div
+          className={`absolute left-3 top-3 flex items-center gap-2 text-[12px] leading-none ${
+            review.imageUrl ? "text-[var(--text-on-brand)]" : "text-[var(--text-primary)]"
+          }`}
+        >
+          {review.avatarUrl ? (
+            <Image
+              src={review.avatarUrl}
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="h-6 w-6 shrink-0 rounded-full"
+              style={{ background: `hsl(${review.authorHue} 55% 55%)` }}
+            />
+          )}
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            {review.author}
+            <DotOutline size={12} aria-hidden="true" />
+            {review.ageLabel}
           </span>
-          <span className="text-[12px] text-white/80">{review.ageLabel}</span>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-3">
-        {/* Product bold, then the reviewer's conclusion in normal weight
-            (BUG-006) — one undifferentiated block gave no way to tell what was
-            reviewed from what was concluded about it. */}
-        {review.product ? (
-          <p className="line-clamp-1 text-[13px] font-semibold leading-snug text-[var(--text-primary)]">
-            {review.product}
-          </p>
-        ) : null}
-        <Heading
-          className={[
-            "line-clamp-3 text-[13px] leading-snug text-[var(--text-secondary)]",
-            review.product ? "mt-0.5 font-normal" : "text-[14px] font-semibold text-[var(--text-primary)]",
-          ].join(" ")}
-        >
-          {review.title}
+      <div className="flex h-[92px] flex-col rounded-b-[12px] border-x border-b border-[var(--line-hairline-10)] px-3 pb-3 pt-3 md:h-auto md:min-h-[92px]">
+        <Heading className="line-clamp-2 text-[12px] font-normal leading-[18px]">
+          {review.product ? `${review.product} - ${review.title}` : review.title}
         </Heading>
-        {/* Count then icon, both stats always present, as drawn. */}
-        <div className="mt-3 flex items-center gap-3 text-[12px] text-[var(--text-secondary)]">
+        <p className="mt-auto flex items-center gap-1 pt-2 text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">
           <span className="inline-flex items-center gap-1">
             {review.upvotes}
-            <ArrowFatUp size={14} weight="fill" className="text-[var(--accent-success)]" />
+            <ArrowFatUp size={12} weight="fill" aria-hidden="true" />
+            <span className="sr-only">upvotes</span>
           </span>
+          <DotOutline size={12} aria-hidden="true" />
           <span className="inline-flex items-center gap-1">
             {review.comments || "0"}
-            <ChatCircle size={14} />
+            <ChatCircle size={12} aria-hidden="true" />
+            <span className="sr-only">comments</span>
           </span>
-        </div>
+        </p>
       </div>
     </Link>
   );

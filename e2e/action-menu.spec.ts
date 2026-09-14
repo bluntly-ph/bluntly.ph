@@ -19,7 +19,10 @@ import { test, expect, type Page } from "@playwright/test";
  */
 
 const MOBILE = { width: 390, height: 844 };
-const SURFACES = ["/", "/search", "/questions", "/categories", "/feed"] as const;
+// Where the Figma file draws the FAB. The store page carries it too, but needs a
+// seller record to render; the routes below must NOT show it.
+const SURFACES = ["/search"] as const;
+const NO_FAB = ["/", "/feed", "/categories", "/questions"] as const;
 const ACTIONS = [
   { name: "Ask a Question", path: "/questions/new" },
   { name: "Rate a Seller", path: "/sellers/rate" },
@@ -99,6 +102,13 @@ test.describe("mobile action menu", () => {
       await expect(page).toHaveURL(
         new RegExp(`/login\\?next=${encodeURIComponent(action.path)}(&|$)`),
       );
+    });
+  }
+
+  for (const path of NO_FAB) {
+    test(`no FAB on ${path}, which the Figma file does not draw it on`, async ({ page }) => {
+      await page.goto(path);
+      await expect(fab(page)).toHaveCount(0);
     });
   }
 

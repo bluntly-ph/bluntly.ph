@@ -53,9 +53,17 @@ type State = "idle" | "sending" | "done";
 export function ReportDialog({
   reviewId,
   canReport,
+  hideTrigger = false,
 }: {
   reviewId: string;
   canReport: boolean;
+  /**
+   * Keep the trigger out of sight. The Review page frame (4218:1196) has no
+   * Report button in its action row: reporting lives in the bar's overflow
+   * menu, which opens this dialog through the trigger's id. `.click()` still
+   * fires on a hidden element, so there remains exactly one report path.
+   */
+  hideTrigger?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState<string>("");
@@ -120,6 +128,7 @@ export function ReportDialog({
     <>
       <button
         type="button"
+        hidden={hideTrigger}
         onClick={open}
         // Addressable so the overflow menu in the top nav can open this same
         // dialog (BUG-012) instead of there being a second report path with its

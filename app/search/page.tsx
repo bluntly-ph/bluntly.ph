@@ -5,7 +5,9 @@ import { CaretLeft, ChatCircle, MagnifyingGlass, Storefront } from "@phosphor-ic
 import { QuestionResultRow } from "@/components/search/QuestionResultRow";
 import { SellerResultRow } from "@/components/sellers/SellerResultRow";
 import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
+import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
+import { parseReviewSort } from "@/components/search/search-tabs-model";
 import { ReviewListRow } from "@/components/review/ReviewListRow";
 import { Unavailable } from "@/components/site/Unavailable";
 import { ActionMenu } from "@/components/site/ActionMenu";
@@ -24,18 +26,18 @@ export const metadata: Metadata = {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; from?: string; tab?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; from?: string; tab?: string; sort?: string }>;
 }) {
-  const { q = "", category, from, tab } = await searchParams;
+  const { q = "", category, from, tab, sort: rawSort } = await searchParams;
   const activeTab: SearchTab =
     tab === "questions" ? "questions" : tab === "sellers" ? "sellers" : "reviews";
+  const sort = parseReviewSort(rawSort);
   const activeCategory = CATEGORIES.find((c) => c.slug === category);
   const searching = Boolean(q.trim() || category);
   // Arrived by tapping a tile on /categories. That makes /categories the
-  // meaningful "up" destination — both for the back link and for "All", which
-  // otherwise dead-ends on /search with no route back (BUG-011).
+  // meaningful "up" destination — both for the back link and for clearing the
+  // category, which otherwise dead-ends on /search with no route back (BUG-011).
   const fromCategories = from === "categories";
-  const categoryQuery = fromCategories ? "&from=categories" : "";
 
   // Parallel: the viewer and the results are independent (see app/page.tsx).
   // Only the active tab's results are fetched — the other tab is a separate URL
@@ -43,7 +45,7 @@ export default async function SearchPage({
   const [me, results, questions, sellers] = await Promise.all([
     getUser().catch(() => null),
     activeTab === "reviews"
-      ? searchReviews({ q, category, limit: 24 })
+      ? searchReviews({ q, category, sort, limit: 24 })
       : Promise.resolve(null),
     activeTab === "questions"
       ? getQuestions(undefined, { q, limit: 24 })
@@ -78,7 +80,7 @@ export default async function SearchPage({
           the two together. Narrowing the column is what stops this reading as a
           phone layout stretched to fill a monitor.
           Phone: the frames' 16px gutter, and rows that run edge to edge. */}
-      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-4 pb-8 pt-[19px] md:px-6 md:py-8 lg:py-10">
+      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-4 pb-8 pt-3 md:px-6 md:py-8 lg:py-10">
         {fromCategories ? (
           <Link
             href="/categories"
@@ -88,53 +90,27 @@ export default async function SearchPage({
           </Link>
         ) : null}
 
-        {/* 56px at radius 32 with a #323232 hairline, as drawn — search is
-            this page's subject, so it gets more height than the landing's. */}
+        {/* The frames' SearchBar: 56px at radius 32 with a #323232 hairline, a
+            28px magnifier 16px in, the query in 16px Poppins at 0.8px tracking
+            56px in, and a 28px clear glyph 16px from the right edge. */}
         <div className="max-w-[40rem]">
           <SearchAutocomplete
             defaultValue={q}
             placeholder="Search products, reviews, or ask a question"
             showClear
             tone="strong"
-            inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[52px] pr-12 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
+            inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
           />
         </div>
 
-        <SearchTabs active={activeTab} q={q} category={category} from={from} />
+        <SearchTabs active={activeTab} q={q} category={category} sort={sort} from={from} />
 
-        {/* Category chips.
-            A horizontal scroller is right on a phone, where the row is wider
-            than the screen and swiping is natural. On desktop it was the wrong
-            component entirely: the strip kept `w-max` and `overflow-x-auto`, so
-            the last categories were clipped mid-word at the container edge with
-            only a hidden scrollbar to reach them — fourteen categories, four of
-            them unreachable without knowing to drag. There is room to wrap at
-            `lg`, so it wraps. */}
-        {/* Categories narrow reviews. They have no meaning for questions, so
-            the row is not rendered on that tab rather than shown inert. */}
+        {/* All filters / Sort. The category, a real filter, lives in the All
+            filters sheet and shows as an applied chip beside the pills. Questions
+            and sellers serve neither a filter nor an order, so the pills are not
+            drawn there rather than drawn inert. */}
         {activeTab === "reviews" ? (
-        <div className="-mx-4 mt-5 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 lg:mx-0 lg:overflow-x-visible lg:px-0">
-          <ul className="flex w-max gap-2 lg:w-auto lg:flex-wrap lg:gap-y-2.5">
-            <li>
-              <Link
-                href={fromCategories ? "/categories" : "/search"}
-                className={chip(!category && !q)}
-              >
-                All
-              </Link>
-            </li>
-            {CATEGORIES.filter((c) => c.slug !== "trending").map((c) => (
-              <li key={c.slug}>
-                <Link
-                  href={`/search?category=${c.slug}${categoryQuery}`}
-                  className={chip(category === c.slug)}
-                >
-                  {c.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+          <SearchFilterBar q={q} category={category} sort={sort} from={from} />
         ) : null}
 
         {/* The phone frames go straight from the tabs to the results, so the
@@ -209,15 +185,6 @@ export default async function SearchPage({
       <SiteFooter />
     </div>
   );
-}
-
-function chip(active: boolean): string {
-  return [
-    "inline-flex whitespace-nowrap rounded-[var(--radius-md)] px-3.5 py-1.5 text-[13px] font-medium capitalize",
-    active
-      ? "bg-[var(--accent-primary)] text-white"
-      : "bg-[var(--surface-card)] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)] hover:text-[var(--text-primary)]",
-  ].join(" ");
 }
 
 /**

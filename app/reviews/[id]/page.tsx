@@ -6,7 +6,6 @@ import { PricePanel } from "@/components/product/PricePanel";
 import { ReportPriceForm } from "@/components/product/ReportPriceForm";
 import { ReviewAside } from "@/components/review/ReviewAside";
 import { ReviewDetail } from "@/components/review/ReviewDetail";
-import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getComments } from "@/lib/comments";
@@ -89,7 +88,7 @@ export default async function ReviewPage({
         <div className="mx-auto w-full lg:max-w-[76rem] lg:px-10 lg:py-10">
           <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-12">
             <div className="min-w-0">
-              <ReviewDetail data={data} canVote={canVote} isOwnReview={isOwnReview} />
+              <ReviewDetail data={data} canVote={canVote} isOwnReview={isOwnReview} viewer={headerUser} />
 
               <div className="mx-auto w-full max-w-[44rem] px-4 pb-10 lg:mx-0 lg:max-w-[42rem] lg:px-0">
                 {/* FR-2 price panel. Rendered on the review because this is the
@@ -125,7 +124,6 @@ export default async function ReviewPage({
           </div>
         </div>
       </main>
-      <ActionMenu />
       <SiteFooter />
     </div>
   );

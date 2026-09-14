@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ShareNetwork } from "@phosphor-icons/react";
+import { Check, Share, ShareNetwork } from "@phosphor-icons/react";
 
 import { markInteraction } from "@/lib/reading-telemetry-events";
 
@@ -22,8 +22,21 @@ type Status = "idle" | "copied" | "failed";
  *
  * A cancelled share sheet throws `AbortError`; that is the user declining, not a
  * failure, so it must not surface as one.
+ *
+ * `variant="icon"` is the Review page frame's round Share (4218:1196): a 32px
+ * circle with a 1px outline at 30% ink around a 20px Phosphor Share in
+ * --base-gray-400. With no visible label, the status moves into the button's
+ * accessible name, so "Link copied" is still announced and still findable.
  */
-export function ShareButton({ title, reviewId }: { title: string; reviewId: string }) {
+export function ShareButton({
+  title,
+  reviewId,
+  variant = "label",
+}: {
+  title: string;
+  reviewId: string;
+  variant?: "label" | "icon";
+}) {
   const [status, setStatus] = useState<Status>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -67,6 +80,36 @@ export function ShareButton({ title, reviewId }: { title: string; reviewId: stri
   const label =
     status === "copied" ? "Link copied" : status === "failed" ? "Copy failed" : "Share";
 
+  // The icon swap is visual only; screen readers need the change announced.
+  const announcement = (
+    <span aria-live="polite" className="sr-only">
+      {status === "copied"
+        ? "Link copied to clipboard"
+        : status === "failed"
+          ? "Could not copy the link"
+          : ""}
+    </span>
+  );
+
+  if (variant === "icon") {
+    return (
+      <button
+        type="button"
+        onClick={share}
+        aria-label={label}
+        title={label}
+        className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full border border-[var(--line-hairline-30)] text-[var(--base-gray-400)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+      >
+        {status === "copied" ? (
+          <Check size={20} weight="bold" aria-hidden="true" className="text-[var(--accent-success)]" />
+        ) : (
+          <Share size={20} aria-hidden="true" />
+        )}
+        {announcement}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -79,14 +122,7 @@ export function ShareButton({ title, reviewId }: { title: string; reviewId: stri
         <ShareNetwork size={16} />
       )}
       {label}
-      {/* The icon swap is visual only; screen readers need the change announced. */}
-      <span aria-live="polite" className="sr-only">
-        {status === "copied"
-          ? "Link copied to clipboard"
-          : status === "failed"
-            ? "Could not copy the link"
-            : ""}
-      </span>
+      {announcement}
     </button>
   );
 }

@@ -1,25 +1,32 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowFatUp, ImageSquare } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, DotOutline, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
-import { TrustBadge } from "@/components/ui/TrustBadge";
+import { HonestyScore } from "@/components/ui/HonestyScore";
 import type { ReviewCardData } from "@/lib/landing-data";
 import { splitHeadline } from "@/lib/reviews";
 
 /**
- * A search result, as "Mobile Search Page for Buyers.png" draws it.
+ * A search result: Figma "ReviewPreviewCard" (7152:4714), as placed in "Mobile
+ * Search Page for Buyers" (3481:1776). Read from the file on 2026-09-14.
  *
- * Search is a list, not the grid the landing rail uses: an author line, the
- * split title, the stats, and a 100px square thumbnail pinned right, with a
- * full-bleed rule between rows. A grid is for browsing by picture, a list is
- * for scanning results you asked for, and search is the second thing.
+ * Search is a list, not the grid the landing rail uses: a grid is for browsing
+ * by picture, a list is for scanning results you asked for.
  *
- * Phone values measured from the frame (390 wide): rows on a 144px pitch with
- * 20px above and 24px below the content, a 2px --base-gray-150 rule, a 24px
- * avatar, the author at 13px, a 16/22px title — the product bold with its
- * hyphen, the rest regular — a green up-arrow with the helpful count and the
- * comment count at 13px, and a 100px thumbnail at radius 16.
+ * Phone values from the component: a 226px body and a 100px media square
+ * pushed apart; a 24px avatar with the byline 8px after it and 3px down —
+ * handle and score in 12px Poppins Light, the age in ExtraLight, separated by
+ * 12px DotOutline glyphs in --base-gray-400; 12px down to the 14px title, the
+ * product bold with its hyphen and the rest regular; 8px down to the stats — a
+ * 16px ArrowFatUp in the success green and 12px Light counts, 3px apart. Cards
+ * sit 20px under the rule above them and 21px over a 1px rule drawn at
+ * --line-hairline-10.
  */
+
+const Dot = () => (
+  <DotOutline size={12} aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
+);
+
 export function ReviewListRow({
   review,
   priority = false,
@@ -40,13 +47,13 @@ export function ReviewListRow({
   const headline = splitHeadline(review.title, review.product);
 
   return (
-    <li className="border-b-2 border-[var(--base-gray-150)] md:border-b md:border-[var(--line-hairline-10)]">
+    <li className="border-b border-[var(--line-hairline-10)]">
       <Link
         href={`/reviews/${review.id}`}
-        className="flex items-start gap-3 px-4 pb-6 pt-5 transition-colors hover:bg-[var(--line-hairline-10)] md:gap-4 md:px-0 md:py-4 lg:gap-6 lg:py-5"
+        className="flex items-start justify-between gap-4 px-4 pb-[21px] pt-5 no-underline transition-colors hover:bg-[var(--line-hairline-10)] md:px-0 md:py-4 lg:gap-6 lg:py-5"
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1 max-md:max-w-[226px]">
+          <div className="flex items-start gap-2">
             {review.avatarUrl ? (
               <Image
                 src={review.avatarUrl}
@@ -64,41 +71,44 @@ export function ReviewListRow({
                 {review.author.slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span className="truncate text-[13px] text-[var(--text-primary)]">
-              {review.username ?? review.author}
-            </span>
-            <TrustBadge
-              levelName={review.trustLevel}
-              stage={review.trustStage}
-              score={review.trustScore}
-              plain
-              compact
-            />
-            <span className="text-[13px] text-[var(--text-muted)]">· {review.ageLabel}</span>
+            <p className="mt-[3px] flex min-w-0 items-center gap-1 text-[12px] leading-none text-[var(--text-primary)]">
+              <span className="truncate font-light">{review.username ?? review.author}</span>
+              {review.trustScore ? (
+                <>
+                  <Dot />
+                  <HonestyScore
+                    score={review.trustScore}
+                    levelName={review.trustLevel}
+                    stage={review.trustStage}
+                  />
+                </>
+              ) : null}
+              <Dot />
+              <span className="shrink-0 font-extralight">{review.ageLabel}</span>
+            </p>
           </div>
 
-          <h2 className="mt-3 text-[16px] leading-[22px] text-[var(--text-primary)]">
+          <h2 className="mt-3 text-[14px] leading-[21px] text-[var(--text-primary)]">
             {headline.product ? (
               <>
-                <span className="font-bold">{headline.product} -</span> {headline.rest}
+                <span className="font-bold">{headline.product} - </span>
+                {headline.rest}
               </>
             ) : (
               <span className="font-bold">{review.title}</span>
             )}
           </h2>
 
-          <p className="mt-2.5 flex items-center text-[13px] text-[var(--text-primary)]">
+          <p className="mt-2 flex items-center gap-[3px] text-[12px] font-light leading-none text-[var(--text-primary)]">
             <ArrowFatUp
-              size={14}
+              size={16}
               weight="fill"
               aria-hidden="true"
-              className="mr-1.5 shrink-0 text-[var(--accent-success)]"
+              className="shrink-0 text-[var(--accent-success)]"
             />
             {review.upvotes}
             <span className="sr-only"> found this helpful</span>
-            <span aria-hidden="true" className="mx-1.5 text-[var(--text-muted)]">
-              •
-            </span>
+            <Dot />
             {/* "1 comments" is the kind of thing that reads as machine output.
                 upvotes/comments are pre-formatted strings ("14.8k"), so the
                 singular only applies to a literal "1". */}
@@ -106,8 +116,8 @@ export function ReviewListRow({
           </p>
         </div>
 
-        {/* 100px square, radius 16, pinned right. */}
-        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] bg-[var(--surface-card)] lg:h-[120px] lg:w-[120px]">
+        {/* 100px square, radius 16, on the component's #e1e1e1 media ground. */}
+        <div className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[16px] bg-[#e1e1e1] lg:h-[120px] lg:w-[120px]">
           {review.imageUrl ? (
             /* `sizes` is a WIDTH, but this box is cropped with object-cover:
                a 1200x630 source scaled to the box width has only ~62px of
@@ -123,14 +133,8 @@ export function ReviewListRow({
               className="object-cover"
             />
           ) : (
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 grid place-items-center"
-              style={{
-                background: `linear-gradient(150deg, hsl(${review.imageHue} 42% 74%), hsl(${review.imageHue + 24} 38% 55%))`,
-              }}
-            >
-              <ImageSquare size={24} weight="light" className="text-white/55" />
+            <div aria-hidden="true" className="absolute inset-0 grid place-items-center">
+              <ImageSquare size={24} weight="light" className="text-[var(--base-gray-400)]" />
             </div>
           )}
         </div>
