@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CaretLeft, ChatCircle } from "@phosphor-icons/react/dist/ssr";
 
+import { SellerFigures } from "@/components/sellers/SellerFigures";
 import { SellerRatingSummary } from "@/components/sellers/SellerRatingSummary";
 import { monthLabel, volumeBars } from "@/components/sellers/seller-model";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -79,6 +80,11 @@ function Dashboard({ dashboard }: { dashboard: SellerDashboard }) {
 
       <div className="mt-6">
         <SellerRatingSummary summary={seller.summary} />
+      </div>
+      {/* The FR-4 figures left the rating card for the store page's frame; the
+          owner still needs them here. */}
+      <div className="mt-5">
+        <SellerFigures summary={seller.summary} />
       </div>
 
       <section aria-labelledby="volume-heading" className="mt-10">

@@ -39,6 +39,22 @@ export function SellerAvatar({
 }
 
 /**
+ * A reviewer with no photo, as a plain 36px disc with their initial. Members
+ * carry no avatar in the seller API, so no face is invented for them.
+ */
+export function ReviewerInitial({ name, size = 36 }: { name: string; size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid shrink-0 place-items-center rounded-full bg-[var(--base-gray-200)] ${FACE} font-semibold text-[var(--text-secondary)]`}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
+    >
+      {(name.trim()[0] ?? "?").toUpperCase()}
+    </span>
+  );
+}
+
+/**
  * "Claimed Profile" only after a moderator approved a claim; everything else,
  * including a store with a claim still waiting, is unclaimed.
  */

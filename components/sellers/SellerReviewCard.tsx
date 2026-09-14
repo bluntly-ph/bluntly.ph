@@ -4,22 +4,24 @@ import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { SellerReview } from "@/lib/sellers";
 
 import { RemoveSellerReviewButton } from "./RemoveSellerReviewButton";
-import { StarRow } from "./SellerIdentity";
+import { ReviewerInitial, StarRow } from "./SellerIdentity";
+import { shortAge } from "./seller-model";
 
 /**
- * One buyer's rating of a store, as "Seller Page - Review.png" draws it: the
- * reviewer and their trust score, the stars, a bold title, and the prose.
+ * One buyer's rating of a store in the full "All reviews" list, as "Seller Page
+ * - Review.png" draws it: a 36px reviewer disc, the name, trust score and level
+ * at 13px with the age under it, 20px stars, a 14px bold title and the prose at
+ * 13/16px. No card chrome — the frame's list items sit on the page.
  *
- * NOT RENDERED, because none of it exists for seller reviews: the vote counts,
- * comment counts and share control on the frame's cards, and the seller's
- * public reply. Drawing them would mean drawing numbers nobody produced.
+ * NOT RENDERED, because none of it exists for seller reviews: vote counts,
+ * Reply, Share, the "..." menu, and the store's public reply.
  *
  * Added under the prose, as REQUIRED FUNCTIONALITY: the four FR-4 answers this
  * buyer gave. They are what makes a seller review different from a product
- * review, and the frame's cards have no other place for them.
+ * review, and the frame's items have no other place for them.
  */
 
-const DATE = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" });
+const FACE = "font-[family-name:var(--font-system)]";
 
 function chip(positive: boolean): string {
   return positive
@@ -36,6 +38,7 @@ export function SellerReviewCard({
   canModerate?: boolean;
 }) {
   const reviewer = review.reviewer;
+  const name = reviewer?.username ?? reviewer?.display_name ?? "Former member";
   const answers: { label: string; positive: boolean }[] = [
     { label: review.accuracy ? "Matched the listing" : "Not as listed", positive: review.accuracy },
     {
@@ -51,37 +54,53 @@ export function SellerReviewCard({
   ];
 
   return (
-    <li className="rounded-[var(--radius-md)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-        <span className="font-medium text-[var(--text-primary)]">
-          {reviewer?.username ?? reviewer?.display_name ?? "Former member"}
-        </span>
-        {reviewer ? (
-          <TrustBadge
-            levelName={reviewer.trust_level_name}
-            stage={reviewer.trust_stage}
-            score={reviewer.reputation_score}
-            plain
-            compact
-          />
-        ) : null}
-        <span className="text-[var(--text-muted)]">
-          <time dateTime={review.created_at}>{DATE.format(new Date(review.created_at))}</time>
-        </span>
+    <li id={`seller-review-${review.id}`} className="scroll-mt-24">
+      <div className="flex items-center gap-[9px]">
+        <ReviewerInitial name={name} />
+        <div className={`min-w-0 ${FACE}`}>
+          <p className="flex flex-wrap items-center gap-x-1 text-[13px] text-[var(--text-primary)]">
+            <span className="truncate">{name}</span>
+            {reviewer ? (
+              <>
+                <span aria-hidden="true" className="text-[var(--text-muted)]">
+                  •
+                </span>
+                <TrustBadge
+                  levelName={reviewer.trust_level_name}
+                  stage={reviewer.trust_stage}
+                  score={reviewer.reputation_score}
+                  plain
+                  compact
+                />
+                {reviewer.trust_level_name ? (
+                  <>
+                    <span aria-hidden="true" className="text-[var(--text-muted)]">
+                      •
+                    </span>
+                    <span aria-hidden="true">{reviewer.trust_level_name}</span>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </p>
+          <p className="text-[11px] text-[var(--text-secondary)]">
+            <time dateTime={review.created_at}>{shortAge(review.created_at)}</time>
+          </p>
+        </div>
       </div>
 
-      <StarRow value={review.overall_rating} size={20} className="mt-3" />
+      <StarRow value={review.overall_rating} size={20} className="mt-[14px]" />
 
       {review.title ? (
-        <h3 className="mt-2 text-[16px] font-bold text-[var(--text-primary)]">{review.title}</h3>
+        <h3 className="mt-3 text-[14px] font-bold leading-5 text-[var(--text-primary)]">{review.title}</h3>
       ) : null}
       {review.comment ? (
-        <p className="mt-1 whitespace-pre-line text-[14px] leading-[20px] text-[var(--text-primary)]">
+        <p className={`mt-2 whitespace-pre-line ${FACE} text-[13px] leading-4 text-[var(--text-primary)]`}>
           {review.comment}
         </p>
       ) : null}
 
-      <ul aria-label="This buyer's answers" className="mt-3 flex flex-wrap gap-2 text-[12px]">
+      <ul aria-label="This buyer's answers" className={`mt-3 flex flex-wrap gap-2 ${FACE} text-[12px]`}>
         {answers.map((answer) => (
           <li
             key={answer.label}

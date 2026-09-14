@@ -150,6 +150,59 @@ export function distributionBars(distribution: Record<string, number>): StarBar[
   return counts.map((bar) => ({ ...bar, share: total === 0 ? 0 : bar.count / total }));
 }
 
+/**
+ * A star's share as the seller page frame writes it: "88%", "2.3%". Under ten
+ * percent keeps one decimal; a share that rounds up to ten reads "10%".
+ */
+export function sharePercent(share: number): string {
+  const pct = share * 100;
+  if (pct === 0) return "0%";
+  if (pct < 10) {
+    const fixed = pct.toFixed(1);
+    return fixed === "10.0" ? "10%" : `${fixed}%`;
+  }
+  return `${Math.round(pct)}%`;
+}
+
+/**
+ * A review's age the way the seller frames write it: "5h", "12d". Pure, with
+ * `now` injectable, so a client list and its tests agree. An unreadable date
+ * gets no age; one in the future is "now" rather than a negative number.
+ */
+export function shortAge(iso: string, now: number = Date.now()): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.max(0, Math.floor((now - then) / 1000));
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${days}d`;
+  if (days < 365) return `${Math.floor(days / 7)}w`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+type FilterableReview = { overall_rating: number; title: string | null; comment: string | null };
+
+/**
+ * The "All reviews" filter: only the ticked stars, and — when a keyword is
+ * given — only reviews whose title or comment contains it, ignoring case.
+ * No star ticked matches nothing, which is what the unticked boxes say.
+ */
+export function filterSellerReviews<T extends FilterableReview>(
+  reviews: readonly T[],
+  { stars, keyword }: { stars: readonly number[]; keyword: string },
+): T[] {
+  const needle = keyword.trim().toLowerCase();
+  return reviews.filter((review) => {
+    if (!stars.includes(review.overall_rating)) return false;
+    if (!needle) return true;
+    return `${review.title ?? ""}\n${review.comment ?? ""}`.toLowerCase().includes(needle);
+  });
+}
+
 /** The word under the average ("4.7 Excellent" in the seller page frame). */
 export function ratingWord(average: number | null): string | null {
   if (average === null) return null;
