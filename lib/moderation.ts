@@ -51,6 +51,12 @@ export type QueueItem = {
     author_review_count: number;
   };
   /**
+   * FR-8 layers 2 and 3 (plagiarism, reverse image). A sibling of `signals`,
+   * which stays frozen at the advisory six. Optional so a card from an older
+   * API still renders — and renders as "No provider", never as a pass.
+   */
+  integrity?: { plagiarism_status?: string; reverse_image_status?: string };
+  /**
    * The server's priority assessment for this card (policy `review-priority-v1`).
    *
    * A sibling of `signals`, never a field inside it: the six advisory signals

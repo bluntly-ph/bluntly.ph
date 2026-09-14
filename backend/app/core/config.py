@@ -137,6 +137,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     ai_max_tokens: int = 700
 
+    # --- External integrity checks (FR-8 layers 2 and 3). No provider is
+    # procured and no adapter ships; see app/services/integrity_checks.py. ---
+    plagiarism_provider: str = "none"
+    reverse_image_provider: str = "none"
+
     # --- Referral / affiliate links (M2 slice 1) ---
     affiliate_allowed_domains: str = ""   # optional JSON override of the defaults
     earn_eligible_auto_queue: bool = True  # new reviews auto-enter the moderator queue

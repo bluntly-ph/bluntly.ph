@@ -173,8 +173,8 @@ moderator console screen and deployment are still to come.
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | 8.1 | L1 Physical product photograph | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | — | see 3.8 |
-| 8.2 | L2 Plagiarism / fuzzy word matching | MISSING | — | MISSING | MISSING | MISSING | — | no provider interface, no status field, no moderator signal |
-| 8.3 | L3 Reverse image search + metadata | MISSING | — | MISSING | MISSING | MISSING | Provider unnamed in the PRD (`[AMBIGUOUS]`); the interface and status tracking are still implementable without one | PRD FR-8 |
+| 8.2 | L2 Plagiarism / fuzzy word matching | BLOCKED | — | PARTIAL | COMPLETE | BLOCKED | **EXTERNAL_SERVICE_REQUIRED** — no plagiarism provider is procured or named. Built: the provider interface (`TextCheckProvider`, empty `TEXT_ADAPTERS`), the `PLAGIARISM_PROVIDER` setting, moderator-only `GET /admin/integrity-providers`, and `plagiarism_status` on every queue card reading `not_configured` — never "clear". The internal duplicate-content match (trigram, `fraud_service`) is a separate, working layer and is not presented as this check | `services/integrity_checks.py`, `routes/admin_integrity.py`, `test_integrity_checks_rules`, `tests/frontend/integrity-check-label.test.mjs`; branch only, not deployed |
+| 8.3 | L3 Reverse image search + metadata | BLOCKED | — | PARTIAL | COMPLETE | BLOCKED | **EXTERNAL_SERVICE_REQUIRED** — provider unnamed in the PRD (`[AMBIGUOUS]`) and none procured. Built as 8.2: `ImageCheckProvider`, empty `IMAGE_ADAPTERS`, `REVERSE_IMAGE_PROVIDER`, `reverse_image_status` = `not_configured`; the queue card's tile reads "No provider" and fails closed on any unknown status. Photo metadata inspection is not built | PRD FR-8; same evidence as 8.2 |
 | 8.4 | L4 IP multi-account detection | PARTIAL | — | PARTIAL | COMPLETE | PROVISIONAL | — | `services/fraud_service.py`, `test_fraud_signals` |
 | 8.5 | L5 Time-decayed Wilson + velocity detection | PARTIAL | — | PARTIAL | COMPLETE | PROVISIONAL | Thresholds `[AMBIGUOUS]` in the PRD | `services/ranking.py`, `test_ranking_properties` |
 | 8.6 | L6 Community reporting + escalation | COMPLETE | COMPLETE | COMPLETE | COMPLETE | PROVISIONAL | — | `routes/admin_reports.py`, `test_reports_api` |
@@ -190,7 +190,7 @@ moderator console screen and deployment are still to come.
 | 9.1 | Queue categories Review / Answer / Report / Support | COMPLETE | — | COMPLETE | COMPLETE | COMPLETE | — | `ReviewQueueScreen.tsx`; verified live, 4 tabs, 0 dead controls |
 | 9.2 | Queue states In Review / Archive | PARTIAL | — | PARTIAL | PARTIAL | PROVISIONAL | — | needs audit |
 | 9.3 | Priority score + ordering contract | COMPLETE | — | COMPLETE | COMPLETE | COMPLETE | — | `services/moderation_priority.py`, `test_moderation_priority` |
-| 9.4 | Queue item data (product, author, trust, receipt status, age) | PARTIAL | — | PARTIAL | PARTIAL | PROVISIONAL | — | reverse-image status blocked by 8.3 |
+| 9.4 | Queue item data (product, author, trust, receipt status, age) | PARTIAL | — | PARTIAL | PARTIAL | PROVISIONAL | — | the card now carries `plagiarism_status` / `reverse_image_status` (both `not_configured`, see 8.2/8.3); the remaining gap is the audit of the other fields |
 | 9.5 | Reviewer snapshot (account age, trust score, review counts) | PARTIAL | — | PARTIAL | MISSING | PROVISIONAL | — | contract §17 |
 | 9.6 | Engagement signals (upvotes, views, shares, reports, comments) | PARTIAL | — | PARTIAL | PARTIAL | PROVISIONAL | — | `reading_telemetry` provides views |
 | 9.7 | Inline report surfacing (category, description, history) | PARTIAL | — | PARTIAL | COMPLETE | PROVISIONAL | — | contract §19; `test_reports_api` |

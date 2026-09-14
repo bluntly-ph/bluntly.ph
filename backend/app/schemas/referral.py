@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import Platform, ReferralLinkStatus
 from app.schemas.review import ReviewOut
+from app.services.integrity_checks import ExternalCheckStatus
 from app.services.moderation_priority import PriorityBand, PriorityLane, SlaState
 
 
@@ -83,6 +84,16 @@ class QueueSignals(BaseModel):
     author_review_count: int = 0
 
 
+class QueueIntegrityChecks(BaseModel):
+    """External integrity checks, FR-8 layers 2 and 3 — a sibling of
+    ``QueueSignals``, whose advisory six are frozen by the telemetry-isolation
+    gate. No provider is procured, so both stay "not_configured", deliberately
+    not "clear" (app/services/integrity_checks.py)."""
+
+    plagiarism_status: ExternalCheckStatus = "not_configured"
+    reverse_image_status: ExternalCheckStatus = "not_configured"
+
+
 # --- Canonical priority assessment (design §5; policy in
 # app/services/moderation_priority.py) ---
 class QueuePriorityFactor(BaseModel):
@@ -125,6 +136,9 @@ class QueueItem(BaseModel):
     suggested_platform: Platform | None = None
     edited_since_monetized: bool = False
     signals: QueueSignals = Field(default_factory=QueueSignals)
+    # FR-8 layers 2 and 3: whether plagiarism and reverse image checks ran. A
+    # sibling of `signals` for the same reason `priority` is.
+    integrity: QueueIntegrityChecks = Field(default_factory=QueueIntegrityChecks)
     # The canonical priority assessment for this card (design §5). A sibling of
     # `signals`, never a field inside it — `QueueSignals` stays frozen at the
     # advisory six.

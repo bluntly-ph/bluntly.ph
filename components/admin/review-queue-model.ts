@@ -101,6 +101,8 @@ export type QueueCard = {
     author_account_age_days: number;
     author_review_count: number;
   };
+  /** FR-8 layers 2 and 3. Read through `externalCheckLabel`, never directly. */
+  integrity?: { plagiarism_status?: string; reverse_image_status?: string };
   /** The canonical assessment (design section 5). A sibling of `signals`. */
   priority: QueuePriority;
   /**
@@ -522,6 +524,18 @@ export const FLAGGED_VOTERS_UNAVAILABLE =
 export const REVERSE_IMAGE_SEARCH_UNAVAILABLE =
   "FR-8 layer 3 names no provider. Nothing in this build performs reverse " +
   "image search or plagiarism scoring.";
+
+/**
+ * One external integrity check (plagiarism or reverse image) as the card shows
+ * it. Only "clear" and "flagged" mean a provider actually ran; anything else —
+ * "not_configured", a missing field, a status this build does not know — reads
+ * as "No provider", so an unchecked review never looks like a passed one.
+ */
+export function externalCheckLabel(status: string | undefined): { label: string; ran: boolean } {
+  if (status === "clear") return { label: "No match found", ran: true };
+  if (status === "flagged") return { label: "Match found", ran: true };
+  return { label: "No provider", ran: false };
+}
 
 /* ------------------------------------------------- selection and tab links */
 

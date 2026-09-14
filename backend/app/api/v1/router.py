@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     admin_analytics,
     admin_console,
     admin_earnings,
+    admin_integrity,
     admin_prices,
     admin_referral,
     admin_reports,
@@ -62,4 +63,5 @@ api_v1_router.include_router(postback.router)
 api_v1_router.include_router(sellers.router)
 api_v1_router.include_router(admin_sellers.router)
 api_v1_router.include_router(admin_prices.router)
+api_v1_router.include_router(admin_integrity.router)
 api_v1_router.include_router(notifications.router)

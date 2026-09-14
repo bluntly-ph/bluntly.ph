@@ -35,6 +35,7 @@ import {
   accountAgeLabel,
   authorTrustStats,
   engagementFor,
+  externalCheckLabel,
   factorLines,
   laneLabel,
   priorityOf,
@@ -868,12 +869,16 @@ function ReviewDetail({
               a 200px column is not filled with a paragraph. */}
           <div className="mt-1 flex items-stretch gap-2">
             <div
-              title={REVERSE_IMAGE_SEARCH_UNAVAILABLE}
+              title={
+                externalCheckLabel(item.integrity?.reverse_image_status).ran
+                  ? undefined
+                  : REVERSE_IMAGE_SEARCH_UNAVAILABLE
+              }
               className="grid flex-1 place-items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-app)] px-2 py-3 text-center"
             >
               <ImageBroken size={24} className="text-[var(--text-muted)]" aria-hidden="true" />
               <span className="text-[10px] leading-tight text-[var(--text-secondary)]">
-                No provider
+                {externalCheckLabel(item.integrity?.reverse_image_status).label}
               </span>
             </div>
 
@@ -887,7 +892,9 @@ function ReviewDetail({
             </div>
           </div>
           <p className="mt-1 text-[10px] leading-snug text-[var(--text-muted)]">
-            Plagiarism scoring is not procured in this build.
+            {externalCheckLabel(item.integrity?.plagiarism_status).ran
+              ? `Plagiarism check: ${externalCheckLabel(item.integrity?.plagiarism_status).label}`
+              : "Plagiarism scoring is not procured in this build."}
           </p>
         </Panel>
       </div>

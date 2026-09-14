@@ -2025,6 +2025,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/integrity-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether plagiarism and reverse image checks can run */
+        get: operations["integrity_providers_api_v1_admin_integrity_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -3429,6 +3446,20 @@ export interface components {
             /** Interests */
             interests?: string[] | null;
         };
+        /** ProviderState */
+        ProviderState: {
+            /** Configured */
+            configured: boolean;
+            /** Provider */
+            provider: string | null;
+            /** Detail */
+            detail: string;
+        };
+        /** ProviderStatusOut */
+        ProviderStatusOut: {
+            plagiarism: components["schemas"]["ProviderState"];
+            reverse_image: components["schemas"]["ProviderState"];
+        };
         /**
          * QAAuthor
          * @description The public author fields a Q&A card needs.
@@ -3586,6 +3617,27 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * QueueIntegrityChecks
+         * @description External integrity checks, FR-8 layers 2 and 3 — a sibling of
+         *     ``QueueSignals``, whose advisory six are frozen by the telemetry-isolation
+         *     gate. No provider is procured, so both stay "not_configured", deliberately
+         *     not "clear" (app/services/integrity_checks.py).
+         */
+        QueueIntegrityChecks: {
+            /**
+             * Plagiarism Status
+             * @default not_configured
+             * @enum {string}
+             */
+            plagiarism_status: "not_configured" | "clear" | "flagged";
+            /**
+             * Reverse Image Status
+             * @default not_configured
+             * @enum {string}
+             */
+            reverse_image_status: "not_configured" | "clear" | "flagged";
+        };
         /** QueueItem */
         QueueItem: {
             review: components["schemas"]["ReviewOut"];
@@ -3598,6 +3650,7 @@ export interface components {
              */
             edited_since_monetized: boolean;
             signals?: components["schemas"]["QueueSignals"];
+            integrity?: components["schemas"]["QueueIntegrityChecks"];
             priority: components["schemas"]["QueuePriorityAssessment"];
             /**
              * Queue Time Basis
@@ -8917,6 +8970,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    integrity_providers_api_v1_admin_integrity_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStatusOut"];
                 };
             };
         };

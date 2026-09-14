@@ -6587,6 +6587,32 @@
         }
       }
     },
+    "/api/v1/admin/integrity-providers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Whether plagiarism and reverse image checks can run",
+        "operationId": "integrity_providers_api_v1_admin_integrity_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStatusOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -10151,6 +10177,52 @@
         "title": "ProfileUpdateIn",
         "description": "Onboarding / profile edit. Omitted fields are left untouched."
       },
+      "ProviderState": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "provider",
+          "detail"
+        ],
+        "title": "ProviderState"
+      },
+      "ProviderStatusOut": {
+        "properties": {
+          "plagiarism": {
+            "$ref": "#/components/schemas/ProviderState"
+          },
+          "reverse_image": {
+            "$ref": "#/components/schemas/ProviderState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plagiarism",
+          "reverse_image"
+        ],
+        "title": "ProviderStatusOut"
+      },
       "QAAuthor": {
         "properties": {
           "id": {
@@ -10571,6 +10643,33 @@
         "title": "QueueCounts",
         "description": "Totals over the filtered, ordered candidate set \u2014 computed before the\nrequested page is sliced, so the UI can show queue depth truthfully even\nwhile looking at page one."
       },
+      "QueueIntegrityChecks": {
+        "properties": {
+          "plagiarism_status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "clear",
+              "flagged"
+            ],
+            "title": "Plagiarism Status",
+            "default": "not_configured"
+          },
+          "reverse_image_status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "clear",
+              "flagged"
+            ],
+            "title": "Reverse Image Status",
+            "default": "not_configured"
+          }
+        },
+        "type": "object",
+        "title": "QueueIntegrityChecks",
+        "description": "External integrity checks, FR-8 layers 2 and 3 \u2014 a sibling of\n``QueueSignals``, whose advisory six are frozen by the telemetry-isolation\ngate. No provider is procured, so both stay \"not_configured\", deliberately\nnot \"clear\" (app/services/integrity_checks.py)."
+      },
       "QueueItem": {
         "properties": {
           "review": {
@@ -10606,6 +10705,9 @@
           },
           "signals": {
             "$ref": "#/components/schemas/QueueSignals"
+          },
+          "integrity": {
+            "$ref": "#/components/schemas/QueueIntegrityChecks"
           },
           "priority": {
             "$ref": "#/components/schemas/QueuePriorityAssessment"
