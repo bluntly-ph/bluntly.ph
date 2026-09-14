@@ -83,7 +83,11 @@
   --accent-danger: var(--semantic-danger);
   --accent-star: var(--semantic-star);
 
-  /* ---- disabled control, measured from the Send code / Continue frames ---- */
-  --disabled-surface: rgba(32, 32, 32, 0.14);
-  --disabled-text: rgba(32, 32, 32, 0.52);
+  /* ---- disabled control ----
+     Opaque, as the frames draw it: composer step 6 and onboarding step 1 both
+     measure #dddddd with a #7f7f7f label on the #f2f2f2 page. The previous
+     rgba(32,32,32,.14 / .52) overlay matched only over white; on the page grey
+     it rendered #d5d5d5 / #858585. An opaque value reads the same on any ground. */
+  --disabled-surface: rgb(221, 221, 221);
+  --disabled-text: rgb(127, 127, 127);
 }
