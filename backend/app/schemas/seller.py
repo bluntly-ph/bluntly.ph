@@ -158,3 +158,27 @@ class SellerClaimOut(BaseModel):
 class ClaimDecision(BaseModel):
     decision: Literal["approve", "reject"]
     note: str | None = Field(default=None, max_length=2000)
+
+
+class MonthCount(BaseModel):
+    #: "YYYY-MM", a Manila calendar month.
+    month: str
+    count: int
+
+
+class WaitingQuestion(BaseModel):
+    id: uuid.UUID
+    body: str
+    created_at: datetime
+
+
+class SellerDashboardOut(BaseModel):
+    """What a store's approved owner sees about their own store."""
+
+    seller: SellerDetailOut
+    #: Visible reviews per month, oldest first, zero-filled.
+    monthly_volume: list[MonthCount]
+    #: Store questions with no answer from the store yet.
+    unanswered_questions: int
+    #: Oldest first, at most 20: the ones that have waited longest come first.
+    waiting_questions: list[WaitingQuestion]

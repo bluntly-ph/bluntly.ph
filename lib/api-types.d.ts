@@ -1823,6 +1823,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sellers/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stores this account runs (approved claims only)
+         * @description Declared before `/{seller_id}` so "mine" is never parsed as a store id.
+         */
+        get: operations["my_stores_api_v1_sellers_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sellers/{seller_id}": {
         parameters: {
             query?: never;
@@ -1832,6 +1852,23 @@ export interface paths {
         };
         /** A store with its public rating summary */
         get: operations["get_seller_api_v1_sellers__seller_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sellers/{seller_id}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The approved owner's view of their store (review monitoring) */
+        get: operations["seller_dashboard_api_v1_sellers__seller_id__dashboard_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2869,6 +2906,13 @@ export interface components {
          * @enum {string}
          */
         ModerationTargetType: "review" | "answer" | "seller_review" | "question" | "user";
+        /** MonthCount */
+        MonthCount: {
+            /** Month */
+            month: string;
+            /** Count */
+            count: number;
+        };
         /** OptionalReasonRequest */
         OptionalReasonRequest: {
             /** Reason */
@@ -4165,6 +4209,19 @@ export interface components {
             /** Store Url */
             store_url?: string | null;
         };
+        /**
+         * SellerDashboardOut
+         * @description What a store's approved owner sees about their own store.
+         */
+        SellerDashboardOut: {
+            seller: components["schemas"]["SellerDetailOut"];
+            /** Monthly Volume */
+            monthly_volume: components["schemas"]["MonthCount"][];
+            /** Unanswered Questions */
+            unanswered_questions: number;
+            /** Waiting Questions */
+            waiting_questions: components["schemas"]["WaitingQuestion"][];
+        };
         /** SellerDetailOut */
         SellerDetailOut: {
             /**
@@ -4634,6 +4691,21 @@ export interface components {
          */
         VoteIn: {
             vote: components["schemas"]["VoteDirection"];
+        };
+        /** WaitingQuestion */
+        WaitingQuestion: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
     };
     responses: never;
@@ -8268,6 +8340,26 @@ export interface operations {
             };
         };
     };
+    my_stores_api_v1_sellers_mine_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOut"][];
+                };
+            };
+        };
+    };
     get_seller_api_v1_sellers__seller_id__get: {
         parameters: {
             query?: never;
@@ -8286,6 +8378,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SellerDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seller_dashboard_api_v1_sellers__seller_id__dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                seller_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDashboardOut"];
                 };
             };
             /** @description Validation Error */

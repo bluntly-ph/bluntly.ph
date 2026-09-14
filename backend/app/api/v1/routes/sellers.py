@@ -21,6 +21,7 @@ from app.schemas.seller import (
     SellerClaimCreate,
     SellerClaimOut,
     SellerCreate,
+    SellerDashboardOut,
     SellerDetailOut,
     SellerOut,
     SellerReviewCreate,
@@ -56,10 +57,25 @@ def list_sellers(db: Session = Depends(get_db),
     return seller_service.list_sellers(db, q=q, platform=platform, limit=limit)
 
 
+@router.get("/mine", response_model=list[SellerOut],
+            summary="Stores this account runs (approved claims only)")
+def my_stores(db: Session = Depends(get_db),
+              user: User = Depends(get_current_user)) -> list[SellerOut]:
+    """Declared before `/{seller_id}` so "mine" is never parsed as a store id."""
+    return seller_service.list_my_stores(db, user)
+
+
 @router.get("/{seller_id}", response_model=SellerDetailOut,
             summary="A store with its public rating summary")
 def get_seller(seller_id: uuid.UUID, db: Session = Depends(get_db)) -> SellerDetailOut:
     return seller_service.get_seller_detail(db, seller_id)
+
+
+@router.get("/{seller_id}/dashboard", response_model=SellerDashboardOut,
+            summary="The approved owner's view of their store (review monitoring)")
+def seller_dashboard(seller_id: uuid.UUID, db: Session = Depends(get_db),
+                     user: User = Depends(get_current_user)) -> SellerDashboardOut:
+    return seller_service.get_dashboard(db, seller_id, user)
 
 
 @router.post("/{seller_id}/reviews", response_model=SellerReviewOut, status_code=201,

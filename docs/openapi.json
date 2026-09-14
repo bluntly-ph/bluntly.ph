@@ -5941,6 +5941,37 @@
         }
       }
     },
+    "/api/v1/sellers/mine": {
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "Stores this account runs (approved claims only)",
+        "description": "Declared before `/{seller_id}` so \"mine\" is never parsed as a store id.",
+        "operationId": "my_stores_api_v1_sellers_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SellerOut"
+                  },
+                  "type": "array",
+                  "title": "Response My Stores Api V1 Sellers Mine Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/sellers/{seller_id}": {
       "get": {
         "tags": [
@@ -5967,6 +5998,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SellerDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sellers/{seller_id}/dashboard": {
+      "get": {
+        "tags": [
+          "sellers"
+        ],
+        "summary": "The approved owner's view of their store (review monitoring)",
+        "operationId": "seller_dashboard_api_v1_sellers__seller_id__dashboard_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerDashboardOut"
                 }
               }
             }
@@ -8813,6 +8892,24 @@
           "user"
         ],
         "title": "ModerationTargetType"
+      },
+      "MonthCount": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "title": "Month"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "count"
+        ],
+        "title": "MonthCount"
       },
       "OptionalReasonRequest": {
         "properties": {
@@ -12277,6 +12374,40 @@
         ],
         "title": "SellerCreate"
       },
+      "SellerDashboardOut": {
+        "properties": {
+          "seller": {
+            "$ref": "#/components/schemas/SellerDetailOut"
+          },
+          "monthly_volume": {
+            "items": {
+              "$ref": "#/components/schemas/MonthCount"
+            },
+            "type": "array",
+            "title": "Monthly Volume"
+          },
+          "unanswered_questions": {
+            "type": "integer",
+            "title": "Unanswered Questions"
+          },
+          "waiting_questions": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingQuestion"
+            },
+            "type": "array",
+            "title": "Waiting Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seller",
+          "monthly_volume",
+          "unanswered_questions",
+          "waiting_questions"
+        ],
+        "title": "SellerDashboardOut",
+        "description": "What a store's approved owner sees about their own store."
+      },
       "SellerDetailOut": {
         "properties": {
           "id": {
@@ -13544,6 +13675,31 @@
         ],
         "title": "VoteIn",
         "description": "Community helpfulness vote (M2 slice 2)."
+      },
+      "WaitingQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "body",
+          "created_at"
+        ],
+        "title": "WaitingQuestion"
       }
     },
     "securitySchemes": {

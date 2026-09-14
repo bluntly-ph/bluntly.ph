@@ -26,16 +26,18 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError, NotFoundError
+from app.core.constants import MANILA
+from app.core.errors import AppError, ForbiddenError, NotFoundError
 from app.models.enums import Platform, SellerClaimStatus
 from app.models.product import Product
+from app.models.qa import Answer, Question
 from app.models.seller import Seller, SellerClaim, SellerReview
 from app.models.user import User
 from app.schemas.qa import QAAuthor
@@ -44,11 +46,13 @@ from app.schemas.seller import (
     SellerClaimCreate,
     SellerClaimOut,
     SellerCreate,
+    SellerDashboardOut,
     SellerDetailOut,
     SellerOut,
     SellerReviewCreate,
     SellerReviewOut,
     SellerSummary,
+    WaitingQuestion,
 )
 
 _WHITESPACE = re.compile(r"\s+")
@@ -193,6 +197,86 @@ def get_seller_detail(db: Session, seller_id: uuid.UUID) -> SellerDetailOut:
     data["review_count"] = summary.review_count
     data["overall_average"] = summary.overall_average
     return SellerDetailOut(**data, summary=summary)
+
+
+# ------------------------------------------------------------ dashboard
+
+#: Months of review volume on the owner's dashboard.
+DASHBOARD_MONTHS = 6
+
+
+def monthly_volume(reviews: Iterable[Any], *, months: int = DASHBOARD_MONTHS,
+                   today: date | None = None) -> list[dict]:
+    """Reviews per Manila calendar month, zero-filled, oldest first.
+
+    A month with no reviews is a zero rather than a missing entry, so a chart
+    drawn from this cannot silently close the gap and imply steady volume.
+    """
+    current = today or datetime.now(MANILA).date()
+    keys: list[str] = []
+    year, month = current.year, current.month
+    for _ in range(months):
+        keys.append(f"{year:04d}-{month:02d}")
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+    keys.reverse()
+    counts = dict.fromkeys(keys, 0)
+    for row in reviews:
+        local = row.created_at.astimezone(MANILA)
+        key = f"{local.year:04d}-{local.month:02d}"
+        if key in counts:
+            counts[key] += 1
+    return [{"month": key, "count": counts[key]} for key in keys]
+
+
+def _require_owner(seller: Seller, user: User) -> None:
+    """The approved owner only. A pending claim is a request, not ownership."""
+    if seller.claim_status != SellerClaimStatus.claimed or seller.claimed_by_id != user.id:
+        raise ForbiddenError("Only the store's approved owner can open its dashboard.",
+                             code="not_store_owner")
+
+
+def list_my_stores(db: Session, user: User) -> list[SellerDetailOut]:
+    """Stores this account runs: claims a moderator approved, nothing pending."""
+    stores = db.scalars(
+        select(Seller)
+        .where(Seller.claimed_by_id == user.id,
+               Seller.claim_status == SellerClaimStatus.claimed)
+        .order_by(Seller.display_name)
+    ).all()
+    return [get_seller_detail(db, store.id) for store in stores]
+
+
+def get_dashboard(db: Session, seller_id: uuid.UUID, user: User) -> SellerDashboardOut:
+    """Review monitoring for the store's approved owner (FR-4).
+
+    Everything here is already public on the store page except the waiting
+    list's framing: which store questions have no answer from the store yet,
+    oldest first, because those are the ones the owner is expected to act on.
+    """
+    seller = get_seller_or_404(db, seller_id)
+    _require_owner(seller, user)
+
+    reviews = db.scalars(
+        select(SellerReview).where(SellerReview.seller_id == seller.id, _VISIBLE)
+    ).all()
+    answered_by_store = select(Answer.question_id).where(Answer.is_seller_answer.is_(True))
+    waiting = select(Question).where(
+        Question.seller_id == seller.id,
+        Question.is_removed.is_(False),
+        Question.id.not_in(answered_by_store),
+    )
+    unanswered = db.scalar(select(func.count()).select_from(waiting.subquery())) or 0
+    oldest_first = db.scalars(waiting.order_by(Question.created_at).limit(20)).all()
+
+    return SellerDashboardOut(
+        seller=get_seller_detail(db, seller.id),
+        monthly_volume=monthly_volume(reviews),
+        unanswered_questions=unanswered,
+        waiting_questions=[
+            WaitingQuestion(id=q.id, body=q.body, created_at=q.created_at)
+            for q in oldest_first
+        ],
+    )
 
 
 # ---------------------------------------------------------------- reviews

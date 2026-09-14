@@ -1,6 +1,7 @@
 import "server-only";
 
 import { apiFetch } from "./api/client";
+import { ApiError } from "./api/errors";
 import type { QAAuthor } from "./qa";
 import { getSessionToken } from "./session";
 import type { SellerPlatform } from "@/components/sellers/seller-model";
@@ -97,6 +98,52 @@ export async function getSellerReviews(id: string, limit = 30): Promise<SellerRe
     );
   } catch {
     return null;
+  }
+}
+
+export type MonthCount = { month: string; count: number };
+
+export type SellerDashboard = {
+  seller: SellerDetail;
+  /** Visible reviews per Manila month, oldest first, zero-filled. */
+  monthly_volume: MonthCount[];
+  /** Store questions with no answer from the store yet. */
+  unanswered_questions: number;
+  /** Oldest first, at most 20. */
+  waiting_questions: { id: string; body: string; created_at: string }[];
+};
+
+/**
+ * Stores the signed-in account runs (approved claims only). Empty on any
+ * failure: it only decides whether a dashboard link is offered, and a missing
+ * link is the safe way for that to fail.
+ */
+export async function getMyStores(): Promise<Seller[]> {
+  try {
+    return await apiFetch<Seller[]>("/api/v1/sellers/mine", { token: await getSessionToken() });
+  } catch {
+    return [];
+  }
+}
+
+export type DashboardResult =
+  | { ok: true; dashboard: SellerDashboard }
+  | { ok: false; reason: "not_owner" | "not_found" | "unavailable" };
+
+/** The owner's dashboard, or why it cannot be shown. Branches on `code`, not prose. */
+export async function getSellerDashboard(id: string): Promise<DashboardResult> {
+  try {
+    const dashboard = await apiFetch<SellerDashboard>(
+      `/api/v1/sellers/${encodeURIComponent(id)}/dashboard`,
+      { token: await getSessionToken() },
+    );
+    return { ok: true, dashboard };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.code === "not_store_owner") return { ok: false, reason: "not_owner" };
+      if (error.status === 404 || error.status === 422) return { ok: false, reason: "not_found" };
+    }
+    return { ok: false, reason: "unavailable" };
   }
 }
 

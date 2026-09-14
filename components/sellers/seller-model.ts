@@ -180,3 +180,26 @@ export function ratingPrompt(overall: number | null): string | null {
   if (overall === 3) return "A mixed experience? Tell people what went right and what didn’t.";
   return "Sorry it didn’t go well. Tell people what happened.";
 }
+
+/* --------------------------------------------------- owner dashboard */
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-09" -> "Sep 2026". Fixed English names, so the label never depends on locale. */
+export function monthLabel(key: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(key);
+  if (!match) return key;
+  const index = Number(match[2]) - 1;
+  return index >= 0 && index < 12 ? `${MONTH_NAMES[index]} ${match[1]}` : key;
+}
+
+export type VolumeBar = { month: string; count: number; share: number };
+
+/**
+ * Review volume as bars, each a share of the busiest month in the window. The
+ * API zero-fills the months, so a quiet month is an empty bar, never a gap.
+ */
+export function volumeBars(months: { month: string; count: number }[]): VolumeBar[] {
+  const max = months.reduce((most, m) => Math.max(most, m.count), 0);
+  return months.map((m) => ({ month: m.month, count: m.count, share: max === 0 ? 0 : m.count / max }));
+}

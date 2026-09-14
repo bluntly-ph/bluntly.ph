@@ -14,7 +14,7 @@ import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Unavailable } from "@/components/site/Unavailable";
 import { getUser } from "@/lib/dal";
 import { getQuestions } from "@/lib/qa";
-import { getSeller, getSellerReviews } from "@/lib/sellers";
+import { getMyStores, getSeller, getSellerReviews } from "@/lib/sellers";
 
 export const metadata: Metadata = {
   title: "Seller — bluntly",
@@ -42,6 +42,12 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
 
   const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
   const canModerate = me?.role === "moderator" || me?.role === "admin";
+  // The public store shape never says who claimed it, so ownership is asked of
+  // the API — and only when it could be true, to spare everyone else a request.
+  const ownsStore =
+    me !== null && seller.claim_status === "claimed"
+      ? (await getMyStores()).some((store) => store.id === seller.id)
+      : false;
   const count = seller.review_count;
   const rateHref = `/sellers/rate?seller=${seller.id}`;
   const pill =
@@ -77,6 +83,14 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           >
             Ask a question
           </a>
+          {ownsStore ? (
+            <Link
+              href={`/sellers/${seller.id}/dashboard`}
+              className={`${pill} border-[var(--accent-trust)] text-[var(--accent-trust)] hover:bg-[color-mix(in_srgb,var(--accent-trust)_8%,transparent)]`}
+            >
+              Store dashboard
+            </Link>
+          ) : null}
           {seller.store_url ? (
             <a
               href={seller.store_url}
