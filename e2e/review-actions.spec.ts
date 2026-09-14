@@ -137,7 +137,7 @@ test.describe("category strip — desktop must not clip it", () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/search");
       const clipped = await page.evaluate(() => {
-        const list = document.querySelector("form + div ul");
+        const list = document.querySelector('nav[aria-label="Search results type"] + div ul');
         if (!list) return null;
         const chips = [...list.querySelectorAll("li")];
         const last = chips[chips.length - 1].getBoundingClientRect();
@@ -150,11 +150,18 @@ test.describe("category strip — desktop must not clip it", () => {
   test("mobile keeps the horizontal scroller", async ({ page }) => {
     // The fix must not have turned the phone strip into a wrapped block; at
     // 393px a three-row chip grid would push the results off the first screen.
+    //
+    // Both tests here located the strip as `form + div ul`, which stopped
+    // matching when the result tabs were inserted between the field and the
+    // strip (2187989): the desktop test then failed on `null`, and this one
+    // passed on a height of 0 without looking at anything. The strip is now
+    // found after the tab nav, and it must exist before its height means a thing.
     await page.setViewportSize({ width: 393, height: 850 });
     await page.goto("/search");
     const height = await page.evaluate(
-      () => document.querySelector("form + div ul")?.getBoundingClientRect().height ?? 0,
+      () => document.querySelector('nav[aria-label="Search results type"] + div ul')?.getBoundingClientRect().height ?? 0,
     );
+    expect(height).toBeGreaterThan(0);
     expect(height).toBeLessThan(60);
     expect(
       await page.evaluate(
