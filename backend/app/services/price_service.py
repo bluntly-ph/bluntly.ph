@@ -4,7 +4,7 @@ FR-2 verbatim: *"Price panel from community-submitted purchase price
 observations — displayed only when ≥ 3 independent observations exist;
 partial-data empty states specified."*
 
-Three decisions follow from that wording and are worth stating, because each
+Four decisions follow from that wording and the completion contract, and each
 one could reasonably have gone the other way:
 
 **"Independent" means distinct submitters, not distinct rows.** Otherwise one
@@ -14,6 +14,12 @@ rows per user, so the count is over `DISTINCT submitted_by`. A NULL submitter
 (a row whose author was deleted) cannot be shown to be independent of anything,
 so it never counts toward the threshold — but its price still participates in
 the summary once the panel is unlocked, because it was a real observation.
+
+**Only approved observations count.** The completion contract makes every
+observation pending until a moderator approves or rejects it (migration 0044),
+and the panel is built from approved rows alone. A pending price is counted —
+so the UI can say something is waiting — but never priced; a rejected one is
+neither.
 
 **Nothing here is scraped.** `price_history` is community-submitted by design
 (`docs/schema.md`: "Never scraped"), and the anti-scraping mandate is permanent
@@ -30,14 +36,17 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.enums import Platform
-from app.models.product import PriceHistory
+from app.core.errors import AppError, NotFoundError
+from app.models.enums import Platform, PriceObservationSource, PriceObservationStatus
+from app.models.product import PriceHistory, Product
+from app.models.user import User
+from app.schemas.product import PriceObservationDecision, PriceObservationQueueItem
 
 # FR-2: the panel is shown only at or above this many independent observations.
 MIN_INDEPENDENT_OBSERVATIONS = 3
@@ -56,6 +65,8 @@ class PricePanel:
     currency: str = "PHP"
     latest_observed_at: date | None = None
     platforms: tuple[str, ...] = ()
+    #: Observations still waiting for a moderator: counted, never priced.
+    pending_count: int = 0
 
 
 def _median(values: list[Decimal]) -> Decimal:
@@ -75,14 +86,17 @@ def panel_from(rows) -> PricePanel:
     could only be tested against a live Postgres. Every test of it therefore
     skipped in any environment without one, which is most of them.
 
-    Takes anything with `submitted_by`, `price`, `observed_at` and `platform`,
-    so a test can pass plain objects and exercise the rule directly.
+    Takes anything with `submitted_by`, `price`, `observed_at`, `platform` and
+    `status`, so a test can pass plain objects and exercise the rule directly.
     """
-    total = len(rows)
+    rows = list(rows)
+    approved = [r for r in rows if r.status == PriceObservationStatus.approved]
+    pending = sum(1 for r in rows if r.status == PriceObservationStatus.pending)
+    total = len(approved)
     # Distinct submitters, not rows. One person reporting three times is one
     # observation of the market, and a row whose author has been deleted
     # (`submitted_by` NULL) cannot be shown to be independent of anything.
-    independent = len({r.submitted_by for r in rows if r.submitted_by is not None})
+    independent = len({r.submitted_by for r in approved if r.submitted_by is not None})
 
     if independent < MIN_INDEPENDENT_OBSERVATIONS:
         # Deliberately no prices in this branch. Returning them "just for the
@@ -90,9 +104,9 @@ def panel_from(rows) -> PricePanel:
         # threshold exists precisely because one or two observations are not
         # yet meaningful.
         return PricePanel(observation_count=total, independent_count=independent,
-                          sufficient=False)
+                          sufficient=False, pending_count=pending)
 
-    prices = [r.price for r in rows]
+    prices = [r.price for r in approved]
     return PricePanel(
         observation_count=total,
         independent_count=independent,
@@ -100,23 +114,38 @@ def panel_from(rows) -> PricePanel:
         low=min(prices),
         high=max(prices),
         median=_median(prices),
-        latest_observed_at=max(r.observed_at for r in rows),
-        platforms=tuple(sorted({r.platform.value for r in rows})),
+        latest_observed_at=max(r.observed_at for r in approved),
+        platforms=tuple(sorted({r.platform.value for r in approved})),
+        pending_count=pending,
     )
+
+
+def new_observation(product_id: uuid.UUID, user_id: uuid.UUID | None, platform: Platform,
+                    price: Decimal, observed_at: date, variant: str | None, *,
+                    source: PriceObservationSource = PriceObservationSource.manual,
+                    review_id: uuid.UUID | None = None) -> PriceHistory:
+    """An unsaved, pending observation. Callers own the transaction.
+
+    Separate from `submit_observation` so review submission can add one inside
+    its own transaction: a review and the price it reports either both land or
+    neither does.
+    """
+    return PriceHistory(product_id=product_id, submitted_by=user_id,
+                        platform=platform, price=price, observed_at=observed_at,
+                        variant=variant, source=source, review_id=review_id,
+                        status=PriceObservationStatus.pending)
 
 
 def submit_observation(db: Session, product_id: uuid.UUID, user_id: uuid.UUID,
                        platform: Platform, price: Decimal,
                        observed_at: date, variant: str | None) -> PriceHistory:
-    """Record one price observation. One row per submission, by design.
+    """Record one price observation, pending moderation.
 
     Repeat submissions from the same person are allowed - a price legitimately
     changes over time - but they do not make that person any more independent,
     which is why the threshold counts distinct submitters rather than rows.
     """
-    row = PriceHistory(product_id=product_id, submitted_by=user_id,
-                       platform=platform, price=price,
-                       observed_at=observed_at, variant=variant)
+    row = new_observation(product_id, user_id, platform, price, observed_at, variant)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -141,7 +170,8 @@ def panels_for(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, Pri
 
     Comparison shows up to four products; asking per product would be four
     round trips to a database in another region for data that one grouped read
-    already has.
+    already has. Each group goes through `panel_from`, so the comparison and
+    the product page cannot disagree about the threshold.
     """
     if not product_ids:
         return {}
@@ -152,23 +182,7 @@ def panels_for(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, Pri
     grouped: dict[uuid.UUID, list[PriceHistory]] = {pid: [] for pid in product_ids}
     for row in rows:
         grouped.setdefault(row.product_id, []).append(row)
-
-    panels: dict[uuid.UUID, PricePanel] = {}
-    for pid, items in grouped.items():
-        independent = len({r.submitted_by for r in items if r.submitted_by is not None})
-        if independent < MIN_INDEPENDENT_OBSERVATIONS:
-            panels[pid] = PricePanel(observation_count=len(items),
-                                     independent_count=independent, sufficient=False)
-            continue
-        prices = [r.price for r in items]
-        panels[pid] = PricePanel(
-            observation_count=len(items), independent_count=independent,
-            sufficient=True, low=min(prices), high=max(prices),
-            median=_median(prices),
-            latest_observed_at=max(r.observed_at for r in items),
-            platforms=tuple(sorted({r.platform.value for r in items})),
-        )
-    return panels
+    return {pid: panel_from(items) for pid, items in grouped.items()}
 
 
 def observation_count(db: Session, product_id: uuid.UUID) -> int:
@@ -176,3 +190,64 @@ def observation_count(db: Session, product_id: uuid.UUID) -> int:
         select(func.count(PriceHistory.id))
         .where(PriceHistory.product_id == product_id)
     ) or 0
+
+
+# ------------------------------------------------------------- moderation
+
+def _queue_item(row: PriceHistory, product_name: str | None,
+                submitter: str | None) -> PriceObservationQueueItem:
+    return PriceObservationQueueItem(
+        id=row.id, product_id=row.product_id, product_name=product_name,
+        platform=row.platform, price=row.price, variant=row.variant,
+        observed_at=row.observed_at, source=row.source, status=row.status,
+        submitter_username=submitter, decision_note=row.decision_note,
+        created_at=row.created_at,
+    )
+
+
+def list_pending(db: Session, *, product_id: uuid.UUID | None,
+                 limit: int) -> list[PriceObservationQueueItem]:
+    """Oldest first: a price reported earlier is checked earlier."""
+    stmt = (
+        select(PriceHistory, Product.canonical_name, User.username)
+        .join(Product, Product.id == PriceHistory.product_id)
+        .outerjoin(User, User.id == PriceHistory.submitted_by)
+        .where(PriceHistory.status == PriceObservationStatus.pending)
+    )
+    if product_id is not None:
+        stmt = stmt.where(PriceHistory.product_id == product_id)
+    stmt = stmt.order_by(PriceHistory.created_at).limit(limit)
+    return [_queue_item(row, name, username) for row, name, username in db.execute(stmt).all()]
+
+
+def decide_observation(db: Session, observation_id: uuid.UUID, moderator: User,
+                       decision: PriceObservationDecision) -> PriceObservationQueueItem:
+    """Approve or reject one observation.
+
+    Refuses a moderator deciding their own price — the same self-dealing rule
+    as `self_report` and seller claims — and a second decision on a decided
+    row, so an approval cannot be silently flipped.
+    """
+    row = db.get(PriceHistory, observation_id, with_for_update=True)
+    if row is None:
+        raise NotFoundError("Price observation not found.")
+    if row.submitted_by is not None and row.submitted_by == moderator.id:
+        raise AppError("You cannot decide a price you submitted.", code="self_decision",
+                       status_code=422, title="Invalid decision")
+    if row.status != PriceObservationStatus.pending:
+        raise AppError("This price has already been decided.",
+                       code="price_observation_already_decided", status_code=409,
+                       title="Price already decided")
+
+    row.status = (PriceObservationStatus.approved if decision.decision == "approve"
+                  else PriceObservationStatus.rejected)
+    row.decided_by_id = moderator.id
+    row.decided_at = datetime.now(UTC)
+    row.decision_note = decision.note
+    db.commit()
+    db.refresh(row)
+
+    product = db.get(Product, row.product_id)
+    submitter = db.get(User, row.submitted_by) if row.submitted_by else None
+    return _queue_item(row, product.canonical_name if product else None,
+                       submitter.username if submitter else None)

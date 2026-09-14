@@ -100,17 +100,29 @@ export function PricePanel({
             </p>
           ) : null}
           <p className="mt-3 text-[12px] text-[var(--text-muted)]">
-            Prices buyers here reported paying. Not a listing price, and never
-            collected from a marketplace.
+            Prices buyers here reported paying, each checked by a moderator.
+            Not a listing price, and never collected from a marketplace.
           </p>
         </>
       ) : (
         <>
           <p className="mt-2 text-[13px] text-[var(--text-secondary)]">
             {panel.observation_count === 0
-              ? "Nobody has reported paying for this yet."
+              ? panel.pending_count > 0
+                ? "No checked reports yet."
+                : "Nobody has reported paying for this yet."
               : `${panel.observation_count} report${panel.observation_count === 1 ? "" : "s"} so far, from ${panel.independent_count} buyer${panel.independent_count === 1 ? "" : "s"}.`}
           </p>
+          {/* Pending reports are counted, never priced: a moderator has not
+              checked them, so they cannot open the range. Saying they exist
+              keeps "nobody has reported" from being false. */}
+          {panel.pending_count > 0 ? (
+            <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+              {panel.pending_count === 1
+                ? "1 more report is waiting for a moderator to check."
+                : `${panel.pending_count} more reports are waiting for a moderator to check.`}
+            </p>
+          ) : null}
           <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
             {needed === 1
               ? "One more buyer and we can show a price range."

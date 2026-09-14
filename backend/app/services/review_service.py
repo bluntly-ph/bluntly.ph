@@ -10,11 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.categories import spellings_for
 from app.core.config import settings
 from app.core.errors import NotFoundError
-from app.models.enums import EarnEligibleStatus, VerificationStatus
+from app.models.enums import EarnEligibleStatus, PriceObservationSource, VerificationStatus
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
 from app.models.user import User
+from app.schemas.product import _ph_today
 from app.schemas.review import ReviewCreate, ReviewUpdate
+from app.services.price_service import new_observation
 from app.services.storage import review_photo_belongs_to
 
 # Fields captured in each version snapshot.
@@ -126,6 +128,14 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
     )
     db.add(review)
     db.flush()
+    # "Let's talk money" feeds the community price panel (completion contract).
+    # Only with a marketplace — an observation without one would be invented —
+    # and pending like any other, so it counts once a moderator approves it.
+    # Dated the day it was reported: the card asks what was paid, not when.
+    if payload.price_paid is not None and payload.price_paid > 0 and payload.price_platform:
+        db.add(new_observation(
+            review.product_id, author_id, payload.price_platform, payload.price_paid,
+            _ph_today(), None, source=PriceObservationSource.review, review_id=review.id))
     db.add(ReviewVersion(review_id=review.id, version_number=1,
                          snapshot=_snapshot(review), edited_by=author_id,
                          change_note="initial submission"))

@@ -17,6 +17,7 @@ import {
   PiggyBank,
   Question,
   Storefront,
+  Tag,
   UsersThree,
   X,
 } from "@phosphor-icons/react/dist/ssr";
@@ -82,6 +83,10 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
     heading: "Manage",
     items: [
       { label: "Products", Icon: Handbag, href: "/moderate/products", match: "/moderate/products" },
+      // Not in the sidebar component (5017:2225). Community prices are pending
+      // until a moderator decides them (FR-2, completion contract), and the
+      // decision needs a screen.
+      { label: "Prices", Icon: Tag, href: "/moderate/prices", match: "/moderate/prices" },
       {
         label: "Sellers",
         Icon: Storefront,

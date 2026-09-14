@@ -5,12 +5,18 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.categories import CATEGORIES, normalize_category
 from app.core.constants import MANILA
-from app.models.enums import Platform, ProductStatus
+from app.models.enums import (
+    Platform,
+    PriceObservationSource,
+    PriceObservationStatus,
+    ProductStatus,
+)
 from app.schemas.urls import web_url_or_none
 
 # Published in the OpenAPI schema so the contract states what a category may
@@ -139,6 +145,9 @@ class PriceObservationOut(BaseModel):
     price: Decimal
     observed_at: date
     variant: str | None = None
+    #: "pending" on submission: the price counts once a moderator approves it.
+    status: PriceObservationStatus
+    source: PriceObservationSource
     created_at: datetime
 
 
@@ -161,6 +170,32 @@ class PricePanelOut(BaseModel):
     median: Decimal | None = None
     latest_observed_at: date | None = None
     platforms: list[str] = Field(default_factory=list)
+    #: Observations waiting for a moderator: counted so the page can say so,
+    #: never priced.
+    pending_count: int = 0
+
+
+class PriceObservationQueueItem(BaseModel):
+    """One observation as the moderator's queue shows it."""
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: str | None = None
+    platform: Platform
+    price: Decimal
+    variant: str | None = None
+    observed_at: date
+    source: PriceObservationSource
+    status: PriceObservationStatus
+    #: Who reported it, so a moderator can notice one person reporting repeatedly.
+    submitter_username: str | None = None
+    decision_note: str | None = None
+    created_at: datetime
+
+
+class PriceObservationDecision(BaseModel):
+    decision: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class ComparisonEntry(BaseModel):

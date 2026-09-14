@@ -60,6 +60,7 @@ def _panel_out(product_id: uuid.UUID, panel) -> PricePanelOut:
         low=panel.low, high=panel.high, median=panel.median,
         latest_observed_at=panel.latest_observed_at,
         platforms=list(panel.platforms),
+        pending_count=panel.pending_count,
     )
 
 

@@ -46,6 +46,21 @@ def _observe(client, headers, product_id, price, days_ago=0, platform="shopee"):
     })
 
 
+def _approve_pending(client, moderator_headers, product_id):
+    """Approve every pending observation on one product, as a moderator would.
+
+    Filtered by product: the CI database is cumulative, and an oldest-first
+    queue would otherwise put this test's rows behind every earlier run's.
+    """
+    queue = client.get("/api/v1/admin/price-observations", headers=moderator_headers,
+                       params={"product_id": product_id, "limit": 200})
+    assert queue.status_code == 200, queue.text
+    for item in queue.json():
+        resp = client.post(f"/api/v1/admin/price-observations/{item['id']}/decision",
+                           headers=moderator_headers, json={"decision": "approve"})
+        assert resp.status_code == 200, resp.text
+
+
 # --------------------------------------------------------------------------
 # The threshold rule, unit level (no DB)
 # --------------------------------------------------------------------------
@@ -74,7 +89,9 @@ def test_panel_hidden_until_three_independent_submitters(client):
     _, token_a, _ = register_and_token(client)
     _, token_b, _ = register_and_token(client)
     _, token_c, _ = register_and_token(client)
+    _, token_mod, _ = register_and_token(client, role="moderator")
     a, b, c = _auth(token_a), _auth(token_b), _auth(token_c)
+    mod = _auth(token_mod)
     product_id = _product(client, a)
 
     def panel():
@@ -93,6 +110,7 @@ def test_panel_hidden_until_three_independent_submitters(client):
     # that a naive row count would wrongly unlock.
     for price in (1000, 1100, 1200):
         assert _observe(client, a, product_id, price).status_code == 201
+    _approve_pending(client, mod, product_id)
     one_person = panel()
     assert one_person["observation_count"] == 3
     assert one_person["independent_count"] == 1
@@ -101,10 +119,16 @@ def test_panel_hidden_until_three_independent_submitters(client):
 
     # A second independent submitter: still short.
     assert _observe(client, b, product_id, 1300).status_code == 201
+    _approve_pending(client, mod, product_id)
     assert panel()["sufficient"] is False
 
-    # The third unlocks it.
+    # The third unlocks it once a moderator approves it. Until then it is
+    # waiting, and a waiting price does not count.
     assert _observe(client, c, product_id, 1500).status_code == 201
+    waiting = panel()
+    assert waiting["sufficient"] is False
+    assert waiting["pending_count"] == 1
+    _approve_pending(client, mod, product_id)
     full = panel()
     assert full["sufficient"] is True
     assert full["independent_count"] == 3
@@ -160,6 +184,122 @@ def test_invalid_observations_are_rejected(client, bad):
     body.update(bad)
     assert client.post(f"/api/v1/products/{product_id}/prices",
                        headers=headers, json=body).status_code == 422
+
+
+# --------------------------------------------------------------------------
+# Moderation: pending -> approved | rejected
+# --------------------------------------------------------------------------
+
+@requires_db
+def test_a_new_observation_waits_for_a_moderator(client):
+    _, token, _ = register_and_token(client)
+    headers = _auth(token)
+    product_id = _product(client, headers)
+
+    resp = _observe(client, headers, product_id, 800)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["status"] == "pending"
+    assert resp.json()["source"] == "manual"
+
+    panel = client.get(f"/api/v1/products/{product_id}/prices").json()
+    assert panel["observation_count"] == 0
+    assert panel["pending_count"] == 1
+
+
+@requires_db
+def test_only_a_moderator_decides_prices_and_never_their_own(client):
+    _, user_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    user, mod = _auth(user_token), _auth(mod_token)
+    product_id = _product(client, user)
+
+    theirs = _observe(client, user, product_id, 900).json()
+    own = _observe(client, mod, product_id, 950).json()
+    url = "/api/v1/admin/price-observations/{}/decision"
+
+    assert client.get("/api/v1/admin/price-observations", headers=user).status_code == 403
+    assert client.post(url.format(theirs["id"]), headers=user,
+                       json={"decision": "approve"}).status_code == 403
+
+    queue = client.get("/api/v1/admin/price-observations", headers=mod,
+                       params={"product_id": product_id}).json()
+    assert {item["id"] for item in queue} == {theirs["id"], own["id"]}
+
+    self_decided = client.post(url.format(own["id"]), headers=mod, json={"decision": "approve"})
+    assert self_decided.status_code == 422
+    assert self_decided.json()["code"] == "self_decision"
+
+    approved = client.post(url.format(theirs["id"]), headers=mod,
+                           json={"decision": "approve", "note": "Plausible for this model."})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+
+    again = client.post(url.format(theirs["id"]), headers=mod, json={"decision": "reject"})
+    assert again.status_code == 409
+    assert again.json()["code"] == "price_observation_already_decided"
+
+
+@requires_db
+def test_a_rejected_price_never_counts(client):
+    tokens = [register_and_token(client)[1] for _ in range(3)]
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    mod = _auth(mod_token)
+    product_id = _product(client, _auth(tokens[0]))
+    ids = [_observe(client, _auth(token), product_id, price).json()["id"]
+           for token, price in zip(tokens, (1000, 1100, 1), strict=True)]
+    for obs_id, decision in zip(ids, ("approve", "approve", "reject"), strict=True):
+        assert client.post(f"/api/v1/admin/price-observations/{obs_id}/decision",
+                           headers=mod, json={"decision": decision}).status_code == 200
+
+    panel = client.get(f"/api/v1/products/{product_id}/prices").json()
+    assert panel["sufficient"] is False
+    assert panel["independent_count"] == 2
+    assert panel["pending_count"] == 0
+
+
+def _review_body(product_id: str, **extra) -> dict:
+    body = {"product_id": product_id, "title": "Kept the price honest",
+            "discussion": "Used it daily for a month and it held up fine.",
+            "verdict": "it_depends", "star_rating": 4}
+    body.update(extra)
+    return body
+
+
+@requires_db
+def test_the_price_paid_in_a_review_becomes_a_pending_observation(client):
+    """Contract: "Let's Talk Money must feed" the price pipeline."""
+    _, token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    headers = _auth(token)
+    product_id = _product(client, headers)
+
+    resp = client.post("/api/v1/reviews", headers=headers, json=_review_body(
+        product_id, price_paid="1299.00", price_platform="lazada"))
+    assert resp.status_code == 201, resp.text
+
+    queue = client.get("/api/v1/admin/price-observations", headers=_auth(mod_token),
+                       params={"product_id": product_id}).json()
+    assert len(queue) == 1
+    assert queue[0]["source"] == "review"
+    assert queue[0]["platform"] == "lazada"
+    assert Decimal(queue[0]["price"]) == Decimal("1299.00")
+    assert client.get(f"/api/v1/products/{product_id}/prices").json()["pending_count"] == 1
+
+
+@requires_db
+def test_a_price_without_a_marketplace_stays_on_the_review(client):
+    """An observation needs a marketplace; guessing one would fabricate it."""
+    _, token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    headers = _auth(token)
+    product_id = _product(client, headers)
+
+    resp = client.post("/api/v1/reviews", headers=headers,
+                       json=_review_body(product_id, price_paid="1299.00"))
+    assert resp.status_code == 201, resp.text
+    queue = client.get("/api/v1/admin/price-observations", headers=_auth(mod_token),
+                       params={"product_id": product_id}).json()
+    assert queue == []
 
 
 # --------------------------------------------------------------------------
@@ -232,6 +372,8 @@ def test_compare_carries_price_data_once_the_threshold_is_met(client):
     first, second = _product(client, h1), _product(client, h1)
     for token in (t1, t2, t3):
         assert _observe(client, _auth(token), first, 2500).status_code == 201
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    _approve_pending(client, _auth(mod_token), first)
 
     body = client.get(f"/api/v1/products/compare?ids={first},{second}").json()
     by_id = {e["product"]["id"]: e for e in body["entries"]}

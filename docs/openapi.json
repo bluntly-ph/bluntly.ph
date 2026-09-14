@@ -6309,6 +6309,135 @@
           }
         }
       }
+    },
+    "/api/v1/admin/price-observations": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Price observations waiting for a decision, oldest first",
+        "operationId": "pending_observations_api_v1_admin_price_observations_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceObservationQueueItem"
+                  },
+                  "title": "Response Pending Observations Api V1 Admin Price Observations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-observations/{observation_id}/decision": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Approve or reject a price observation",
+        "operationId": "decide_observation_api_v1_admin_price_observations__observation_id__decision_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "observation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Observation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceObservationDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceObservationQueueItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8884,6 +9013,35 @@
         ],
         "title": "Platform"
       },
+      "PriceObservationDecision": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "PriceObservationDecision"
+      },
       "PriceObservationIn": {
         "properties": {
           "platform": {
@@ -8968,6 +9126,12 @@
             ],
             "title": "Variant"
           },
+          "status": {
+            "$ref": "#/components/schemas/PriceObservationStatus"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PriceObservationSource"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -8981,9 +9145,125 @@
           "platform",
           "price",
           "observed_at",
+          "status",
+          "source",
           "created_at"
         ],
         "title": "PriceObservationOut"
+      },
+      "PriceObservationQueueItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Observed At"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PriceObservationSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PriceObservationStatus"
+          },
+          "submitter_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitter Username"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "product_id",
+          "platform",
+          "price",
+          "observed_at",
+          "source",
+          "status",
+          "created_at"
+        ],
+        "title": "PriceObservationQueueItem",
+        "description": "One observation as the moderator's queue shows it."
+      },
+      "PriceObservationSource": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "review"
+        ],
+        "title": "PriceObservationSource",
+        "description": "How a price reached the platform: the price endpoint, or the price a\nreviewer gave on the composer's \"Let's talk money\" card."
+      },
+      "PriceObservationStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected"
+        ],
+        "title": "PriceObservationStatus",
+        "description": "Where a community price stands (FR-2, completion contract).\n\nPending until a moderator decides it. The public price panel is built from\napproved observations only; a pending one is counted so the page can say\nsomething is waiting, and never priced."
       },
       "PricePanelOut": {
         "properties": {
@@ -9067,6 +9347,11 @@
             },
             "type": "array",
             "title": "Platforms"
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -11039,6 +11324,16 @@
               }
             ],
             "title": "Price Paid"
+          },
+          "price_platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Platform"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

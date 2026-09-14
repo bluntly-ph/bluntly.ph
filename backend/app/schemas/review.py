@@ -8,7 +8,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
-from app.models.enums import EarnEligibleStatus, Verdict, VerificationStatus, VoteDirection
+from app.models.enums import (
+    EarnEligibleStatus,
+    Platform,
+    Verdict,
+    VerificationStatus,
+    VoteDirection,
+)
 from app.schemas.urls import web_url_or_none
 
 
@@ -49,6 +55,10 @@ class ReviewCreate(BaseModel):
     # key was uploaded by this caller before it is stored.
     receipt_key: str | None = None
     price_paid: Decimal | None = None
+    #: Where the price was paid. With `price_paid`, the review also files a
+    #: pending community price observation; without it the price stays on the
+    #: review alone, because guessing a marketplace would invent one.
+    price_platform: Platform | None = None
 
 
 class ReviewUpdate(BaseModel):

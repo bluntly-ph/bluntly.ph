@@ -1,6 +1,7 @@
 import "server-only";
 
 import { apiFetch } from "./api/client";
+import { getSessionToken } from "./session";
 
 /**
  * Product-side reads for FR-2: the community price panel and comparison.
@@ -26,6 +27,23 @@ export type PricePanel = {
   median: string | null;
   latest_observed_at: string | null;
   platforms: string[];
+  /** Reports waiting for a moderator. Counted, never priced. */
+  pending_count: number;
+};
+
+export type PriceObservationQueueItem = {
+  id: string;
+  product_id: string;
+  product_name: string | null;
+  platform: "shopee" | "lazada" | "amazon" | "other";
+  price: string;
+  variant: string | null;
+  observed_at: string;
+  source: "manual" | "review";
+  status: "pending" | "approved" | "rejected";
+  submitter_username: string | null;
+  decision_note: string | null;
+  created_at: string;
 };
 
 export type ComparisonEntry = {
@@ -79,4 +97,16 @@ export function peso(value: string | null): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+}
+
+/** Moderator only: prices waiting for a decision. Per-user, so never cached. */
+export async function getPendingPriceObservations(): Promise<PriceObservationQueueItem[] | null> {
+  try {
+    return await apiFetch<PriceObservationQueueItem[]>(
+      "/api/v1/admin/price-observations?limit=100",
+      { token: await getSessionToken() },
+    );
+  } catch {
+    return null;
+  }
 }

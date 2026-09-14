@@ -5,6 +5,13 @@ import { createPortal } from "react-dom";
 import { ArrowRight, Money } from "@phosphor-icons/react";
 
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
+import {
+  PRICE_PLATFORMS,
+  PRICE_PLATFORM_LABEL,
+  normalisePrice,
+  priceBlocker,
+  type PricePlatform,
+} from "@/components/reviews/price-capture-model";
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -29,17 +36,22 @@ import { Button } from "@/components/ui/Button";
 export function PriceCaptureCard({
   open,
   price,
+  platform,
   busy,
   error,
   onPriceChange,
+  onPlatformChange,
   onSubmit,
   onCancel,
 }: {
   open: boolean;
   price: string;
+  /** Where the price was paid; asked only once an amount is typed. */
+  platform: PricePlatform | null;
   busy: boolean;
   error: string | null;
   onPriceChange: (next: string) => void;
+  onPlatformChange: (next: PricePlatform) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }) {
@@ -69,6 +81,7 @@ export function PriceCaptureCard({
   if (!open) return null;
 
   const hasPrice = price.trim().length > 0;
+  const blocker = priceBlocker(price, platform);
 
   return createPortal(
     <>
@@ -116,12 +129,45 @@ export function PriceCaptureCard({
           ) : null}
           <input
             value={price}
-            onChange={(e) => onPriceChange(e.target.value.replace(/[^0-9.]/g, ""))}
+            onChange={(e) => onPriceChange(normalisePrice(e.target.value))}
             inputMode="decimal"
             placeholder="How much was it?"
             className="h-12 w-full bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
           />
         </label>
+
+        {/* INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY. The frame
+            asks for the amount only. That amount now feeds the community price
+            panel, and a price observation needs the marketplace it was paid on
+            — guessing one would invent it. So the question appears once an
+            amount is typed, and skipping stays a single press, as drawn. */}
+        {hasPrice ? (
+          <fieldset className="mt-4">
+            <legend className="text-[13px] text-[var(--text-secondary)]">
+              Where did you buy it?
+            </legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {PRICE_PLATFORMS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onPlatformChange(key)}
+                  aria-pressed={platform === key}
+                  className={`h-9 cursor-pointer rounded-[var(--radius-pill)] px-3.5 font-[family-name:var(--font-system)] text-[14px] ${
+                    platform === key
+                      ? "bg-[var(--accent-primary)] text-white"
+                      : "bg-[var(--surface-card)] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)]"
+                  }`}
+                >
+                  {PRICE_PLATFORM_LABEL[key]}
+                </button>
+              ))}
+            </div>
+            <p aria-live="polite" className="mt-2 text-[12px] text-[var(--text-muted)]">
+              {blocker ?? "A moderator checks each price before it counts."}
+            </p>
+          </fieldset>
+        ) : null}
 
         {error ? (
           <p role="alert" className="mt-3 text-[13px] text-[var(--accent-danger)]">
@@ -134,7 +180,13 @@ export function PriceCaptureCard({
             row as the price input above it, centred grey text, no border.
             Filled, "Let's talk money-1.png" draws the orange pill. */}
         {hasPrice || busy ? (
-          <Button type="button" onClick={onSubmit} disabled={busy} fullWidth className="mt-6">
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={busy || Boolean(blocker)}
+            fullWidth
+            className="mt-6"
+          >
             {busy ? "Submitting…" : "Submit"}
             {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
           </Button>

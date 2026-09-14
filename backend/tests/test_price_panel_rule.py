@@ -19,19 +19,20 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.enums import Platform
+from app.models.enums import Platform, PriceObservationStatus
 from app.services.price_service import MIN_INDEPENDENT_OBSERVATIONS, panel_from
 
 
 class Observation:
-    """Duck-typed stand-in for a PriceHistory row."""
+    """Duck-typed stand-in for a PriceHistory row. Approved unless stated."""
 
     def __init__(self, price, submitted_by=..., observed_at=None,
-                 platform=Platform.shopee):
+                 platform=Platform.shopee, status=PriceObservationStatus.approved):
         self.price = Decimal(str(price))
         self.submitted_by = uuid.uuid4() if submitted_by is ... else submitted_by
         self.observed_at = observed_at or date(2026, 8, 1)
         self.platform = platform
+        self.status = status
 
 
 def from_distinct_people(*prices):
@@ -134,6 +135,50 @@ class TestTheArithmeticOnceItOpens:
             Observation(120, platform=Platform.shopee),
         ]
         assert panel_from(rows).platforms == ("lazada", "shopee")
+
+
+class TestOnlyApprovedObservationsCount:
+    """The completion contract: observations are pending, approved or rejected,
+    and the panel is built from approved ones only. A price nobody has checked
+    is not yet an observation of the market."""
+
+    PENDING = PriceObservationStatus.pending
+    REJECTED = PriceObservationStatus.rejected
+
+    def test_pending_observations_do_not_open_the_panel(self):
+        rows = [Observation(p, status=self.PENDING) for p in (100, 110, 120)]
+        panel = panel_from(rows)
+        assert panel.sufficient is False
+        assert panel.observation_count == 0
+        assert panel.independent_count == 0
+        assert panel.pending_count == 3
+
+    def test_pending_rows_do_not_top_up_approved_ones(self):
+        rows = from_distinct_people(100, 110) + [Observation(120, status=self.PENDING)]
+        panel = panel_from(rows)
+        assert panel.independent_count == 2
+        assert panel.pending_count == 1
+        assert panel.sufficient is False
+
+    def test_a_rejected_price_is_not_in_the_range(self):
+        rows = from_distinct_people(100, 110, 120) + [
+            Observation(99_999, status=self.REJECTED)]
+        panel = panel_from(rows)
+        assert panel.sufficient is True
+        assert panel.high == Decimal("120")
+        assert panel.observation_count == 3
+
+    def test_a_rejected_price_is_not_counted_as_waiting(self):
+        panel = panel_from([Observation(100, status=self.REJECTED)])
+        assert panel.pending_count == 0
+
+
+def test_panels_for_routes_through_the_same_rule():
+    """The comparison view kept its own copy of the threshold; one rule only."""
+    import inspect
+
+    from app.services import price_service
+    assert "panel_from(" in inspect.getsource(price_service.panels_for)
 
 
 def test_get_panel_still_routes_through_the_rule():

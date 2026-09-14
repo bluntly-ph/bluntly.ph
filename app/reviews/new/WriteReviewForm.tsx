@@ -36,6 +36,7 @@ import {
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
+import { pricePayload, type PricePlatform } from "@/components/reviews/price-capture-model";
 import { ReceiptField } from "@/components/reviews/ReceiptField";
 import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
@@ -152,6 +153,9 @@ type Draft = {
   // localStorage would outlive it and travel with a synced browser profile.
   receiptKey: string | null;
   price: string;
+  // Where that price was paid. With a price it becomes a pending community
+  // price observation; drafts saved before this field read it as null.
+  pricePlatform: PricePlatform | null;
   savedAt: number;
 };
 
@@ -169,6 +173,7 @@ const EMPTY_DRAFT: Draft = {
   photoUrl: null,
   receiptKey: null,
   price: "",
+  pricePlatform: null,
   savedAt: 0,
 };
 
@@ -1414,7 +1419,9 @@ function StepsFlow({
           cons: lines(draft.cons),
           photo_url: draft.photoUrl,
           receipt_key: draft.receiptKey,
-          price_paid: draft.price.trim() ? Number(draft.price) : null,
+          // price_paid and price_platform together, or neither; with both the
+          // API also files a pending community price observation.
+          ...pricePayload(draft.price, draft.pricePlatform),
         }),
       });
       if (!res.ok) {
@@ -1688,9 +1695,11 @@ function StepsFlow({
       <PriceCaptureCard
         open={askingPrice}
         price={draft.price}
+        platform={draft.pricePlatform}
         busy={busy}
         error={error}
         onPriceChange={(price) => patch({ price })}
+        onPlatformChange={(pricePlatform) => patch({ pricePlatform })}
         onSubmit={submit}
         onCancel={() => setAskingPrice(false)}
       />

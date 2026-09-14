@@ -1925,6 +1925,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/price-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Price observations waiting for a decision, oldest first */
+        get: operations["pending_observations_api_v1_admin_price_observations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-observations/{observation_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or reject a price observation */
+        post: operations["decide_observation_api_v1_admin_price_observations__observation_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2928,6 +2962,16 @@ export interface components {
          * @enum {string}
          */
         Platform: "shopee" | "lazada" | "amazon" | "other";
+        /** PriceObservationDecision */
+        PriceObservationDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Note */
+            note?: string | null;
+        };
         /**
          * PriceObservationIn
          * @description One community-submitted purchase price (FR-2).
@@ -2970,12 +3014,70 @@ export interface components {
             observed_at: string;
             /** Variant */
             variant?: string | null;
+            status: components["schemas"]["PriceObservationStatus"];
+            source: components["schemas"]["PriceObservationSource"];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
         };
+        /**
+         * PriceObservationQueueItem
+         * @description One observation as the moderator's queue shows it.
+         */
+        PriceObservationQueueItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name?: string | null;
+            platform: components["schemas"]["Platform"];
+            /** Price */
+            price: string;
+            /** Variant */
+            variant?: string | null;
+            /**
+             * Observed At
+             * Format: date
+             */
+            observed_at: string;
+            source: components["schemas"]["PriceObservationSource"];
+            status: components["schemas"]["PriceObservationStatus"];
+            /** Submitter Username */
+            submitter_username?: string | null;
+            /** Decision Note */
+            decision_note?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * PriceObservationSource
+         * @description How a price reached the platform: the price endpoint, or the price a
+         *     reviewer gave on the composer's "Let's talk money" card.
+         * @enum {string}
+         */
+        PriceObservationSource: "manual" | "review";
+        /**
+         * PriceObservationStatus
+         * @description Where a community price stands (FR-2, completion contract).
+         *
+         *     Pending until a moderator decides it. The public price panel is built from
+         *     approved observations only; a pending one is counted so the page can say
+         *     something is waiting, and never priced.
+         * @enum {string}
+         */
+        PriceObservationStatus: "pending" | "approved" | "rejected";
         /**
          * PricePanelOut
          * @description The panel, or the reason it is not shown yet.
@@ -3013,6 +3115,11 @@ export interface components {
             latest_observed_at?: string | null;
             /** Platforms */
             platforms?: string[];
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
         };
         /**
          * PriorityBand
@@ -3762,6 +3869,7 @@ export interface components {
             receipt_key?: string | null;
             /** Price Paid */
             price_paid?: number | string | null;
+            price_platform?: components["schemas"]["Platform"] | null;
         };
         /** ReviewOut */
         ReviewOut: {
@@ -8370,6 +8478,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SellerReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_observations_api_v1_admin_price_observations_get: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceObservationQueueItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_observation_api_v1_admin_price_observations__observation_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                observation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceObservationDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceObservationQueueItem"];
                 };
             };
             /** @description Validation Error */

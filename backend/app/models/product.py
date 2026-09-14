@@ -16,17 +16,25 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
-from app.models.enums import ImageSource, Platform, ProductStatus
+from app.models.enums import (
+    ImageSource,
+    Platform,
+    PriceObservationSource,
+    PriceObservationStatus,
+    ProductStatus,
+)
 
 
 class Product(Base, UUIDPrimaryKey, Timestamps):
@@ -99,6 +107,13 @@ class PriceHistory(Base, UUIDPrimaryKey, Timestamps):
     """Community-submitted price observations (§3.4). Never scraped."""
 
     __tablename__ = "price_history"
+    __table_args__ = (
+        Index("ix_price_history_product_status", "product_id", "status"),
+        # One observation per review: editing or resubmitting a review must not
+        # multiply the price it reported.
+        Index("uq_price_history_review", "review_id", unique=True,
+              postgresql_where=text("review_id IS NOT NULL")),
+    )
 
     product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False
@@ -110,3 +125,27 @@ class PriceHistory(Base, UUIDPrimaryKey, Timestamps):
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
+
+    #: Pending until a moderator decides (0044). The panel counts approved rows
+    #: only; see price_service.panel_from.
+    status: Mapped[PriceObservationStatus] = mapped_column(
+        Enum(PriceObservationStatus, name="price_observation_status"),
+        default=PriceObservationStatus.pending,
+        server_default=PriceObservationStatus.pending.value,
+        nullable=False,
+    )
+    source: Mapped[PriceObservationSource] = mapped_column(
+        Enum(PriceObservationSource, name="price_observation_source"),
+        default=PriceObservationSource.manual,
+        server_default=PriceObservationSource.manual.value,
+        nullable=False,
+    )
+    #: The review whose "Let's talk money" card reported this price, if any.
+    review_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("reviews.id", ondelete="SET NULL")
+    )
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(Text)

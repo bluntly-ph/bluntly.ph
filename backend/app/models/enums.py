@@ -284,3 +284,24 @@ class SellerClaimStatus(str, enum.Enum):
     pending = "pending"
     claimed = "claimed"
     rejected = "rejected"
+
+
+class PriceObservationStatus(str, enum.Enum):
+    """Where a community price stands (FR-2, completion contract).
+
+    Pending until a moderator decides it. The public price panel is built from
+    approved observations only; a pending one is counted so the page can say
+    something is waiting, and never priced.
+    """
+
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class PriceObservationSource(str, enum.Enum):
+    """How a price reached the platform: the price endpoint, or the price a
+    reviewer gave on the composer's "Let's talk money" card."""
+
+    manual = "manual"
+    review = "review"
