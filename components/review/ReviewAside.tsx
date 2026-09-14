@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SealCheck, ShoppingBag, Star } from "@phosphor-icons/react/dist/ssr";
 
 import { PricePanel } from "@/components/product/PricePanel";
+import { ReportPriceForm } from "@/components/product/ReportPriceForm";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { ReviewCardData } from "@/lib/landing-data";
 import type { PricePanel as PanelData } from "@/lib/products";
@@ -25,10 +26,13 @@ export function ReviewAside({
   data,
   panel,
   related,
+  signedIn = false,
 }: {
   data: ReviewFull;
   panel: PanelData | null;
   related: ReviewCardData[];
+  /** Whether "Report what you paid" can open, or asks the reader to log in. */
+  signedIn?: boolean;
 }) {
   const { review, author, product } = data;
   const authorName = author?.display_name || author?.username || "reviewer";
@@ -137,7 +141,10 @@ export function ReviewAside({
       {/* FR-2. The panel publishes nothing below three independent submitters
           and says so itself, so it is safe to render unconditionally. It brings
           its own heading, so it is not wrapped in another one. */}
-      <PricePanel panel={panel} compact />
+      <div>
+        <PricePanel panel={panel} compact />
+        {product ? <ReportPriceForm productId={product.id} signedIn={signedIn} /> : null}
+      </div>
 
       {author ? (
         <section aria-labelledby="aside-reviewer">

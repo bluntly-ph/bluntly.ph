@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { CommentThread } from "@/components/review/CommentThread";
 import { PricePanel } from "@/components/product/PricePanel";
+import { ReportPriceForm } from "@/components/product/ReportPriceForm";
 import { ReviewAside } from "@/components/review/ReviewAside";
 import { ReviewDetail } from "@/components/review/ReviewDetail";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -99,6 +100,7 @@ export default async function ReviewPage({
                 {data.product ? (
                   <div className="lg:hidden">
                     <PricePanel panel={pricePanel} />
+                    <ReportPriceForm productId={data.product.id} signedIn={Boolean(me)} />
                   </div>
                 ) : null}
                 <CommentThread reviewId={id} initial={comments} viewerId={viewerId} />
@@ -109,7 +111,12 @@ export default async function ReviewPage({
                 would otherwise strand the product, its price and the Buy action
                 at the very top, which is where they are least useful. */}
             <aside className="hidden lg:block lg:sticky lg:top-28">
-              <ReviewAside data={data} panel={pricePanel} related={related} />
+              <ReviewAside
+                data={data}
+                panel={pricePanel}
+                related={related}
+                signedIn={Boolean(me)}
+              />
             </aside>
           </div>
         </div>
