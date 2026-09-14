@@ -98,12 +98,25 @@ engineering analysis.
 - `/_next/static/chunks/29qf0wjmceuhq.js`, ~14,001 B estimated legacy
   JavaScript — `legacy-javascript-insight`
 - **8 font files** on the homepage (`/_next/static/media/*.woff2`, 5.8–8.8 KB
-  each, ~63 KB together)
+  each, ~63 KB together). Source: `app/layout.tsx` loads Poppins at six
+  weights (200, 300, 400, 500, 600, 700) plus Bebas Neue. Measured usage in
+  `app/` and `components/`: `font-extralight` 1 class, `font-light` 25,
+  `font-normal` 12, `font-medium` 140, `font-semibold` 166, `font-bold` 71.
+  Weight 200 is the only near-unused one, which would save one ~8 KB file.
+  Recorded, not changed.
 - Speed Index 4.8 s (score 0.04), the weakest metric; FCP scores 0.16
 - `lcp-breakdown-insight`: time to first byte 66 ms, **element render delay
   8,778 ms** (observed trace) — the render delay, not the network, is where the
-  LCP time goes
-- `bf-cache`: 2 failure reasons (back/forward cache not restorable)
+  LCP time goes. **The LCP element is the hero headline** `<h1>` "Finally.
+  Honest reviews.", selector `section.relative > div.relative >
+  div.animate-fade-up > h1`. It sits inside an entrance animation, so the
+  largest paint cannot land until that animation reveals it. Leading
+  hypothesis for both the LCP render delay and the 4.8 s Speed Index; to be
+  confirmed against the clean runs before anything changes.
+- `bf-cache`: "main resource has `cache-control: no-store`" and "a JavaScript
+  network request received `Cache-Control: no-store`". Lighthouse marks both
+  not actionable; the first follows from the root layout reading the `theme`
+  cookie (`app/layout.tsx`), which makes every page dynamically rendered.
 - Accessibility `color-contrast` fails on 10 nodes, and they are design
   tokens, not one-offs:
 
