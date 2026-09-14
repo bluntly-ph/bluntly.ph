@@ -8850,6 +8850,16 @@
         ],
         "title": "MarkPaidRequest"
       },
+      "MaterialRelationship": {
+        "type": "string",
+        "enum": [
+          "none",
+          "free_or_discounted",
+          "connected"
+        ],
+        "title": "MaterialRelationship",
+        "description": "What the reviewer declared about their relationship to the product\n(completion contract X.1). NULL on a review means never asked."
+      },
       "MemberRole": {
         "type": "string",
         "enum": [
@@ -11547,6 +11557,16 @@
                 "type": "null"
               }
             ]
+          },
+          "material_relationship": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaterialRelationship"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -11703,6 +11723,16 @@
               }
             ],
             "title": "Price Paid"
+          },
+          "material_relationship": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaterialRelationship"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "verification_status": {
             "$ref": "#/components/schemas/VerificationStatus"
@@ -11964,6 +11994,16 @@
               }
             ],
             "title": "Price Paid"
+          },
+          "material_relationship": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MaterialRelationship"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "change_note": {
             "anyOf": [

@@ -35,6 +35,8 @@ import {
 } from "@/components/reviews/composer-gate-model";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
 import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
+import { DisclosureField } from "@/components/reviews/DisclosureField";
+import type { MaterialRelationship } from "@/components/reviews/disclosure-model";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
 import { pricePayload, type PricePlatform } from "@/components/reviews/price-capture-model";
 import { ReceiptField } from "@/components/reviews/ReceiptField";
@@ -156,6 +158,9 @@ type Draft = {
   // Where that price was paid. With a price it becomes a pending community
   // price observation; drafts saved before this field read it as null.
   pricePlatform: PricePlatform | null;
+  // Disclosure of a material relationship (X.1). Drafts saved before this
+  // field read it as null and the last step asks again.
+  disclosure: MaterialRelationship | null;
   savedAt: number;
 };
 
@@ -174,6 +179,7 @@ const EMPTY_DRAFT: Draft = {
   receiptKey: null,
   price: "",
   pricePlatform: null,
+  disclosure: null,
   savedAt: 0,
 };
 
@@ -1422,6 +1428,7 @@ function StepsFlow({
           // price_paid and price_platform together, or neither; with both the
           // API also files a pending community price observation.
           ...pricePayload(draft.price, draft.pricePlatform),
+          material_relationship: draft.disclosure,
         }),
       });
       if (!res.ok) {
@@ -1672,6 +1679,10 @@ function StepsFlow({
         {step === 6 ? (
           <>
             <TitleField value={draft.title} onChange={(title) => patch({ title })} />
+            <DisclosureField
+              value={draft.disclosure}
+              onChange={(disclosure) => patch({ disclosure })}
+            />
             <ReviewPreviewCard
               username={user?.username ?? null}
               avatarUrl={user?.avatarUrl ?? null}

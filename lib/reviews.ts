@@ -32,6 +32,8 @@ type FeedItem = {
     pros: string[] | null;
     cons: string[] | null;
     price_paid: string | null;
+    /** Disclosure (X.1); null when the review predates the question. */
+    material_relationship?: "none" | "free_or_discounted" | "connected" | null;
     photo_url: string | null;
     verification_status: "verified" | "unverified";
     helpful_votes: number;

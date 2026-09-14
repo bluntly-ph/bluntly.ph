@@ -305,3 +305,12 @@ class PriceObservationSource(str, enum.Enum):
 
     manual = "manual"
     review = "review"
+
+
+class MaterialRelationship(str, enum.Enum):
+    """What the reviewer declared about their relationship to the product
+    (completion contract X.1). NULL on a review means never asked."""
+
+    none = "none"
+    free_or_discounted = "free_or_discounted"
+    connected = "connected"

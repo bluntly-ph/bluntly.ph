@@ -4,6 +4,7 @@ import {
   CaretLeft,
   Check,
   ImageSquare,
+  Info,
   MagnifyingGlass,
   SealCheck,
   ShieldCheck,
@@ -16,6 +17,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReadingTelemetry } from "@/components/review/ReadingTelemetry";
+import { disclosureLabel } from "@/components/reviews/disclosure-model";
 import { ReportDialog } from "@/components/review/ReportDialog";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import { ReviewOverflowMenu } from "@/components/review/ReviewOverflowMenu";
@@ -208,6 +210,14 @@ export function ReviewDetail({
           <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-success)]">
             <SealCheck size={15} weight="fill" />
             Verified purchase
+          </span>
+        ) : null}
+        {/* Disclosure (X.1): shown whenever the reviewer declared a relationship,
+            next to the verification it qualifies. */}
+        {disclosureLabel(review.material_relationship) ? (
+          <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[color-mix(in_srgb,var(--accent-trust)_12%,transparent)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-primary)]">
+            <Info size={14} aria-hidden="true" className="text-[var(--accent-trust)]" />
+            {disclosureLabel(review.material_relationship)}
           </span>
         ) : null}
       </div>

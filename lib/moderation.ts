@@ -16,6 +16,8 @@ export type QueueItem = {
      *  the object itself from GET /reviews/{id}/receipt, which authorizes the
      *  caller and returns a short-lived signed URL. */
     has_receipt: boolean;
+    /** Disclosure (X.1); null when the review predates the question. */
+    material_relationship?: "none" | "free_or_discounted" | "connected" | null;
     created_at: string;
     /** Already served by ReviewOut; the queue screen's Score column and the
      *  detail panel read these rather than inventing a ranking. */

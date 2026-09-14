@@ -30,6 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
 from app.models.enums import (
     EarnEligibleStatus,
+    MaterialRelationship,
     Platform,
     ReferralLinkStatus,
     Verdict,
@@ -80,6 +81,13 @@ class Review(Base, UUIDPrimaryKey, Timestamps):
         """
         return bool(self.receipt_key)
     price_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+
+    # Disclosure of a material relationship (completion contract X.1, 0046).
+    # NULL means the review predates the question - never defaulted to "none",
+    # which would record a declaration its author did not make.
+    material_relationship: Mapped[MaterialRelationship | None] = mapped_column(
+        Enum(MaterialRelationship, name="material_relationship")
+    )
 
     verification_status: Mapped[VerificationStatus] = mapped_column(
         Enum(VerificationStatus, name="verification_status"),

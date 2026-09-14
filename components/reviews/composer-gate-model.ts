@@ -31,6 +31,8 @@ export type GateDraft = {
   anti: string;
   photoUrl: string | null;
   title: string;
+  /** Disclosure of a material relationship (X.1); "none" is an answer. */
+  disclosure: string | null;
 };
 
 /** How many characters short of the floor a field still is. Never negative. */
@@ -86,7 +88,12 @@ export function blockerFor(step: number, draft: GateDraft): string | null {
     case 5:
       return draft.photoUrl ? null : "Add a photo, or skip this step.";
     case 6:
-      return draft.title.trim() ? null : "Give your review a title.";
+      if (!draft.title.trim()) return "Give your review a title.";
+      // INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY: step 7's frame
+      // draws the title only; disclosure (X.1) must be answered before submit.
+      return draft.disclosure
+        ? null
+        : "Say whether you received anything for this review or are connected to the brand.";
     default:
       return null;
   }

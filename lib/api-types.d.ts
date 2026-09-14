@@ -2886,6 +2886,13 @@ export interface components {
             provider_ref: string;
         };
         /**
+         * MaterialRelationship
+         * @description What the reviewer declared about their relationship to the product
+         *     (completion contract X.1). NULL on a review means never asked.
+         * @enum {string}
+         */
+        MaterialRelationship: "none" | "free_or_discounted" | "connected";
+        /**
          * MemberRole
          * @enum {string}
          */
@@ -3925,6 +3932,7 @@ export interface components {
             /** Price Paid */
             price_paid?: number | string | null;
             price_platform?: components["schemas"]["Platform"] | null;
+            material_relationship?: components["schemas"]["MaterialRelationship"] | null;
         };
         /** ReviewOut */
         ReviewOut: {
@@ -3969,6 +3977,7 @@ export interface components {
             has_receipt: boolean;
             /** Price Paid */
             price_paid?: string | null;
+            material_relationship?: components["schemas"]["MaterialRelationship"] | null;
             verification_status: components["schemas"]["VerificationStatus"];
             /**
              * Helpful Votes
@@ -4048,6 +4057,7 @@ export interface components {
             receipt_key?: string | null;
             /** Price Paid */
             price_paid?: number | string | null;
+            material_relationship?: components["schemas"]["MaterialRelationship"] | null;
             /** Change Note */
             change_note?: string | null;
         };

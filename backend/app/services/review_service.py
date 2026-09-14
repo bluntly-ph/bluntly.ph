@@ -29,7 +29,7 @@ from app.services.storage import review_photo_belongs_to
 VERSIONED_FIELDS = (
     "title", "discussion", "verdict", "verdict_explanation", "target_audience",
     "anti_target_audience", "star_rating", "pros", "cons", "photo_url",
-    "price_paid",
+    "price_paid", "material_relationship",
 )
 
 
@@ -62,7 +62,7 @@ def _snapshot(review: Review) -> dict:
     snap: dict = {}
     for field in VERSIONED_FIELDS:
         value = getattr(review, field)
-        if field == "verdict" and value is not None:
+        if field in ("verdict", "material_relationship") and value is not None:
             value = value.value
         elif field == "price_paid" and value is not None:
             value = str(value)
@@ -116,6 +116,7 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
         photo_url=payload.photo_url,
         receipt_key=payload.receipt_key,
         price_paid=payload.price_paid,
+        material_relationship=payload.material_relationship,
         # Proof photo at submission => verified (FR-3), but only if the
         # photo is genuinely this author's upload. See _verification_for.
         verification_status=_verification_for(payload.photo_url, author_id),

@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from app.models.enums import (
     EarnEligibleStatus,
+    MaterialRelationship,
     Platform,
     Verdict,
     VerificationStatus,
@@ -59,6 +60,9 @@ class ReviewCreate(BaseModel):
     #: pending community price observation; without it the price stays on the
     #: review alone, because guessing a marketplace would invent one.
     price_platform: Platform | None = None
+    #: Disclosure (X.1). The composer always asks; a client that does not send
+    #: it is recorded as never asked (NULL), not as "none".
+    material_relationship: MaterialRelationship | None = None
 
 
 class ReviewUpdate(BaseModel):
@@ -84,6 +88,7 @@ class ReviewUpdate(BaseModel):
         return web_url_or_none(value, field="Photo links")
     receipt_key: str | None = None
     price_paid: Decimal | None = None
+    material_relationship: MaterialRelationship | None = None
     change_note: str | None = None
 
 
@@ -128,6 +133,8 @@ class ReviewOut(BaseModel):
     # or the author fetches the object itself from GET /reviews/{id}/receipt.
     has_receipt: bool = False
     price_paid: Decimal | None = None
+    #: The reviewer's disclosure (X.1); null when the review predates the question.
+    material_relationship: MaterialRelationship | None = None
     verification_status: VerificationStatus
     # Community visibility voting (M2 slice 2).
     helpful_votes: int = 0

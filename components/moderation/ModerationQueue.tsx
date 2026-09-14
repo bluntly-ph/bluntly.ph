@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowSquareOut, LinkSimple, Receipt, Warning } from "@phosphor-icons/react/dist/ssr";
 
+import { disclosureLabel } from "@/components/reviews/disclosure-model";
 import { Button } from "@/components/ui/Button";
 import type { QueueItem } from "@/lib/moderation";
 
@@ -159,6 +160,11 @@ function ModerationCard({
             <Receipt size={12} />
             {receiptBusy ? "opening…" : "proof of purchase"}
           </button>
+        ) : null}
+        {disclosureLabel(review.material_relationship) ? (
+          <span className="text-[var(--accent-trust)]">
+            {disclosureLabel(review.material_relationship)}
+          </span>
         ) : null}
         <span className="ml-auto">
           {review.verification_status === "verified" ? "✓ verified" : "unverified"}

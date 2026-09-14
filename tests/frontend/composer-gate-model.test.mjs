@@ -27,6 +27,7 @@ const EMPTY = {
   anti: "",
   photoUrl: null,
   title: "",
+  disclosure: null,
 };
 
 const filled = (over) => ({ ...EMPTY, ...over });
@@ -94,6 +95,15 @@ test("blank lines do not count as a pro or a con", () => {
 test("step 6 gates on the photo — Skip is a route past it, not an unlock", () => {
   assert.ok(blockerFor(5, EMPTY), "the frame greys Continue with no photo");
   assert.equal(blockerFor(5, filled({ photoUrl: "https://cdn/x.jpg" })), null);
+});
+
+test("the last step needs a title and the disclosure answer", () => {
+  // INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY: step 7's frame draws
+  // the title only; disclosure of a material relationship is required, so the
+  // step cannot submit until it is answered. "No" is an answer.
+  assert.match(blockerFor(6, filled({ disclosure: "none" })), /title/i);
+  assert.match(blockerFor(6, filled({ title: "Light and quiet" })), /received|connected|disclos/i);
+  assert.equal(blockerFor(6, filled({ title: "Light and quiet", disclosure: "none" })), null);
 });
 
 test("a zero rating is not a rating", () => {
