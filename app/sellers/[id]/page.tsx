@@ -38,6 +38,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
   if (!seller) notFound();
 
   const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const canModerate = me?.role === "moderator" || me?.role === "admin";
   const count = seller.review_count;
   const rateHref = `/sellers/rate?seller=${seller.id}`;
   const pill =
@@ -102,7 +103,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
         ) : (
           <ul className="mt-4 flex flex-col gap-4">
             {reviews.map((review) => (
-              <SellerReviewCard key={review.id} review={review} />
+              <SellerReviewCard key={review.id} review={review} canModerate={canModerate} />
             ))}
           </ul>
         )}

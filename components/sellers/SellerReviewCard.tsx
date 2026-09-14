@@ -3,6 +3,7 @@ import Image from "next/image";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { SellerReview } from "@/lib/sellers";
 
+import { RemoveSellerReviewButton } from "./RemoveSellerReviewButton";
 import { StarRow } from "./SellerIdentity";
 
 /**
@@ -26,7 +27,14 @@ function chip(positive: boolean): string {
     : "bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] text-[var(--text-primary)]";
 }
 
-export function SellerReviewCard({ review }: { review: SellerReview }) {
+export function SellerReviewCard({
+  review,
+  canModerate = false,
+}: {
+  review: SellerReview;
+  /** Draws the moderator's remove control. The API enforces the role. */
+  canModerate?: boolean;
+}) {
   const reviewer = review.reviewer;
   const answers: { label: string; positive: boolean }[] = [
     { label: review.accuracy ? "Matched the listing" : "Not as listed", positive: review.accuracy },
@@ -102,6 +110,8 @@ export function SellerReviewCard({ review }: { review: SellerReview }) {
           ))}
         </ul>
       ) : null}
+
+      {canModerate ? <RemoveSellerReviewButton reviewId={review.id} /> : null}
     </li>
   );
 }

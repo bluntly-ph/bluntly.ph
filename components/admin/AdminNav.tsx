@@ -28,14 +28,15 @@ import {
  * with labels, sectioned MAIN / MANAGE / FINANCE / SYSTEM — so the toggle is
  * part of the design, not an addition.
  *
- * Every item routes somewhere real. Two are deliberately inert and say why on
- * their face rather than being silently clickable:
+ * Every item routes somewhere real. One is deliberately inert and says why on
+ * its face rather than being silently clickable:
  *
- *   Sellers    FR-4 was descoped by the owner (2026-07-28, reaffirmed
- *              2026-08-07) and the schema was dropped in migration 0024.
- *              There is no seller entity to manage.
  *   Settings   No console settings have been specified. Inventing some would
  *              be scope, not implementation.
+ *
+ * Sellers was inert too while FR-4 stood descoped (2026-07-28, reaffirmed
+ * 2026-08-07; schema dropped in 0024). The completion contract reinstated it
+ * (0042, 0043), so it now opens the seller-claim queue.
  *
  * `Review Queue`, `Q&A` and reports are one screen with tabs, because frame
  * 5017:3758 draws them that way: Reviews / Answers / Report / Support.
@@ -84,9 +85,8 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
       {
         label: "Sellers",
         Icon: Storefront,
-        blocked: "Not available in current product scope",
-        why:
-          "Seller accounts were descoped by the owner (2026-07-28, reaffirmed 2026-08-07) and the schema was dropped in migration 0024. There is no seller entity to manage.",
+        href: "/moderate/sellers",
+        match: "/moderate/sellers",
       },
       {
         label: "Users",
