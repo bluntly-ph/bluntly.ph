@@ -7,7 +7,10 @@ import { Check, Info, MagnifyingGlass, Star } from "@phosphor-icons/react";
 import type { Question } from "@/lib/qa";
 import type { SellerReview, SellerSummary } from "@/lib/sellers";
 
+import { TrustBadge } from "@/components/ui/TrustBadge";
+
 import { AskSellerQuestionForm } from "./AskSellerQuestionForm";
+import { ReviewerInitial } from "./SellerIdentity";
 import { STAR_BAR_COLOUR } from "./SellerRatingSummary";
 import { SellerReviewCard } from "./SellerReviewCard";
 import { distributionBars, filterSellerReviews, sharePercent, shortAge } from "./seller-model";
@@ -251,21 +254,60 @@ export function SellerReviewsSection({
         ) : questions.length === 0 ? (
           <p className={`mt-4 ${FACE} text-[14px] text-[var(--text-secondary)]`}>No questions yet.</p>
         ) : (
-          <ul className="mt-6 flex flex-col gap-6">
-            {questions.map((q) => (
-              <li key={q.id}>
-                <Link href={`/questions/${q.id}`} className="block no-underline">
-                  <p className={`${FACE} text-[13px] text-[var(--text-primary)]`}>
-                    {q.asker?.username ?? q.asker?.display_name ?? "A buyer"}
-                    <span className="text-[var(--text-secondary)]"> • {shortAge(q.created_at)}</span>
-                  </p>
-                  <p className="mt-2 text-[14px] font-bold leading-5 text-[var(--text-primary)]">{q.body}</p>
-                  <p className={`mt-1 ${FACE} text-[13px] text-[var(--text-secondary)]`}>
-                    {q.answer_count} {q.answer_count === 1 ? "answer" : "answers"}
-                  </p>
-                </Link>
-              </li>
-            ))}
+          // "Seller Page - Questions.png": the asker's 36px disc with "name •
+          // shield score • level" and the age under it, then the question in
+          // 14px bold. NOT RENDERED: the vote / Reply / Share row and the store's
+          // nested reply — the list API carries no answers, so each question links
+          // to its own page, where the store's reply is shown.
+          <ul className="mt-6 flex flex-col gap-8">
+            {questions.map((q) => {
+              const asker = q.asker?.username ?? q.asker?.display_name ?? "A buyer";
+              return (
+                <li key={q.id}>
+                  <Link href={`/questions/${q.id}`} className="block no-underline">
+                    <span className="flex items-center gap-[9px]">
+                      <ReviewerInitial name={asker} />
+                      <span className={`min-w-0 ${FACE}`}>
+                        <span className="flex flex-wrap items-center gap-x-1 text-[13px] text-[var(--text-primary)]">
+                          <span className="truncate">{asker}</span>
+                          {q.asker ? (
+                            <>
+                              <span aria-hidden="true" className="text-[var(--text-muted)]">
+                                •
+                              </span>
+                              <TrustBadge
+                                levelName={q.asker.trust_level_name}
+                                stage={q.asker.trust_stage}
+                                score={q.asker.reputation_score}
+                                plain
+                                compact
+                              />
+                              {q.asker.trust_level_name ? (
+                                <>
+                                  <span aria-hidden="true" className="text-[var(--text-muted)]">
+                                    •
+                                  </span>
+                                  <span aria-hidden="true">{q.asker.trust_level_name}</span>
+                                </>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </span>
+                        <span className="block text-[11px] text-[var(--text-secondary)]">
+                          <time dateTime={q.created_at}>{shortAge(q.created_at)}</time>
+                        </span>
+                      </span>
+                    </span>
+                    <span className="mt-3 block text-[14px] font-bold leading-5 text-[var(--text-primary)]">
+                      {q.body}
+                    </span>
+                    <span className={`mt-1 block ${FACE} text-[13px] text-[var(--text-secondary)]`}>
+                      {q.answer_count} {q.answer_count === 1 ? "answer" : "answers"}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
