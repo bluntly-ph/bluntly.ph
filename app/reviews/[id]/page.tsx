@@ -99,7 +99,10 @@ export default async function ReviewPage({
                     discussion. On desktop it moves into the sidebar, where
                     supporting context belongs. */}
                 {data.product ? (
-                  <div className="lg:hidden">
+                  // `price-history` is the target of the "Price History" pill.
+                  // Only this phone copy carries it; the desktop sidebar renders
+                  // its own panel, and two ids would be invalid.
+                  <div id="price-history" className="scroll-mt-24 lg:hidden">
                     <PricePanel panel={pricePanel} />
                     <ReportPriceForm productId={data.product.id} signedIn={Boolean(me)} />
                   </div>
