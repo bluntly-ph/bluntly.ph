@@ -11,6 +11,7 @@ from app.models.honesty_fund import HonestyFundDistribution  # noqa: F401
 from app.models.maintenance import CronCredential, CronRun  # noqa: F401
 from app.models.membership import MembershipTierConfig  # noqa: F401
 from app.models.moderation import ModerationLog  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 from app.models.otp import EmailOtp  # noqa: F401
 from app.models.payout import Payout  # noqa: F401
 from app.models.postback import AffiliatePostback  # noqa: F401
@@ -39,5 +40,5 @@ __all__ = [
     "ReviewRequest", "RequestUpvote", "ReviewContract", "Payout", "EmailOtp",
     "AffiliatePostback", "ReviewComment", "ReviewCommentVote",
     "ReviewReadingSession", "ReviewFirstVoteGeoBucket",
-    "Seller", "SellerClaim", "SellerReview",
+    "Seller", "SellerClaim", "SellerReview", "Notification",
 ]

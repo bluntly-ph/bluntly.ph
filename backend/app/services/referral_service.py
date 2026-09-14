@@ -47,7 +47,7 @@ from app.schemas.referral import (
     QueueSignals,
 )
 from app.schemas.review import ReviewOut
-from app.services import fraud_service, report_service
+from app.services import fraud_service, notification_service, report_service
 from app.services.contract_service import ensure_contract
 from app.services.moderation_priority import (
     PriorityAssessment,
@@ -189,6 +189,7 @@ def attach_link_and_publish(db: Session, review: Review, moderator_id: uuid.UUID
     recompute_product_aggregates(db, review.product_id)
     if review.author_id is not None:
         recompute_user_trust(db, review.author_id)  # publish moves trust (slice 3)
+    notification_service.review_decided(db, review, "published")
     db.commit()
     db.refresh(review)
     return review
@@ -207,6 +208,7 @@ def publish_without_link(db: Session, review: Review, moderator_id: uuid.UUID) -
     recompute_product_aggregates(db, review.product_id)
     if review.author_id is not None:
         recompute_user_trust(db, review.author_id)  # publish moves trust (slice 3)
+    notification_service.review_decided(db, review, "published")
     db.commit()
     db.refresh(review)
     return review
@@ -220,6 +222,8 @@ def reject(db: Session, review: Review, moderator_id: uuid.UUID, reason: str) ->
     _audit(db, moderator_id, ModerationAction.reject, review.id, notes=reason)
     if review.author_id is not None:
         recompute_user_trust(db, review.author_id)
+    # FR-3: a rejection reaches the author with its reason (1.6, 3.12).
+    notification_service.review_decided(db, review, "rejected", reason)
     db.commit()
     db.refresh(review)
     return review
@@ -262,6 +266,7 @@ def unpublish(db: Session, review: Review, moderator_id: uuid.UUID,
     review.earn_eligible_status = EarnEligibleStatus.pending
     _audit(db, moderator_id, ModerationAction.unpublish, review.id, notes=reason,
            context={"previous_status": previous.value})
+    notification_service.review_decided(db, review, "unpublished", reason)
     recompute_product_aggregates(db, review.product_id)
     if review.author_id is not None:
         recompute_user_trust(db, review.author_id)

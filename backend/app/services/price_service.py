@@ -47,6 +47,7 @@ from app.models.enums import Platform, PriceObservationSource, PriceObservationS
 from app.models.product import PriceHistory, Product
 from app.models.user import User
 from app.schemas.product import PriceObservationDecision, PriceObservationQueueItem
+from app.services import notification_service
 
 # FR-2: the panel is shown only at or above this many independent observations.
 MIN_INDEPENDENT_OBSERVATIONS = 3
@@ -244,6 +245,12 @@ def decide_observation(db: Session, observation_id: uuid.UUID, moderator: User,
     row.decided_by_id = moderator.id
     row.decided_at = datetime.now(UTC)
     row.decision_note = decision.note
+    approved = row.status == PriceObservationStatus.approved
+    notification_service.notify(
+        db, row.submitted_by,
+        "price_approved" if approved else "price_rejected",
+        "Your price report was approved" if approved else "Your price report was not approved",
+        body=decision.note)
     db.commit()
     db.refresh(row)
 

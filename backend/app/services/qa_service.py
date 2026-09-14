@@ -35,6 +35,7 @@ from app.schemas.qa import (
     QuestionDetailOut,
     QuestionOut,
 )
+from app.services import notification_service
 
 FIRST_RESPONDER_WINDOW = timedelta(hours=24)
 
@@ -265,6 +266,12 @@ def create_answer(
     db.add(answer)
     if is_first:
         _award_badge(db, responder_id, "first_responder")
+    if question.asker_id is not None and question.asker_id != responder_id:
+        notification_service.notify(
+            db, question.asker_id, "question_answered",
+            "The store answered your question" if seller_answer
+            else "Your question has a new answer",
+            body=payload.body, link=f"/questions/{question.id}")
     db.commit()
     db.refresh(answer)
     return _answer_out(answer, db.get(User, responder_id), seller)
@@ -290,6 +297,7 @@ def mark_best_answer(
             code="cannot_pick_own_answer",
         )
 
+    newly_picked = question.best_answer_id != answer.id
     if question.best_answer_id and question.best_answer_id != answer.id:
         previous = db.get(Answer, question.best_answer_id)
         if previous is not None:
@@ -297,5 +305,9 @@ def mark_best_answer(
     answer.is_best_answer = True
     question.best_answer_id = answer.id
     _award_badge(db, answer.responder_id, "best_answer")
+    if newly_picked:
+        notification_service.notify(
+            db, answer.responder_id, "best_answer", "Your answer was picked as the best one",
+            body=question.body, link=f"/questions/{question.id}")
     db.commit()
     return get_question_detail(db, question.id)

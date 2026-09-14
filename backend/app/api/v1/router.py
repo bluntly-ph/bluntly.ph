@@ -19,6 +19,7 @@ from app.api.v1.routes import (
     contracts,
     internal_cron,
     membership,
+    notifications,
     payouts,
     postback,
     products,
@@ -61,3 +62,4 @@ api_v1_router.include_router(postback.router)
 api_v1_router.include_router(sellers.router)
 api_v1_router.include_router(admin_sellers.router)
 api_v1_router.include_router(admin_prices.router)
+api_v1_router.include_router(notifications.router)

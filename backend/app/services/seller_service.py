@@ -54,6 +54,7 @@ from app.schemas.seller import (
     SellerSummary,
     WaitingQuestion,
 )
+from app.services import notification_service
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -379,6 +380,10 @@ def remove_seller_review(db: Session, review_id: uuid.UUID, moderator: User,
     review.removed_at = datetime.now(UTC)
     review.removed_by_id = moderator.id
     review.removal_note = note
+    notification_service.notify(
+        db, review.reviewer_id, "seller_review_removed",
+        "A moderator removed your seller review",
+        body=note, link=f"/sellers/{review.seller_id}")
     db.commit()
     db.refresh(review)
     reviewer = db.get(User, review.reviewer_id) if review.reviewer_id else None
@@ -472,6 +477,14 @@ def decide_claim(db: Session, claim_id: uuid.UUID, moderator: User,
     claim.decided_by_id = moderator.id
     claim.decided_at = datetime.now(UTC)
     claim.decision_note = decision.note
+    if claim.status == SellerClaimStatus.claimed:
+        notification_service.notify(
+            db, claim.user_id, "seller_claim_approved", "Your store claim was approved",
+            body=decision.note or seller.display_name, link=f"/sellers/{seller.id}/dashboard")
+    else:
+        notification_service.notify(
+            db, claim.user_id, "seller_claim_rejected", "Your store claim was not approved",
+            body=decision.note or seller.display_name, link=f"/sellers/{seller.id}")
     db.commit()
     db.refresh(claim)
     return _claim_out(claim, seller)
