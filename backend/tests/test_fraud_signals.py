@@ -62,7 +62,10 @@ def test_signal_batch_preserves_values_with_constant_query_count(client):
     pid = client.post(
         "/api/v1/products",
         headers=ah,
-        json={"name": "BatchSignalWidget", "category": "electronics"},
+        # Unique per run: a repeated name now returns the existing product
+        # (duplicate detection), and the cumulative CI database keeps earlier
+        # runs' identical reviews on it, which tie with `original_id` at 1.0.
+        json={"name": f"BatchSignalWidget {_uuid.uuid4().hex[:8]}", "category": "electronics"},
     ).json()["id"]
 
     def make(discussion: str) -> str:

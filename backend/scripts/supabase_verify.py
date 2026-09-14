@@ -321,7 +321,8 @@ def verify_flow(db, client: TestClient, keep: bool) -> None:
     print("\n== FLOW: review -> publish -> referral link -> click ==")
     pid = client.post("/api/v1/products", headers=ah, json={
         "name": f"VerifyWidget {ts}", "category": "electronics-tech",
-        "source_url": "https://shopee.ph/x-i.1.2"}).json()["id"]
+        # Unique listing: a repeated source_url returns the existing product.
+        "source_url": f"https://shopee.ph/x-i.1.{uuid.uuid4().int % 10**12}"}).json()["id"]
     created_products.append(pid)
     rid = client.post("/api/v1/reviews", headers=ah, json={
         "product_id": pid, "title": "Verify", "discussion": f"Verification run {ts}.",

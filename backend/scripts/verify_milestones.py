@@ -72,9 +72,12 @@ class Harness:
         return uid, {"Authorization": f"Bearer {token}"}
 
     def product(self, h: dict, name: str) -> str:
+        # The listing must be unique too: a repeated source_url returns the
+        # product that already has it (duplicate detection), so a fixed link
+        # would fold every verification product into the first one ever made.
         return self.c.post("/api/v1/products", headers=h, json={
             "name": f"{name}-{uuid.uuid4().hex[:6]}", "category": "electronics",
-            "source_url": "https://shopee.ph/x-i.1.2"}).json()["id"]
+            "source_url": f"https://shopee.ph/x-i.1.{uuid.uuid4().int % 10**12}"}).json()["id"]
 
     def review(self, h: dict, pid: str, stars: int = 4, photo: bool = True) -> str:
         body = {"product_id": pid, "title": "Verify", "star_rating": stars,
@@ -432,10 +435,25 @@ def verify_fr2_and_receipt_privacy(h) -> None:
         c.post(f"/api/v1/products/{pid}/prices", headers=ah, json={
             "platform": "shopee", "price": value,
             "observed_at": date.today().isoformat(), "variant": None})
+    # Community prices start pending (migration 0044): nothing is priced or
+    # counted until a moderator — not the submitter — approves it.
+    pending = c.get(f"/api/v1/products/{pid}/prices").json()
+    check("FR-2: submitted prices wait for a moderator and are not published",
+          pending["pending_count"] == 3 and pending["observation_count"] == 0
+          and pending["low"] is None,
+          f"pending={pending['pending_count']} counted={pending['observation_count']}")
+
+    _, mh = h.register("fr2mod", role="moderator")
+    queue = c.get("/api/v1/admin/price-observations", headers=mh,
+                  params={"product_id": pid}).json()
+    decided = [c.post(f"/api/v1/admin/price-observations/{row['id']}/decision",
+                      headers=mh, json={"decision": "approve"}).status_code
+               for row in queue]
     one_author = c.get(f"/api/v1/products/{pid}/prices").json()
     check("FR-2: three observations from ONE buyer keep the panel locked",
-          one_author["sufficient"] is False and one_author["observation_count"] == 3,
-          f"independent={one_author['independent_count']}")
+          decided == [200, 200, 200] and one_author["sufficient"] is False
+          and one_author["observation_count"] == 3 and one_author["independent_count"] == 1,
+          f"decisions={decided} independent={one_author['independent_count']}")
 
     other = c.post("/api/v1/products", headers=ah,
                    json={"name": f"FR2b {uuid.uuid4().hex[:8]}",
