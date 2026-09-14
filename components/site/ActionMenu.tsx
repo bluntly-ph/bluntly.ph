@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { PencilSimple, Plus, Question, Star, X } from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
+import { PencilSimpleLine, Plus, QuestionMark, Star, X } from "@phosphor-icons/react";
+import type { Icon, IconWeight } from "@phosphor-icons/react";
 
 import {
   ACTION_MENU_ITEMS,
@@ -14,33 +14,61 @@ import {
 } from "@/components/site/action-menu-model";
 
 /**
- * The floating action menu from "Action Menu.png".
+ * The floating action menu from "Action Menu.png" — phones only.
  *
- * NOT MOUNTED ANYWHERE, deliberately. The reference specifies the component and
- * its states, but a scan of all 94 frames found the collapsed FAB in that one
- * export and nowhere else — no page reference establishes a mounting surface.
- * Placing it globally would be an unsupported design assumption, and it would
- * duplicate "Write a review" and "Ask a question", which the profile panel
- * already offers. It is built and ready; when a page reference shows where it
- * belongs, mount this rather than redesigning it.
+ * MOUNTED on the discovery surfaces (home, feed, search, categories, questions,
+ * a review, a store) at the owner's direction on 2026-09-14, so QA can start all
+ * three workflows from a phone. The frames draw it on the search page's
+ * Questions tab (live canvas), the questions index and both seller-page tabs.
+ * Hidden from `md` (768px) up: no reference places it on tablet or desktop,
+ * where the header already carries these actions. Never mounted on the
+ * composers it opens.
  *
- * Measured from the reference: a 60x60 collapsed button in brand orange, and an
- * expansion over a black scrim with three labelled actions above a close button.
+ * Measured from the frame at 390x844 (.bluntly-autopilot/figma-reference/
+ * ACTION-MENU.md):
+ *   collapsed  60x60 disc in --brand-600, 32px from the right and bottom edges,
+ *              a 27px plus drawn with a 2px stroke, --shadow-card
+ *   expanded   black scrim at 25%; action discs on an 80px pitch (20px gaps)
+ *              with the close disc, in --brand-400, taking the FAB's place;
+ *              label pills 40px tall, 12px radius, --surface-app, 12px from
+ *              their disc, 16px type with an 11px cap height; glyphs in
+ *              --surface-app: a bare question mark, a star, a pencil on a line
  *
- * "Rate a Seller" is shown DISABLED rather than hidden — see action-menu-model.
+ * INTENTIONAL PRODUCT DIFFERENCE: the frame draws the "Rate a Seller" star in
+ * grey, because it was drawn while no seller entity existed. The owner has since
+ * enabled the action, so its glyph matches the other two rather than reading as
+ * unavailable.
+ *
+ * A disclosure, not an ARIA menu: the panel is a list of ordinary links, which
+ * `role="menu"` would misdescribe to a screen reader.
  */
 
-const ICONS: Record<string, Icon> = {
-  ask: Question,
-  seller: Star,
-  review: PencilSimple,
+const GLYPHS: Record<string, { icon: Icon; size: number; weight: IconWeight }> = {
+  ask: { icon: QuestionMark, size: 28, weight: "regular" },
+  seller: { icon: Star, size: 28, weight: "fill" },
+  review: { icon: PencilSimpleLine, size: 28, weight: "regular" },
 };
 
-export function ActionMenu({ className = "" }: { className?: string }) {
+/** The frame's 32px corner, kept clear of a notch or home indicator. */
+const CORNER =
+  "bottom-[calc(32px_+_env(safe-area-inset-bottom))] right-[calc(32px_+_env(safe-area-inset-right))]";
+
+const DISC =
+  "grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full text-[var(--surface-app)] shadow-[var(--shadow-card)]";
+
+const FOCUS =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+
+export function ActionMenu() {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const close = (returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -57,43 +85,42 @@ export function ActionMenu({ className = "" }: { className?: string }) {
   }, [open]);
 
   const row = (item: ActionMenuItem) => {
-    const Glyph = ICONS[item.key] ?? Star;
+    const glyph = GLYPHS[item.key] ?? GLYPHS.seller;
+    const Glyph = glyph.icon;
     const actionable = isActionable(item);
-    const circle = actionable
-      ? "bg-[var(--accent-primary)] text-white"
-      : "bg-[var(--base-gray-500,#8c8c8c)] text-white";
 
-    const label = (
-      <span
-        className={`rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-4 py-2 text-[14px] shadow-[var(--shadow-card)] ${
-          actionable ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
-        }`}
-      >
-        {item.label}
-      </span>
-    );
-    const glyph = (
-      <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-full shadow-[var(--shadow-card)] ${circle}`}>
-        <Glyph size={24} weight="bold" aria-hidden="true" />
-      </span>
+    const content = (
+      <>
+        <span
+          className={`flex h-10 items-center rounded-[var(--radius-sm)] bg-[var(--surface-app)] pl-4 pr-[5px] text-[16px] tracking-[0.05em] ${
+            actionable ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
+          }`}
+        >
+          {item.label}
+        </span>
+        <span className={`${DISC} bg-[var(--accent-primary)]`}>
+          <Glyph
+            size={glyph.size}
+            weight={glyph.weight}
+            aria-hidden="true"
+            className={actionable ? undefined : "text-[var(--base-gray-300)]"}
+          />
+        </span>
+      </>
     );
 
     if (!actionable) {
       return (
-        <li key={item.key} className="flex items-center justify-end gap-3">
-          {/* A real button carrying `aria-disabled` rather than the `disabled`
-              attribute: the design deliberately shows this action exists and is
-              unavailable, and `disabled` would drop it out of the tab order so a
-              screen-reader user would never learn that. It is announced, focusable
-              and inert. */}
+        <li key={item.key} className="flex justify-end">
+          {/* `aria-disabled` rather than `disabled`, so an unavailable action
+              stays in the tab order and is announced rather than vanishing. */}
           <button
             type="button"
             aria-disabled="true"
             onClick={(e) => e.preventDefault()}
-            className="flex cursor-not-allowed items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+            className={`flex cursor-not-allowed items-center gap-3 ${FOCUS}`}
           >
-            {label}
-            {glyph}
+            {content}
             <span className="sr-only">{DISABLED_REASON[item.key] ?? "Not available yet"}</span>
           </button>
         </li>
@@ -101,14 +128,13 @@ export function ActionMenu({ className = "" }: { className?: string }) {
     }
 
     return (
-      <li key={item.key} className="flex items-center justify-end gap-3">
+      <li key={item.key} className="flex justify-end">
         <Link
           href={item.href as string}
           onClick={() => setOpen(false)}
-          className="flex items-center gap-3 no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+          className={`flex items-center gap-3 no-underline ${FOCUS}`}
         >
-          {label}
-          {glyph}
+          {content}
         </Link>
       </li>
     );
@@ -122,11 +148,10 @@ export function ActionMenu({ className = "" }: { className?: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-haspopup="menu"
-        aria-label={open ? "Close actions" : "Actions"}
-        className={`fixed bottom-6 right-5 z-30 grid h-[60px] w-[60px] cursor-pointer place-items-center rounded-full bg-[var(--accent-primary)] text-white shadow-[var(--shadow-card)] transition-transform hover:bg-[var(--accent-primary-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)] ${className}`}
+        aria-label="Actions"
+        className={`fixed z-30 ${CORNER} ${DISC} cursor-pointer bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-strong)] md:hidden ${FOCUS}`}
       >
-        <Plus size={26} weight="bold" aria-hidden="true" />
+        <Plus size={39} weight="light" aria-hidden="true" />
       </button>
 
       {open
@@ -134,34 +159,34 @@ export function ActionMenu({ className = "" }: { className?: string }) {
             /* Portalled for the reason ProfileNavPanel is: a non-`none`
                backdrop-filter on an ancestor becomes the containing block for
                `fixed` children, which would trap this against the header box. */
-            <>
-              <button
-                type="button"
-                aria-label="Close actions"
-                onClick={() => setOpen(false)}
-                className="fixed inset-0 z-40 cursor-default bg-[rgba(0,0,0,0.45)]"
+            <div className="md:hidden">
+              {/* Pointer-only: keyboard users close with Escape or the close
+                  button, so the scrim is not a second announced control. */}
+              <div
+                data-action-menu-scrim
+                aria-hidden="true"
+                onClick={() => close(false)}
+                className="fixed inset-0 z-40 bg-[rgba(0,0,0,0.25)]"
               />
               <div
                 ref={panelRef}
                 id={panelId}
-                role="menu"
-                aria-label="Actions"
-                className="fixed bottom-6 right-5 z-50 flex flex-col items-end gap-4"
+                data-action-menu-panel
+                className={`fixed z-50 ${CORNER} flex flex-col items-end gap-5`}
               >
-                <ul className="flex flex-col gap-4">{ACTION_MENU_ITEMS.map(row)}</ul>
+                <ul aria-label="Actions" className="flex flex-col gap-5">
+                  {ACTION_MENU_ITEMS.map(row)}
+                </ul>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    triggerRef.current?.focus();
-                  }}
+                  onClick={() => close(true)}
                   aria-label="Close actions"
-                  className="grid h-[60px] w-[60px] cursor-pointer place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent-primary)_70%,white)] text-white shadow-[var(--shadow-card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+                  className={`${DISC} cursor-pointer bg-[var(--brand-400)] ${FOCUS}`}
                 >
-                  <X size={24} weight="bold" aria-hidden="true" />
+                  <X size={36} weight="regular" aria-hidden="true" />
                 </button>
               </div>
-            </>,
+            </div>,
             document.body,
           )
         : null}

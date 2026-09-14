@@ -9,6 +9,7 @@ import { ClaimStatusLine, SellerAvatar } from "@/components/sellers/SellerIdenti
 import { SellerRatingSummary } from "@/components/sellers/SellerRatingSummary";
 import { SellerReviewCard } from "@/components/sellers/SellerReviewCard";
 import { PLATFORM_LABEL } from "@/components/sellers/seller-model";
+import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Unavailable } from "@/components/site/Unavailable";
@@ -173,6 +174,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           </section>
         ) : null}
       </main>
+      <ActionMenu />
       <SiteFooter />
     </div>
   );

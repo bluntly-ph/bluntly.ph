@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getUser } from "@/lib/dal";
@@ -54,6 +55,7 @@ export default async function CategoriesPage() {
           })}
         </ul>
       </main>
+      <ActionMenu />
       <SiteFooter />
     </div>
   );

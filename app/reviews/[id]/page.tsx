@@ -6,6 +6,7 @@ import { PricePanel } from "@/components/product/PricePanel";
 import { ReportPriceForm } from "@/components/product/ReportPriceForm";
 import { ReviewAside } from "@/components/review/ReviewAside";
 import { ReviewDetail } from "@/components/review/ReviewDetail";
+import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getComments } from "@/lib/comments";
@@ -121,6 +122,7 @@ export default async function ReviewPage({
           </div>
         </div>
       </main>
+      <ActionMenu />
       <SiteFooter />
     </div>
   );

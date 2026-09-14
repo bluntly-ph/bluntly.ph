@@ -40,6 +40,9 @@ const PROTECTED = [
   "/reviews/new",
   "/questions/new",
   "/requests/new",
+  // The seller composer, opened from the mobile action menu. Its page guards
+  // with requireOnboardedUser, which alone would drop the return path.
+  "/sellers/rate",
 ];
 
 /** Routes that make no sense while already signed in. */

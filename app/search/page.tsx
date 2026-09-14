@@ -8,6 +8,7 @@ import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
 import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
 import { ReviewListRow } from "@/components/review/ReviewListRow";
 import { Unavailable } from "@/components/site/Unavailable";
+import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { CATEGORIES } from "@/lib/landing-data";
@@ -198,6 +199,7 @@ export default async function SearchPage({
           />
         )}
       </main>
+      <ActionMenu />
       <SiteFooter />
     </div>
   );

@@ -4,6 +4,7 @@ import { Hero } from "@/components/landing/Hero";
 import { LandingCta } from "@/components/landing/LandingCta";
 import { ReadingRail } from "@/components/landing/ReadingRail";
 import { TrustSection } from "@/components/landing/TrustSection";
+import { ActionMenu } from "@/components/site/ActionMenu";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getUser } from "@/lib/dal";
@@ -43,6 +44,7 @@ export default async function Home() {
         <TrustSection />
         <LandingCta />
       </main>
+      <ActionMenu />
       <SiteFooter />
     </div>
   );
