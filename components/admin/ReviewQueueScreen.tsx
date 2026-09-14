@@ -399,7 +399,7 @@ export function ReviewQueueScreen({
                     is never squeezed off the end by a long review title.
                     Below 32rem it scrolls horizontally in its own pane, which
                     is the right behaviour on a phone. */}
-                <table className="w-full min-w-[34rem] table-fixed border-collapse text-left">
+                <table className="w-full min-w-[33rem] table-fixed border-collapse text-left">
                   {/* ID gets the room the backend's real reference needs:
                       `review_id` is `rev_` + 10 hex, not the frame's short
                       "B-270", and a moderator pastes it into a search. */}

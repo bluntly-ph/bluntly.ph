@@ -17,6 +17,7 @@ from app.models.enums import (
     VoteDirection,
 )
 from app.schemas.urls import web_url_or_none
+from app.services.trust_badge import has_trust_badge
 
 
 class VoteIn(BaseModel):
@@ -146,6 +147,16 @@ class ReviewOut(BaseModel):
     earn_eligible_status: EarnEligibleStatus
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_trust_badge(self) -> bool:
+        """X.2: proof + a recorded moderator decision + publication.
+
+        Decided here, once, so every card and page shows the same answer; the
+        rule itself is `services/trust_badge.py`.
+        """
+        return has_trust_badge(self)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

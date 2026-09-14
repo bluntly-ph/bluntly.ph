@@ -198,14 +198,14 @@ moderator console screen and deployment are still to come.
 | 9.9 | Penalties, suspension, vote-weight suspension | COMPLETE | — | COMPLETE | COMPLETE | PROVISIONAL | — | `routes/admin_users.py`, `test_admin_user_management` |
 | 9.10 | Audit log (filterable) | PARTIAL | — | PARTIAL | PARTIAL | PROVISIONAL | — | `moderate/activity` |
 | 9.11 | Platform analytics | COMPLETE | — | COMPLETE | COMPLETE | PROVISIONAL | — | `routes/admin_analytics.py`, `test_admin_overview` |
-| 9.12 | **Date column clipped at 1280** | — | DEFECT | DEFECT | COMPLETE | DEFECT | — | `.final-checks.mjs`; pane 533 vs table min 544 at `xl`; see the fix candidate in `.bluntly-autopilot/COMPOSER-1TO1.md` |
+| 9.12 | **Date column clipped at 1280** | — | PARTIAL | PARTIAL | COMPLETE | PARTIAL | — | PRODUCT DEFECT on the baseline (`.final-checks.mjs`: pane 533 px vs table `min-w-[34rem]` 544 px at 1280). Fix applied off-production: `min-w-[33rem]` (528 px). PARTIAL until the candidate is measured at 1280 against a deployment |
 
 ## Contract items outside FR-1…FR-9
 
 | # | Feature | Backend | Frontend | Admin | Test | Production | Blocker | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | X.1 | **Disclosure of material relationship** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | MISSING | — | Off-production: 0046 `reviews.material_relationship` (none / free_or_discounted / connected; NULL = never asked, not defaulted); versioned with every edit. Composer step 7 asks it and Submit waits — **INTENTIONAL PRODUCT DIFFERENCE**, the frame draws the title only. The review page shows a declared relationship beside "Verified purchase"; the moderation queue card and the review-queue detail panel show it (a pre-question review reads "Not asked"). `test_material_relationship_rules`, `disclosure-model.test.mjs`, `composer-gate-model.test.mjs`; DB tests in CI. Contract §13 |
-| X.2 | **Trust badge gated on real verification state** | COMPLETE | PARTIAL | — | PARTIAL | PROVISIONAL | — | `verification_status` drives it; needs the §15 audit that it is never awarded on trust level or photo presence alone |
+| X.2 | **Trust badge gated on real verification state** | COMPLETE | COMPLETE | — | COMPLETE | MISSING | — | **Audit finding:** the public "Verified purchase" / "Verified" marks read `verification_status`, which is set at submission when the author's photo is attached — before any moderator decision; the desktop aside also called that flag "Proof of purchase provided", which is neither the receipt nor a decision. Off-production fix: `services/trust_badge.py` — proof + a recorded moderator decision (approved / monetized / Honesty Fund) + publication — served as `ReviewOut.has_trust_badge`; review page, aside and feed cards all read it through `showsTrustBadge`, which fails closed. Never on trust level (it does not read the author). See conflict C-6. `test_trust_badge_rules`, `trust-badge-model.test.mjs` |
 | X.3 | **3D / 360 product experience** | MISSING | MISSING | MISSING | MISSING | MISSING | — | contract §20; not in the PRD. No asset metadata, no viewer, no honest-unavailable state |
 | X.4 | **Simulated GCash / Maya payout flow** | MISSING | MISSING | MISSING | MISSING | MISSING | See conflict C-3 | contract §16 |
 | X.5 | Supabase backup / PITR configuration | UNVERIFIED | — | — | — | UNVERIFIED | Needs platform-console inspection, not code | contract §24 |
@@ -264,6 +264,15 @@ rows, so an unclaimed store is representable; claims are moderator-approved
 only), and the tests that pinned the descope were changed to pin the
 reinstatement. Seller reviews still publish without the product gate, as
 DEVIATIONS §37 always said, with moderator removal as the check.
+
+**C-6 — Which reviews carry the trust badge.** PRD FR-6: "approved ≥ 3-star
+reviews get a generated affiliate link + verified trust badge". The completion
+contract: a trust badge only after proof + checks + moderation. Resolution
+taken: the contract's rule, which includes approved ≤2-star reviews routed to
+the Honesty Fund. Withholding the badge only from honest negative reviews
+would make criticism look less credible than praise on a platform that pays a
+fund to reward it. **Worth the owner confirming.** If the PRD's ≥3-star reading
+is wanted, it is a one-line change in `services/trust_badge.py`.
 
 ---
 

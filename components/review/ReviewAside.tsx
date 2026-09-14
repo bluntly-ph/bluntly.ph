@@ -4,6 +4,7 @@ import { SealCheck, ShoppingBag, Star } from "@phosphor-icons/react/dist/ssr";
 
 import { PricePanel } from "@/components/product/PricePanel";
 import { ReportPriceForm } from "@/components/product/ReportPriceForm";
+import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { ReviewCardData } from "@/lib/landing-data";
 import type { PricePanel as PanelData } from "@/lib/products";
@@ -175,10 +176,13 @@ export function ReviewAside({
             </div>
           </div>
 
-          {review.verification_status === "verified" ? (
+          {/* X.2: the same badge, and the same rule, as the review itself. It
+              used to read "Proof of purchase provided" off the photo flag,
+              which is neither the receipt nor a moderator's decision. */}
+          {showsTrustBadge(review) ? (
             <p className="mt-3 inline-flex items-center gap-1.5 text-[12px] text-[var(--accent-success)]">
               <SealCheck size={14} weight="fill" />
-              Proof of purchase provided
+              Verified purchase
             </p>
           ) : null}
 

@@ -2,6 +2,7 @@ import "server-only";
 
 import { apiFetch } from "./api/client";
 import { usablePhoto } from "./image";
+import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import {
   FEATURED_REVIEW,
   READING_REVIEWS,
@@ -36,6 +37,8 @@ type FeedItem = {
     material_relationship?: "none" | "free_or_discounted" | "connected" | null;
     photo_url: string | null;
     verification_status: "verified" | "unverified";
+    /** X.2: proof + moderator decision + publication. Read via showsTrustBadge. */
+    has_trust_badge?: boolean;
     helpful_votes: number;
     unhelpful_votes: number;
     /**
@@ -389,7 +392,7 @@ function toFeedCard(item: FeedItem): FeedCardData {
     imageHue: hueOf(name),
     verdict: item.review.verdict,
     stars: item.review.star_rating,
-    verified: item.review.verification_status === "verified",
+    verified: showsTrustBadge(item.review),
     excerpt: excerptOf(item.review.discussion),
     author: name,
     authorId: item.author?.id ?? null,

@@ -12023,6 +12023,12 @@
             "format": "date-time",
             "title": "Updated At"
           },
+          "has_trust_badge": {
+            "type": "boolean",
+            "title": "Has Trust Badge",
+            "description": "X.2: proof + a recorded moderator decision + publication.\n\nDecided here, once, so every card and page shows the same answer; the\nrule itself is `services/trust_badge.py`.",
+            "readOnly": true
+          },
           "referral_redirect_url": {
             "anyOf": [
               {
@@ -12050,6 +12056,7 @@
           "earn_eligible_status",
           "created_at",
           "updated_at",
+          "has_trust_badge",
           "referral_redirect_url"
         ],
         "title": "ReviewOut"

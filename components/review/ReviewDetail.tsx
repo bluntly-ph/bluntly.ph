@@ -17,6 +17,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { ReadingTelemetry } from "@/components/review/ReadingTelemetry";
+import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import { disclosureLabel } from "@/components/reviews/disclosure-model";
 import { ReportDialog } from "@/components/review/ReportDialog";
 import { TrustBadge } from "@/components/ui/TrustBadge";
@@ -206,7 +207,8 @@ export function ReviewDetail({
           {verdict.label}
         </span>
         <Stars rating={review.star_rating} />
-        {review.verification_status === "verified" ? (
+        {/* X.2: proof + moderator decision + publication, decided by the API. */}
+        {showsTrustBadge(review) ? (
           <span className="inline-flex items-center gap-1 text-[12px] text-[var(--accent-success)]">
             <SealCheck size={15} weight="fill" />
             Verified purchase

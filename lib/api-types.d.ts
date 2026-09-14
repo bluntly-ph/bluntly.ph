@@ -4111,6 +4111,14 @@ export interface components {
              */
             updated_at: string;
             /**
+             * Has Trust Badge
+             * @description X.2: proof + a recorded moderator decision + publication.
+             *
+             *     Decided here, once, so every card and page shows the same answer; the
+             *     rule itself is `services/trust_badge.py`.
+             */
+            readonly has_trust_badge: boolean;
+            /**
              * Referral Redirect Url
              * @description Public attribution link — exposed instead of the raw affiliate URL.
              *     Only present once the review is published AND monetized.
