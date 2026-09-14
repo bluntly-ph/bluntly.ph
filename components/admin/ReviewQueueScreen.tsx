@@ -53,6 +53,7 @@ import {
   type Stat,
   type Tab,
 } from "@/components/admin/review-queue-model";
+import { disclosureLabel } from "@/components/reviews/disclosure-model";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { QueueItem, QueueResult, ReportItem } from "@/lib/moderation";
 
@@ -849,6 +850,15 @@ function ReviewDetail({
               deliberate look rather than a click-through.
             </p>
           ) : null}
+
+          {/* Disclosure (X.1). A review written before the question existed
+              says so, rather than reading as "nothing to disclose". */}
+          <p className="mt-4 text-[10px] font-light text-[var(--text-secondary)]">Disclosure</p>
+          <p className="mt-1 text-[12px] text-[var(--text-primary)]">
+            {item.review.material_relationship == null
+              ? "Not asked — written before the question existed"
+              : (disclosureLabel(item.review.material_relationship) ?? "No relationship declared")}
+          </p>
 
           <p className="mt-4 text-[10px] font-light text-[var(--text-secondary)]">
             Reverse Image Search
