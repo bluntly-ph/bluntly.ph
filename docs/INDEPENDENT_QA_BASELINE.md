@@ -85,6 +85,24 @@ while CI run `34812688685` finishes (a push would cancel it).
 already applied), 0043, 0044, 0045, 0046, 0047 — all additive; 0044 turns
 existing price observations pending (see its docstring).
 
+### Preserved before the owner-review deploy (recorded 2026-09-14)
+
+The owner directed a frontend owner-review candidate to be deployed to
+www.bluntly.ph. That deploy **supersedes the independent-QA baseline**. What
+the QA pass was testing, preserved here so none of it is lost:
+
+| Item | Value |
+|---|---|
+| Previous QA baseline SHA | `4e7c24247d2cb4d853e58ac6bf6a8d9ce63fadd7` |
+| Baseline production deployment | `6422454217` (success, 2026-09-13T14:11:05Z) |
+| Baseline recorded | 2026-09-14T01:21:39Z |
+| Issues reported by QA so far | **11** — the itemised tracker has not been handed over; nothing was fixed from the summary alone |
+| Supplied diagnostics | Lighthouse report `www.bluntly.ph-20260914T071726.html` (extension-contaminated; clean re-runs in `docs/qa-evidence/lighthouse-2026-09-14/`) |
+
+After this deploy the status is **QA BASELINE SUPERSEDED BY OWNER-REVIEW
+FRONTEND CANDIDATE**. Independent QA retests against the final candidate, and
+the 11 issues are triaged against it when the tracker arrives.
+
 ### Branch CI on `ab402b1` — run `34800415118` (2026-09-14, 02:48–04:39Z)
 
 Production guard, Frontend and Backend (no database) passed. Backend (isolated
