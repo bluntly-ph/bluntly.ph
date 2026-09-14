@@ -137,11 +137,55 @@ engineering analysis.
   background under white. Recorded, **not changed** during the freeze: it is a
   brand-token decision, and it may already be one of the eleven tracker items.
 
-## Clean reproduction
+## Clean reproduction — 2026-09-14, against the baseline
 
-*In progress.* Fresh Playwright Chromium, extensions disabled, logged out,
-public homepage, 3 mobile + 3 desktop runs at Lighthouse defaults, medians
-reported, every raw report kept.
+Lighthouse 13.4.1 CLI, Playwright's Chromium (build 1234, `HeadlessChrome/151`,
+Lighthouse benchmark index 1445 on this machine), `--headless=new
+--disable-extensions`, a fresh profile per run, logged out, public homepage.
+Mobile at Lighthouse defaults; desktop with `--preset=desktop`, the same form
+factor and simulated throttling as the supplied run. Six runs interleaved
+mobile/desktop between 01:26:46Z and 01:28:07Z. No run reported a
+`runtimeError`, and none contains extension scripts.
+
+Each CLI invocation exits 1: chrome-launcher cannot delete its temporary
+profile on Windows (`EPERM … Temp\lighthouse.*`) **after** the report is
+written. An environment artifact of the tool, not a failed run.
+
+| Run | Performance | FCP | LCP | Speed Index | TBT | CLS | Requests / KB |
+|---|---|---|---|---|---|---|---|
+| mobile-1 | 93 | 1.18 s | 3.02 s | 2.06 s | 142 ms | 0 | 38 / 322 |
+| mobile-2 | 94 | 1.27 s | 2.96 s | 2.19 s | 63 ms | 0 | 36 / 322 |
+| mobile-3 | 96 | 1.07 s | 2.76 s | 1.32 s | 42 ms | 0 | 37 / 323 |
+| **mobile median** | **94** | **1.18 s** | **2.96 s** | **2.06 s** | **63 ms** | **0** | |
+| desktop-1 | 98 | 0.56 s | 1.07 s | 1.02 s | 1 ms | 0 | 54 / 324 |
+| desktop-2 | 100 | 0.31 s | 0.64 s | 0.73 s | 0 ms | 0 | 54 / 332 |
+| desktop-3 | 99 | 0.54 s | 0.93 s | 0.65 s | 0 ms | 0 | 55 / 334 |
+| **desktop median** | **99** | **0.54 s** | **0.93 s** | **0.73 s** | **0 ms** | **0** | |
+
+Raw reports: `docs/qa-evidence/lighthouse-2026-09-14/*.report.json.gz` (all
+six, gzip; open in the Lighthouse viewer). HTML copies were not committed.
+
+**What this shows, and what it does not.**
+
+- The supplied Performance 69 / Speed Index 4.8 s is **not reproduced** in a
+  clean browser. Under the same desktop preset the median is 99 and Speed
+  Index 0.73 s. That is consistent with the extension's ~150 KB of injected
+  script and the state of the testing machine. It does **not** show that the
+  tester's "the site became slower" is wrong: that report is about their
+  session, and the memory measurement below is what can speak to it. Nothing
+  here is classified as a regression, confirmed or ruled out, until then.
+- The Bluntly-owned candidates are present in **every** clean run:
+  `1qaq7sgotaj6b.css` render-blocking; ~14.0 KB legacy JavaScript in
+  `29qf0wjmceuhq.js`; 8 font files; `bf-cache` failing.
+- **Mobile LCP (median 2.96 s) is the one metric outside "good" (≤ 2.5 s),**
+  and in every run the LCP element sits inside `.animate-fade-up`: the hero
+  `<h1>` on all three desktop runs and on mobile-3, and the featured review
+  card's excerpt (`div.animate-fade-up.delay-2 … p.mt-2`) on mobile-1 and
+  mobile-2. Element render delay 0.75–1.59 s against a time to first byte of
+  99–159 ms. Candidate, **not applied**: stop animating the hero copy and the
+  featured card from `opacity: 0`, then re-measure with the same six runs.
+- `color-contrast`: 8 failing nodes on mobile, 11 on desktop (the supplied run
+  had 10). Brand-token decision; recorded above, not changed.
 
 ## Memory
 
