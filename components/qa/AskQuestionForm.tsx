@@ -260,6 +260,10 @@ function AudienceDialog({ onChoose }: { onChoose: (audience: Audience) => void }
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        // The container takes focus only so a keyboard lands inside the dialog;
+        // it is not a control, so it must not draw the global focus ring (which
+        // an utility class cannot override). Its two options keep theirs.
+        style={{ outline: "none" }}
         onClick={(e) => e.stopPropagation()}
         className="relative h-[407px] w-full max-w-[358px] overflow-hidden rounded-[12px] bg-[var(--surface-app)] shadow-[var(--shadow-card)] outline-none"
       >
