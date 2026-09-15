@@ -82,8 +82,11 @@ export function OtpInput({
   return (
     <div className="flex flex-col gap-3">
       <input type="hidden" name={name} value={value} />
+      {/* Figma "OtpDigit" (6809:457): 48px cells at a 55px pitch, centred in the
+          326px column; the digit in 16px SemiBold; Active takes the brand tint
+          at 10%. */}
       <div
-        className="flex gap-2"
+        className="flex justify-center gap-[7px]"
         role="group"
         aria-label="Six digit verification code"
       >
@@ -105,14 +108,14 @@ export function OtpInput({
             aria-label={`Digit ${index + 1}`}
             aria-invalid={error ? true : undefined}
             className={[
-              "h-12 w-full min-w-0 rounded-[var(--radius-sm)] text-center",
+              "h-12 w-12 min-w-0 shrink rounded-[var(--radius-sm)] text-center",
               // See TextField: white on the mobile sheet, gray on the desktop card.
-              "bg-white lg:bg-[var(--surface-input)]",
-              "text-[18px] font-medium text-[var(--text-primary)]",
-              "outline-none transition-shadow duration-[var(--duration-fast)]",
+              "bg-white lg:bg-[var(--surface-input)] focus:bg-[rgba(239,88,33,0.1)]",
+              "text-[16px] font-semibold text-[var(--text-primary)]",
+              "outline-none transition-[box-shadow,background-color] duration-[var(--duration-fast)]",
               error
                 ? "shadow-[inset_0_0_0_1px_var(--accent-danger)]"
-                : "shadow-[inset_0_0_0_1px_var(--line-hairline-30)] focus:shadow-[inset_0_0_0_2px_var(--accent-primary)]",
+                : "shadow-[inset_0_0_0_1px_var(--line-hairline-30)] focus:shadow-[inset_0_0_0_1px_var(--accent-primary)]",
             ].join(" ")}
           />
         ))}

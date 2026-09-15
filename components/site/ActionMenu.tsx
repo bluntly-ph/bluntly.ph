@@ -7,8 +7,8 @@ import { PencilLine, QuestionMark, Star } from "@phosphor-icons/react";
 import type { Icon, IconWeight } from "@phosphor-icons/react";
 
 import {
-  ACTION_MENU_ITEMS,
   DISABLED_REASON,
+  actionMenuItems,
   isActionable,
   type ActionMenuItem,
 } from "@/components/site/action-menu-model";
@@ -84,8 +84,9 @@ function CloseGlyph() {
   );
 }
 
-export function ActionMenu() {
+export function ActionMenu({ sellerId }: { sellerId?: string } = {}) {
   const [open, setOpen] = useState(false);
+  const items = actionMenuItems({ sellerId });
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -200,7 +201,7 @@ export function ActionMenu() {
                 className={`fixed z-50 ${CORNER} flex flex-col items-end gap-5`}
               >
                 <ul aria-label="Actions" className="flex flex-col gap-5">
-                  {ACTION_MENU_ITEMS.map(row)}
+                  {items.map(row)}
                 </ul>
                 <button
                   type="button"

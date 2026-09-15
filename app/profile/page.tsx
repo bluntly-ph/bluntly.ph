@@ -1,152 +1,117 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { PencilSimpleLine, SealCheck, Star } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, Coins, PencilSimple, SealCheck, ShieldCheck, SignOut } from "@phosphor-icons/react/dist/ssr";
 
 import { logout } from "@/app/actions/auth";
-import { ReviewCard } from "@/components/review/ReviewCard";
+import { ProfileHeader, ProfileTabs } from "@/components/profile/ProfileHeader";
+import { ProfileReviewCard } from "@/components/profile/ProfileReviewCard";
+import { ProfileShareButton } from "@/components/profile/ProfileShareButton";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Unavailable } from "@/components/site/Unavailable";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
-import { TrustBadge } from "@/components/ui/TrustBadge";
 import { requireOnboardedUser } from "@/lib/dal";
 import { INTERESTS } from "@/lib/interests";
+import { joinedLabel } from "@/lib/relative-time";
 import { searchReviews } from "@/lib/reviews";
+import { trustLevelName } from "@/lib/trust";
 
 export const metadata: Metadata = {
   title: "Your profile — bluntly",
 };
 
-const interestLabel = (slug: string) =>
-  INTERESTS.find((i) => i.slug === slug)?.label ?? slug;
+const interestLabel = (slug: string) => INTERESTS.find((i) => i.slug === slug)?.label ?? slug;
 
+/** Chip/Action (7166:4933): 32px, a dark 1px outline at radius 16, a 20px glyph 4px before 12px Light. */
+const CHIP =
+  "inline-flex h-8 cursor-pointer items-center gap-1 rounded-[16px] border border-[var(--text-primary)] px-[11px] text-[12px] font-light leading-none text-[var(--text-primary)] no-underline hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]";
+
+/**
+ * The signed-in member's own profile: Figma "Profile Page - Reviews"
+ * (5446:4328) — see ProfileHeader and ProfileReviewCard for the values.
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES: the figures are the account's real ones
+ * (reviews published, verified reviews, Honesty Score) rather than the frame's
+ * "People helped" and "Buyers guided", which are not served per member; the
+ * owner's own controls — edit, earnings, log out — and the interests they
+ * chose sit under the meta line, where the frame has a bio; "Stats" links to
+ * the dashboard's insights.
+ */
 export default async function ProfilePage() {
   const me = await requireOnboardedUser();
-  const reviews = await searchReviews({
-    author_id: me.id,
-    sort: "newest",
-    limit: 24,
-  });
-  const name = me.display_name || me.username || "You";
+  const reviews = await searchReviews({ author_id: me.id, sort: "newest", limit: 24 });
+  const name = me.username || me.display_name || "You";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
-      <main className="mx-auto w-full max-w-[72rem] flex-1 px-6 py-8 lg:px-10 lg:py-10">
-        {/* Profile header */}
-        <section className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <span className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full text-[26px] font-bold text-white ring-1 ring-[var(--line-hairline-10)]" style={{ background: "hsl(24 55% 55%)" }}>
-            {me.avatar_url ? (
-              <Image src={me.avatar_url} alt="" fill sizes="80px" className="object-cover" />
-            ) : (
-              name.slice(0, 1).toUpperCase()
-            )}
-          </span>
-          <div className="flex-1">
-            <h1 className="text-[24px] font-bold text-[var(--text-primary)]">{name}</h1>
-            {me.username ? (
-              <p className="text-[14px] text-[var(--text-secondary)]">@{me.username}</p>
-            ) : null}
+      <main className="mx-auto w-full max-w-[42rem] flex-1 pb-16 md:px-6 md:pt-6">
+        <ProfileHeader
+          name={name}
+          avatarUrl={me.avatar_url}
+          avatarHue={24}
+          trustLevel={me.trust_level_name ?? trustLevelName(me.trust_stage) ?? "Member"}
+          meta={[me.display_name && me.username ? me.display_name : null, joinedLabel(me.created_at)].filter(
+            (m): m is string => Boolean(m),
+          )}
+          stats={[
+            { value: String(reviews?.length ?? "—"), label: "Reviews written", icon: PencilSimple },
+            { value: String(me.verified_review_count), label: "Verified reviews", icon: SealCheck },
+            { value: String(Math.round(Number(me.reputation_score) || 0)), label: "Honesty Score", icon: ShieldCheck },
+          ]}
+          share={<ProfileShareButton name={name} path={`/u/${me.id}`} />}
+        >
+          {me.interests?.length ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <TrustBadge
-                levelName={me.trust_level_name}
-                stage={me.trust_stage}
-                score={me.reputation_score}
-              />
-              <span className="rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-3 py-1 text-[12px] capitalize text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-                {me.membership_tier} member
-              </span>
+              <span className="text-[12px] font-light leading-none text-[var(--text-primary)]">Shops for:</span>
+              {me.interests.map((slug) => (
+                <span key={slug} className="rounded-[4px] bg-[#d9d9d9] px-2 py-1 text-[10px] leading-none text-[var(--text-primary)]">
+                  {interestLabel(slug)}
+                </span>
+              ))}
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button href="/dashboard" size="sm">Earnings</Button>
-            <Button
-              href="/onboarding"
-              variant="secondary"
-              size="sm"
-              icon={<PencilSimpleLine size={14} />}
-            >
-              Edit
-            </Button>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Link href="/onboarding" className={CHIP}>
+              <PencilSimple size={20} weight="light" aria-hidden="true" /> Edit profile
+            </Link>
+            <Link href="/dashboard" className={CHIP}>
+              <Coins size={20} weight="light" aria-hidden="true" /> Earnings
+            </Link>
             <form action={logout}>
-              <Button type="submit" variant="secondary" size="sm">
-                Log out
-              </Button>
+              <button type="submit" className={`${CHIP} bg-transparent`}>
+                <SignOut size={20} weight="light" aria-hidden="true" /> Log out
+              </button>
             </form>
           </div>
-        </section>
+        </ProfileHeader>
 
-        {/* Stats */}
-        <section className="mt-6 grid grid-cols-3 gap-3 sm:max-w-[28rem]">
-          <Stat icon={<SealCheck size={18} weight="fill" className="text-[var(--accent-success)]" />} value={me.verified_review_count} label="Verified" />
-          <Stat icon={<Star size={18} weight="fill" className="text-[var(--accent-star)]" />} value={me.reputation_score} label="Reputation" />
-          <Stat value={reviews?.length ?? "—"} label="Published" />
-        </section>
+        <ProfileTabs statsHref="/dashboard/insights" />
 
-        {/* Interests */}
-        {me.interests?.length ? (
-          <section className="mt-6">
-            <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Shops for
-            </h2>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {me.interests.map((slug) => (
-                <li key={slug} className="rounded-[var(--radius-md)] bg-[var(--surface-card)] px-3 py-1 text-[13px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-                  {interestLabel(slug)}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {/* Reviews */}
-        <section className="mt-10">
-          <h2 className="text-[18px] font-bold text-[var(--text-primary)]">Your reviews</h2>
-          {reviews === null ? (
+        {reviews === null ? (
+          <div className="px-4 md:px-0">
             <Unavailable what="your reviews" />
-          ) : reviews.length > 0 ? (
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
-              {reviews.map((r) => (
-                <ReviewCard key={r.id} review={r} />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-8 text-center shadow-[var(--shadow-hairline-inset)]">
-              <p className="text-[15px] font-semibold text-[var(--text-primary)]">
-                No published reviews yet
-              </p>
-              <p className="mt-1 text-[14px] text-[var(--text-secondary)]">
-                Share an honest review and start earning from your opinions.
-              </p>
-              <Link href="/reviews/new" className="mt-4 inline-block">
-                <Button size="sm">Write a review</Button>
-              </Link>
-            </div>
-          )}
-        </section>
+          </div>
+        ) : reviews.length > 0 ? (
+          <ul>
+            {reviews.map((r, i) => (
+              <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
+            ))}
+          </ul>
+        ) : (
+          <div className="px-4 pt-10 text-center">
+            <p className="text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">No published reviews yet</p>
+            <p className="mt-[9px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+              Share an honest review and start earning from your opinions.
+            </p>
+            <Button href="/reviews/new" className="mt-6 gap-1">
+              Write a review
+              <ArrowRight size={20} aria-hidden="true" />
+            </Button>
+          </div>
+        )}
       </main>
       <SiteFooter />
-    </div>
-  );
-}
-
-function Stat({
-  icon,
-  value,
-  label,
-}: {
-  icon?: React.ReactNode;
-  value: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <div className="rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-4 text-center shadow-[var(--shadow-hairline-inset)]">
-      <div className="flex items-center justify-center gap-1 text-[20px] font-bold text-[var(--text-primary)]">
-        {icon}
-        {value}
-      </div>
-      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{label}</div>
     </div>
   );
 }

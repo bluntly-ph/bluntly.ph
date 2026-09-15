@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PencilSimple, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 
-import { ReviewCard } from "@/components/review/ReviewCard";
-import { PageShell } from "@/components/site/PageShell";
-import { TrustBadge } from "@/components/ui/TrustBadge";
+import { ProfileHeader, ProfileTabs } from "@/components/profile/ProfileHeader";
+import { ProfileReviewCard } from "@/components/profile/ProfileReviewCard";
+import { ProfileShareButton } from "@/components/profile/ProfileShareButton";
+import { SiteFooter } from "@/components/site/SiteFooter";
+import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
+import { getUser } from "@/lib/dal";
 import { getAuthorProfile } from "@/lib/reviews";
 
 type Params = { params: Promise<{ id: string }> };
@@ -25,9 +29,19 @@ function hue(seed: string): number {
   return h;
 }
 
+/**
+ * A reviewer's public profile, built to Figma "Profile Page - Reviews"
+ * (5446:4328) — see ProfileHeader and ProfileReviewCard.
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES: the public feed carries a reviewer's
+ * identity, trust and published reviews, so the figures are "Reviews written"
+ * and the Honesty Score; followers, a join date, a bio, "People helped",
+ * "Buyers guided" and the Comments and Stats tabs have nothing public behind
+ * them and are not drawn.
+ */
 export default async function ReviewerProfilePage({ params }: Params) {
   const { id } = await params;
-  const data = await getAuthorProfile(id);
+  const [data, me] = await Promise.all([getAuthorProfile(id), getUser().catch(() => null)]);
 
   // `notFound()` rather than rendering the message inline, which returned 200.
   // `/u/{id}` accepts any id, so a soft 404 here meant every made-up id was a
@@ -37,47 +51,36 @@ export default async function ReviewerProfilePage({ params }: Params) {
   if (!data) notFound();
 
   const { author, cards } = data;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
 
   return (
-    <PageShell width="wide">
-      <section className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <span
-          aria-hidden="true"
-          className="grid h-20 w-20 shrink-0 place-items-center rounded-full text-[26px] font-bold text-white ring-1 ring-[var(--line-hairline-10)]"
-          style={{ background: `hsl(${hue(author.name)} 55% 55%)` }}
-        >
-          {author.name.slice(0, 1).toUpperCase()}
-        </span>
-        <div className="flex-1">
-          <h1 className="text-[24px] font-bold text-[var(--text-primary)]">
-            {author.name}
-          </h1>
-          {author.username ? (
-            <p className="text-[14px] text-[var(--text-secondary)]">
-              @{author.username}
-            </p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <TrustBadge
-              levelName={author.trust}
-              stage={author.trustStage}
-              score={author.trustScore}
-            />
-            <span className="rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-3 py-1 text-[12px] text-[var(--text-secondary)] shadow-[var(--shadow-hairline-inset)]">
-              {cards.length} {cards.length === 1 ? "review" : "reviews"}
-            </span>
-          </div>
-        </div>
-      </section>
+    <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
+      <SiteHeader user={user} />
+      <main className="mx-auto w-full max-w-[42rem] flex-1 pb-16 md:px-6 md:pt-6">
+        <ProfileHeader
+          name={author.username ?? author.name}
+          avatarUrl={author.avatarUrl}
+          avatarHue={hue(author.name)}
+          trustLevel={author.trust}
+          meta={author.username && author.name !== author.username ? [author.name] : []}
+          stats={[
+            { value: String(cards.length), label: "Reviews written", icon: PencilSimple },
+            ...(author.trustScore
+              ? [{ value: String(Math.round(Number(author.trustScore) || 0)), label: "Honesty Score", icon: ShieldCheck }]
+              : []),
+          ]}
+          share={<ProfileShareButton name={author.name} path={`/u/${author.id}`} />}
+        />
 
-      <section className="mt-10">
-        <h2 className="text-[18px] font-bold text-[var(--text-primary)]">Reviews</h2>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
-          {cards.map((r) => (
-            <ReviewCard key={r.id} review={r} />
+        <ProfileTabs />
+
+        <ul>
+          {cards.map((r, i) => (
+            <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
           ))}
-        </div>
-      </section>
-    </PageShell>
+        </ul>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

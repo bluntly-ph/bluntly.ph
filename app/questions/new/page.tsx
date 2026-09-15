@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { AskQuestionForm } from "@/components/qa/AskQuestionForm";
-import { SiteHeader } from "@/components/site/SiteHeader";
 import { requireOnboardedUser } from "@/lib/dal";
 
 export const metadata: Metadata = {
@@ -11,11 +10,11 @@ export const metadata: Metadata = {
 export default async function NewQuestionPage() {
   const me = await requireOnboardedUser();
   return (
-    <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
-      <main className="mx-auto w-full max-w-[40rem] flex-1 px-6 py-8 lg:py-10">
-        <AskQuestionForm />
-      </main>
+    // No SiteHeader, as on /reviews/new and /sellers/rate: the "Question Page"
+    // step frames draw the composer's own header. No background of its own
+    // either, so the composer's graph paper shows (ComposerGrid).
+    <div className="flex min-h-dvh flex-col">
+      <AskQuestionForm user={{ username: me.username, avatarUrl: me.avatar_url }} />
     </div>
   );
 }

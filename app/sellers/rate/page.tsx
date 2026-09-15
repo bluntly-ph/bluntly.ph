@@ -22,8 +22,10 @@ export default async function RateSellerPage({
 
   return (
     // No SiteHeader, as on /reviews/new: the seller-review frames draw the
-    // composer's own header, and only the form knows what "back" means.
-    <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
+    // composer's own header, and only the form knows what "back" means. No
+    // background of its own: the body's shows through, and the composer's
+    // graph paper (ComposerGrid, -z-10) would be painted over by one.
+    <div className="flex min-h-dvh flex-col">
       <RateSellerForm
         key={seller?.id ?? "find"}
         user={{ username: me.username, avatarUrl: me.avatar_url }}

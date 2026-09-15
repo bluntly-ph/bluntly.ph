@@ -1,0 +1,137 @@
+import Image from "next/image";
+import Link from "next/link";
+import { DotOutline } from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
+
+export type ProfileStat = { value: string; label: string; icon: Icon };
+
+const Dot = () => <DotOutline size={12} aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />;
+
+/**
+ * The top of a reviewer's profile: Figma "Profile Page - Reviews" (5446:4328),
+ * read 2026-09-15, less its status bar and nav.
+ *
+ *   cover   a 116px band edge to edge
+ *   panel   white, from the cover down: the 80px avatar overlapping the cover
+ *           by 34px, 32px in; a share control against the right, 13px down;
+ *           the name 62px into the panel in 20px SemiBold with the trust pill
+ *           12px after it (the bluntly mark and 10px Regular brand orange on
+ *           the tint at radius 8); the meta line 4px under it in 12px Regular
+ *           at 70% split by DotOutline; then the figures 46px lower — values in
+ *           16px SemiBold brand orange with a 20px glyph, labels 12px under
+ *           them in 12px Regular, 28px apart and centred; 38px of panel below
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES: no member uploads a cover, so the band is
+ * the brand gradient; followers and a bio are not served, so the meta line
+ * carries the handle and the join date; the figures are the ones the account
+ * actually has (see the pages).
+ */
+export function ProfileHeader({
+  name,
+  avatarUrl,
+  avatarHue,
+  trustLevel,
+  meta,
+  stats,
+  share,
+  children,
+}: {
+  name: string;
+  avatarUrl: string | null;
+  /** Tint for the initial when there is no photo. */
+  avatarHue: number;
+  trustLevel: string;
+  meta: string[];
+  stats: ProfileStat[];
+  share?: React.ReactNode;
+  /** Account-specific rows under the meta line (interests, actions). */
+  children?: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div aria-hidden="true" className="h-[116px] bg-[image:var(--brand-gradient)] md:rounded-t-[16px]" />
+      <div className="relative bg-[var(--surface-card)] px-8 pb-[38px] md:rounded-b-[16px] md:shadow-[var(--shadow-card)]">
+        <span
+          className="absolute -top-[34px] left-8 grid h-20 w-20 place-items-center overflow-hidden rounded-full text-[28px] font-semibold text-white"
+          style={avatarUrl ? undefined : { background: `hsl(${avatarHue} 55% 55%)` }}
+        >
+          {avatarUrl ? (
+            <Image src={avatarUrl} alt="" fill sizes="80px" className="object-cover" />
+          ) : (
+            <span aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
+          )}
+        </span>
+        {share ? <div className="absolute right-6 top-[5px]">{share}</div> : null}
+
+        <div className="pt-[62px]">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[20px] font-semibold leading-none text-[var(--text-primary)]">{name}</h1>
+            <span className="inline-flex items-center gap-1 rounded-[8px] bg-[rgba(239,88,33,0.1)] px-2 py-1 text-[10px] leading-none text-[var(--accent-primary)]">
+              <Image src="/icon.svg" alt="" width={12} height={12} unoptimized className="h-3 w-3" />
+              {trustLevel}
+            </span>
+          </div>
+          {meta.length > 0 ? (
+            <p className="mt-1 flex flex-wrap items-center gap-1 text-[12px] leading-[18px] text-[rgba(32,32,32,0.7)]">
+              {meta.map((m, i) => (
+                <span key={m} className="inline-flex items-center gap-1">
+                  {i > 0 ? <Dot /> : null}
+                  {m}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {children}
+        </div>
+
+        {/* One row, as drawn: equal columns that stay put at every phone width
+            and let a longer label wrap inside its own column rather than push a
+            figure onto a second row. The 28px gap is the frame's; the columns
+            reach into the panel's 32px gutter so three labels fit at 390. */}
+        <dl
+          className="-mx-4 mt-[46px] grid gap-x-3"
+          style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}
+        >
+          {stats.map(({ value, label, icon: Glyph }) => (
+            <div key={label} className="flex flex-col-reverse items-center gap-3 text-center">
+              <dt className="text-[12px] leading-none text-[var(--text-primary)]">{label}</dt>
+              <dd className="flex items-center gap-1 text-[16px] font-semibold leading-none text-[var(--accent-primary)]">
+                {value}
+                <Glyph size={20} aria-hidden="true" />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The profile's section tabs, 16px under the panel: 14px Regular 60px apart,
+ * the current one in ink and the rest in #8c8c8c, over a full-bleed hairline
+ * 23px lower. Only sections that exist are listed — the frame's "Comments"
+ * has no list behind it.
+ */
+export function ProfileTabs({ statsHref }: { statsHref?: string }) {
+  return (
+    <nav aria-label="Profile sections" className="border-b border-[var(--line-hairline-10)]">
+      <ul className="flex justify-center gap-[60px] pb-[23px] pt-4 text-[14px] leading-none">
+        <li>
+          <span aria-current="page" className="text-[var(--text-primary)]">
+            Reviews
+          </span>
+        </li>
+        {statsHref ? (
+          <li>
+            <Link href={statsHref} className="text-[var(--base-gray-400)] no-underline hover:text-[var(--text-primary)]">
+              Stats
+            </Link>
+          </li>
+        ) : null}
+      </ul>
+    </nav>
+  );
+}
+
+export default ProfileHeader;

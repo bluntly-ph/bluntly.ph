@@ -2,16 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { SealCheck } from "@phosphor-icons/react/dist/ssr";
+import { Medal } from "@phosphor-icons/react/dist/ssr";
 
-/** The asker awards Best Answer (POST /questions/{qid}/answers/{aid}/best). */
-export function BestAnswerButton({
-  questionId,
-  answerId,
-}: {
-  questionId: string;
-  answerId: string;
-}) {
+/**
+ * The asker awards Best Answer (POST /questions/{qid}/answers/{aid}/best).
+ * Drawn as the Question Page's "Best Answer" line — a 16px Medal and 12px
+ * Light — so the control and the badge it produces read as one thing.
+ */
+export function BestAnswerButton({ questionId, answerId }: { questionId: string; answerId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -19,10 +17,7 @@ export function BestAnswerButton({
     if (busy) return;
     setBusy(true);
     try {
-      const res = await fetch(
-        `/api/bff/api/v1/questions/${questionId}/answers/${answerId}/best`,
-        { method: "POST" },
-      );
+      const res = await fetch(`/api/bff/api/v1/questions/${questionId}/answers/${answerId}/best`, { method: "POST" });
       if (res.ok) router.refresh();
     } finally {
       setBusy(false);
@@ -34,9 +29,9 @@ export function BestAnswerButton({
       type="button"
       onClick={mark}
       disabled={busy}
-      className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--accent-success)] disabled:opacity-60"
+      className="inline-flex cursor-pointer items-center gap-1 text-[12px] font-light leading-none text-[var(--text-primary)] hover:text-[var(--accent-success)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)] disabled:cursor-wait disabled:opacity-60"
     >
-      <SealCheck size={14} />
+      <Medal size={16} aria-hidden="true" />
       {busy ? "Marking…" : "Mark best answer"}
     </button>
   );

@@ -27,6 +27,21 @@ export const ACTION_MENU_ITEMS: readonly ActionMenuItem[] = [
   { key: "review", label: "Write a Review", href: "/reviews/new", enabled: true },
 ] as const;
 
+/**
+ * The menu as offered on a given page. On a store's page ("Seller Page -
+ * Review" draws the menu there, 4797:16411) "Rate a Seller" carries that store,
+ * so the composer opens on its rating step instead of asking which store again;
+ * /sellers/rate still resolves the id against the API before using it. The
+ * other two actions are about products and are unchanged.
+ */
+export function actionMenuItems(context: { sellerId?: string } = {}): readonly ActionMenuItem[] {
+  const sellerId = context.sellerId?.trim();
+  if (!sellerId) return ACTION_MENU_ITEMS;
+  return ACTION_MENU_ITEMS.map((item) =>
+    item.key === "seller" ? { ...item, href: `/sellers/rate?seller=${encodeURIComponent(sellerId)}` } : item,
+  );
+}
+
 /** Why a disabled action is unavailable, for assistive technology. */
 export const DISABLED_REASON: Record<string, string> = {};
 

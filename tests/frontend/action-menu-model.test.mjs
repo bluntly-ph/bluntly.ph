@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ACTION_MENU_ITEMS,
   DISABLED_REASON,
+  actionMenuItems,
   isActionable,
 } from "../../components/site/action-menu-model.ts";
 
@@ -49,6 +50,25 @@ test("no action is enabled without somewhere to go", () => {
       assert.ok(item.href, `${item.key} is enabled and must have an href`);
     }
   }
+});
+
+test("on a store's page, Rate a Seller opens that store's composer", () => {
+  const items = actionMenuItems({ sellerId: "5e11e700-0000-4000-8000-000000000001" });
+  const seller = items.find((i) => i.key === "seller");
+  assert.equal(seller.href, "/sellers/rate?seller=5e11e700-0000-4000-8000-000000000001");
+  // The other two actions are about products, so the store does not follow them.
+  assert.equal(items.find((i) => i.key === "ask").href, "/questions/new");
+  assert.equal(items.find((i) => i.key === "review").href, "/reviews/new");
+});
+
+test("without a store in view the menu is the plain one", () => {
+  assert.deepEqual(actionMenuItems(), ACTION_MENU_ITEMS);
+  assert.deepEqual(actionMenuItems({ sellerId: "" }), ACTION_MENU_ITEMS);
+});
+
+test("a store id is encoded, never spliced raw into the query", () => {
+  const seller = actionMenuItems({ sellerId: "a b&c" }).find((i) => i.key === "seller");
+  assert.equal(seller.href, "/sellers/rate?seller=a%20b%26c");
 });
 
 test("isActionable refuses an enabled item with an empty href", () => {

@@ -2,17 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/Button";
 
-/** Answer a question (POST /questions/{id}/answers via the BFF). */
-export function AnswerForm({
-  questionId,
-  canAnswer,
-}: {
-  questionId: string;
-  canAnswer: boolean;
-}) {
+/**
+ * Answer a question (POST /questions/{id}/answers via the BFF).
+ *
+ * The field is the composers' ("Question Page - Step 2", 4695:14599): white at
+ * radius 16 with the card shadow, 14px Regular on 21px lines, an orange line
+ * once there is something in it; the pill under it with its trailing arrow.
+ * A visitor is sent to log in and brought back to this question.
+ */
+export function AnswerForm({ questionId, canAnswer }: { questionId: string; canAnswer: boolean }) {
   const router = useRouter();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,8 +22,9 @@ export function AnswerForm({
 
   if (!canAnswer) {
     return (
-      <Button href="/login" size="sm" variant="secondary">
+      <Button href={`/login?next=${encodeURIComponent(`/questions/${questionId}`)}`} className="gap-1">
         Log in to answer
+        <ArrowRight size={20} aria-hidden="true" />
       </Button>
     );
   }
@@ -52,20 +55,34 @@ export function AnswerForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2">
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={3}
-        placeholder="Share what you know from actually using it…"
-        className="w-full resize-y rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-3 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]"
-      />
-      {error ? <span role="alert" className="text-[12px] text-[var(--accent-danger)]">{error}</span> : null}
-      <div>
-        <Button type="submit" size="sm" disabled={!body.trim() || busy}>
-          {busy ? "Posting…" : "Post answer"}
-        </Button>
+    <form onSubmit={submit}>
+      <div className="relative">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value.slice(0, 4000))}
+          aria-label="Your answer"
+          className={`field-sizing-content block min-h-[156px] w-full resize-none rounded-[16px] border bg-[var(--surface-card)] px-[15px] py-4 text-[14px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none focus-visible:border-[var(--accent-primary)] ${
+            body.trim() ? "border-[rgba(239,88,33,0.8)]" : "border-transparent"
+          }`}
+        />
+        {body.length === 0 ? (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-4 top-4 text-[14px] leading-[21px] text-[rgba(32,32,32,0.3)]"
+          >
+            Answer it <em>bluntly</em> here..
+          </span>
+        ) : null}
       </div>
+      {error ? (
+        <p role="alert" className="mt-2 text-[12px] leading-[18px] text-[var(--accent-danger)]">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={!body.trim() || busy} className="mt-4 gap-1">
+        {busy ? "Posting…" : "Post answer"}
+        {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
+      </Button>
     </form>
   );
 }

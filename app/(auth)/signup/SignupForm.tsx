@@ -28,13 +28,23 @@ function countdown(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Figma "Login & Signup" (5348:2789 / 5357:2935): 20px Medium over 12px Regular at 70%, 10px apart. */
+const TITLE = "text-[20px] font-medium leading-none text-[var(--text-primary)]";
+const SUBTITLE = "mt-2 text-[12px] leading-[15px] text-[rgba(32,32,32,0.7)]";
+
 /**
- * Email signup — the "Let's get started!" and "Enter the code" frames.
+ * Email signup — the "Let's get started!" and "Enter the code" frames, read
+ * from Figma 2026-09-15: the title 48px into the sheet, the field or the six
+ * code cells 30px under the subtitle, "Resend code" 12px under the cells in
+ * 12px Regular brand orange, and the pill disabled until there is something to
+ * send.
  *
  * The copy is the frames' own, with one correction: the design reads "We'll
  * text you a code" above an *email* field. Delivery is by email, so the word is
  * corrected rather than shipping a promise the product does not keep
- * (docs/DEVIATIONS.md #59).
+ * (docs/DEVIATIONS.md #59). The "New here? Sign up" switch under the field is
+ * not drawn; without it a visitor on the wrong one of the two pages has no way
+ * across.
  */
 export function SignupForm({
   purpose,
@@ -45,6 +55,7 @@ export function SignupForm({
   next?: string;
 }) {
   const [sendState, sendAction, sending] = useActionState(requestOtp, EMPTY);
+  const [email, setEmail] = useState("");
 
   return sendState.emailSent ? (
     <CodeStep email={sendState.emailSent} purpose={purpose} next={next} />
@@ -52,20 +63,16 @@ export function SignupForm({
     <form action={sendAction} className="contents">
       <AuthSheet
         footer={
-          <Button type="submit" fullWidth disabled={sending}>
+          <Button type="submit" fullWidth disabled={sending || !email.trim()}>
             {sending ? "Sending…" : "Send code"}
           </Button>
         }
       >
         <input type="hidden" name="purpose" value={purpose} />
-        <h1 className="text-[20px] font-medium text-[var(--text-primary)]">
-          Let&rsquo;s get started!
-        </h1>
-        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
-          We&rsquo;ll email you a code to verify it&rsquo;s really you
-        </p>
+        <h1 className={TITLE}>Let&rsquo;s get started!</h1>
+        <p className={SUBTITLE}>We&rsquo;ll email you a code to verify it&rsquo;s really you</p>
 
-        <div className="mt-6">
+        <div className="mt-[29px]">
           <TextField
             label="Email address"
             labelHidden
@@ -75,17 +82,20 @@ export function SignupForm({
             autoComplete="email"
             placeholder="Email address"
             required
+            fieldSize="lg"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             error={sendState.fieldErrors?.email}
           />
         </div>
 
         <FormError state={sendState} next={next} />
 
-        <p className="mt-6 text-[12px] text-[var(--text-secondary)]">
+        <p className="mt-6 text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
           {purpose === "signup" ? "Already have an account? " : "New here? "}
           <Link
             href={withNext(purpose === "signup" ? "/login" : "/signup", next)}
-            className="text-[var(--accent-primary)] underline underline-offset-2"
+            className="font-normal text-[var(--accent-primary)] no-underline underline-offset-2 hover:underline"
           >
             {purpose === "signup" ? "Log in" : "Sign up"}
           </Link>
@@ -155,12 +165,8 @@ function CodeStep({
         {/* Survives the OTP round-trip so verifyOtp can return the user to
             wherever the auth guard interrupted them. */}
         {next ? <input type="hidden" name="next" value={next} /> : null}
-        <h1 className="text-[20px] font-medium text-[var(--text-primary)]">
-          Enter the code
-        </h1>
-        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
-          Sent via your email address: {email}
-        </p>
+        <h1 className={TITLE}>Enter the code</h1>
+        <p className={SUBTITLE}>Sent via your email address: {email}</p>
         {/* BUG-018: signing up with an address that already has an account gets
             a *login* code, and previously nothing said so — the reviewer was
             left waiting for a signup that silently became something else.
@@ -168,13 +174,12 @@ function CodeStep({
             taken, because which one it is must stay unrevealed: the server
             deliberately does not disclose account existence here. */}
         {purpose === "signup" ? (
-          <p className="mt-2 text-[12px] text-[var(--text-muted)]">
-            Already have an account with this address? The code above signs you
-            in instead.
+          <p className="mt-2 text-[12px] font-light leading-[18px] text-[var(--text-muted)]">
+            Already have an account with this address? The code above signs you in instead.
           </p>
         ) : null}
 
-        <div className="mt-6">
+        <div className="mt-[29px]">
           <OtpInput error={verifyState.error} onChangeValue={setCode} />
         </div>
 
@@ -185,13 +190,9 @@ function CodeStep({
           formAction={resendAction}
           formNoValidate
           disabled={resending || waiting}
-          className="mt-3 self-start text-[12px] text-[var(--accent-primary)] underline-offset-2 hover:underline disabled:no-underline disabled:opacity-60"
+          className="mt-3 self-start text-[12px] leading-none text-[var(--accent-primary)] underline-offset-2 hover:underline disabled:no-underline disabled:opacity-60"
         >
-          {resending
-            ? "Sending…"
-            : waiting
-              ? `Resend code in ${countdown(waitSeconds)}`
-              : "Resend code"}
+          {resending ? "Sending…" : waiting ? `Resend code in ${countdown(waitSeconds)}` : "Resend code"}
         </button>
 
         {/* Every one of these was previously invisible: the step rendered only
@@ -200,7 +201,7 @@ function CodeStep({
         {resendState.error ? (
           <p
             role="alert"
-            className="mt-2 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-3 py-2 text-[12px] text-[var(--accent-danger)]"
+            className="mt-3 rounded-[12px] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-3 py-2 text-[12px] leading-[18px] text-[var(--accent-danger)]"
           >
             {resendState.error}
             {/* Gated only on the server having sent a wait, not additionally on
@@ -208,15 +209,12 @@ function CodeStep({
                 time, and two conditions meant either one silently swallowed it.
                 Falls back to the server's figure if the ticker hasn't started. */}
             {resendState.retryAfterSeconds
-              ? ` You can request another in ${countdown(
-                  waiting ? waitSeconds : resendState.retryAfterSeconds,
-                )}.`
+              ? ` You can request another in ${countdown(waiting ? waitSeconds : resendState.retryAfterSeconds)}.`
               : null}
           </p>
         ) : resendState.ok ? (
-          <p role="status" className="mt-2 text-[12px] text-[var(--text-secondary)]">
-            A new code is on its way. The code in any earlier email has stopped
-            working — use the newest one.
+          <p role="status" className="mt-3 text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+            A new code is on its way. The code in any earlier email has stopped working — use the newest one.
           </p>
         ) : null}
       </AuthSheet>
@@ -244,15 +242,12 @@ function FormError({ state, next }: { state: FormState; next?: string }) {
   return (
     <p
       role="alert"
-      className="mt-4 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[12px] text-[var(--accent-danger)]"
+      className="mt-4 rounded-[12px] bg-[color-mix(in_srgb,var(--accent-danger)_10%,transparent)] px-4 py-3 text-[12px] leading-[18px] text-[var(--accent-danger)]"
     >
       {state.code === "account_not_found" ? (
         <>
           Looks like you don&apos;t have an account yet.{" "}
-          <Link
-            href={signupHref}
-            className="font-semibold underline underline-offset-2"
-          >
+          <Link href={signupHref} className="font-semibold underline underline-offset-2">
             Create an account
           </Link>{" "}
           to get started.

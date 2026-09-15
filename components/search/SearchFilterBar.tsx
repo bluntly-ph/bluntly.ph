@@ -224,7 +224,7 @@ export function SearchFilterBar({
  * containing block for `fixed` descendants. From `md` up, where no frame draws
  * it, the same 390px panel is centred as a dialog.
  */
-function Sheet({
+export function Sheet({
   title,
   icon,
   submitLabel,
@@ -327,7 +327,7 @@ function Sheet({
   );
 }
 
-function Section({
+export function Section({
   heading,
   info,
   compact = false,
@@ -374,7 +374,7 @@ function Section({
   );
 }
 
-function Radio({
+export function Radio({
   name,
   value,
   label,

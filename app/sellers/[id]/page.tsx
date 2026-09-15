@@ -196,7 +196,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
           </section>
         ) : null}
       </main>
-      <ActionMenu />
+      <ActionMenu sellerId={seller.id} />
       <SiteFooter />
     </div>
   );

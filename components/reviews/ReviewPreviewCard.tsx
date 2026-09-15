@@ -1,37 +1,31 @@
 import Image from "next/image";
-import { ArrowFatUp, DotsThree, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { ArrowFatUp, DotOutline, DotsThree, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 /**
- * "This is what people see first" — step 7's live preview of the review card.
+ * "This is what people see first" — the live preview of the review card, on
+ * step 7 and on the All done screen.
  *
- * Measured from "Reviewer Page - Step 7.png" and "7.1.png" at 390. Typing in
- * the title field rewrites the card's headline in both frames, so this is a
- * live preview bound to the draft, not a static illustration.
+ * Figma "ReviewCard" (7082:1414) with Media and Stats on, as placed in
+ * "Reviewer Page - Step 7" (4452:748) and "Reviewer Page - All done" (4550:8882),
+ * read 2026-09-15. The same tilted stack as the landing card: three 358x172
+ * layers — the brand tint at 10% rotated +5deg, the tint flat, and the card
+ * rotated -5deg in --surface-app with the warm #bcaca6 shadow — and inside,
+ * 12px padding and a 12px gap between the body and a 100px media square at
+ * radius 16. The body: a 28px avatar and the handle in 12px Light, the age in
+ * 10px ExtraLight; the headline in 12px Bold; the stats — a 16px ArrowFatUp in
+ * the success green, counts in 12px Light split by a 12px DotOutline. A 24px
+ * DotsThree sits 12px from the top right.
  *
- *   white card   x16..372, ~356x158, rotated about -4deg (its bottom edge
- *                falls 14px across 160px of width), page-coloured with the
- *                card shadow, 16px radius
- *   peach card   the same box behind it, tilted the other way, rgb(242,227,220)
- *   avatar       34px circle, top left
- *   shield       12x13 at rgb(55,113,200) — accent-trust, to the unit
- *   headline     bold, two lines, "<product> - <the title being typed>"
- *   upvote arrow 13x13 at rgb(31,175,56) — accent-success, to the unit
- *   thumb        ~105px square on the right, 12px radius: the step 6 photo
+ * Bound to the draft: typing the title rewrites the headline, and the photo is
+ * the one from step 6.
  *
- * WHAT IS NOT COPIED FROM THE FRAME, and why:
- *
- * The frame fills the card with sample engagement — "100" beside the name,
- * "5h", "14.8k", "3.2k comments" — and floats two pills over it, "Earned
- * P45.50 today" and a quoted question that changes between the two frames
- * ("How noisy is it?" -> "Nice review!"). Those are mock data. This review has
- * not been submitted, so it has no votes, no comments, no age and no
- * earnings, and putting a peso figure on the reviewer's own screen would be
- * stating something untrue rather than styling something true.
- *
- * So the card is 1:1 in layout and bound to what the reviewer actually has —
- * their name, avatar, product, title and photo — with the counters at their
- * real values and the two pills left out. Everything else here is the frame's.
- * If the owner wants the pills back as decoration, they are a few lines.
+ * INTENTIONAL PRODUCT DIFFERENCE: the frames fill the card with sample
+ * engagement — an Honesty Score of 100, "5h", "14.8k", "3.2k comments" — and
+ * float two pills over it, "Earned P45.50 today" and a reader's question. This
+ * review has not been published, so it has no votes, comments, earnings or
+ * questions; the counters show their real zero, the age says "now", and the
+ * pills are not drawn. The reviewer's score is not in the composer's session
+ * data, so the shield is left out rather than shown with a made-up number.
  */
 export function ReviewPreviewCard({
   username,
@@ -39,82 +33,58 @@ export function ReviewPreviewCard({
   productName,
   title,
   photoUrl,
+  className = "mt-10",
 }: {
   username: string | null;
   avatarUrl: string | null;
   productName: string | null;
   title: string;
   photoUrl: string | null;
+  className?: string;
 }) {
-  const headline = [productName, title.trim()].filter(Boolean).join(" – ");
+  const trimmed = title.trim();
+  const layer = "absolute h-[172px] w-[358px] rounded-[12px] bg-[rgba(239,88,33,0.1)]";
 
   return (
-    <div className="relative mt-10 h-[190px]">
-      {/* The tilted card peeking out behind, top-left and bottom-right. */}
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 top-[6px] h-[158px] rotate-[3deg] rounded-[var(--radius-md)] bg-[rgb(242,227,220)]"
-      />
+    // The frames place this group 9px left of the content edge.
+    <div className={`relative -ml-[9px] h-[209px] ${className}`}>
+      <div aria-hidden="true" className={`${layer} left-[11px] top-[21px] rotate-[5deg]`} />
+      <div aria-hidden="true" className={`${layer} left-[11px] top-5`} />
 
-      <div className="absolute inset-x-0 top-0 h-[158px] -rotate-[4deg] rounded-[var(--radius-md)] bg-[var(--surface-app)] p-4 shadow-[var(--shadow-card)]">
-        <div className="flex gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="relative h-[34px] w-[34px] shrink-0 overflow-hidden rounded-full bg-[var(--base-gray-200)]">
-                {avatarUrl ? (
-                  <Image src={avatarUrl} alt="" fill sizes="34px" className="object-cover" />
-                ) : null}
-              </span>
-              <span className="truncate text-[14px] font-medium text-[var(--text-primary)]">
-                {username ?? "you"}
-              </span>
-              <span aria-hidden="true" className="text-[var(--text-muted)]">
-                &middot;
-              </span>
-              <ShieldCheck
-                size={13}
-                weight="fill"
-                aria-hidden="true"
-                className="shrink-0 text-[var(--accent-trust)]"
-              />
-              <span className="text-[12px] text-[var(--text-secondary)]">now</span>
-            </div>
-
-            <p className="mt-2 line-clamp-2 text-[15px] font-bold leading-[20px] text-[var(--text-primary)]">
-              {headline || "Your interesting title here…"}
-            </p>
-
-            <p className="mt-2 flex items-center gap-1.5 text-[13px] text-[var(--text-primary)]">
-              <ArrowFatUp
-                size={13}
-                weight="fill"
-                aria-hidden="true"
-                className="text-[var(--accent-success)]"
-              />
-              0
-              <span aria-hidden="true" className="text-[var(--text-muted)]">
-                &middot;
-              </span>
-              0 comments
-            </p>
+      <div className="absolute left-[7px] top-[15px] flex h-[172px] w-[358px] -rotate-[5deg] items-center gap-3 overflow-hidden rounded-[12px] bg-[var(--surface-app)] p-3 text-[var(--text-primary)] shadow-[0px_4px_4px_0px_#bcaca6]">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 self-stretch overflow-hidden">
+          <div className="flex items-center gap-2">
+            <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-[var(--base-gray-200)]">
+              {avatarUrl ? <Image src={avatarUrl} alt="" fill sizes="28px" className="object-cover" /> : null}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[12px] font-light leading-4">{username ?? "you"}</span>
+              <span className="text-[10px] font-extralight leading-[15px]">now</span>
+            </span>
           </div>
 
-          {/* The frame's overflow affordance. Drawn, not wired: this is a
-              preview of a review that does not exist yet, so there is nothing
-              for a menu to act on. */}
-          <DotsThree
-            size={20}
-            weight="bold"
-            aria-hidden="true"
-            className="absolute right-3 top-3 text-[var(--text-muted)]"
-          />
+          <p className="line-clamp-3 text-[12px] font-bold leading-[18px]">
+            {productName ? `${productName} - ` : ""}
+            {trimmed || "Your interesting title here..."}
+          </p>
 
-          <span className="relative h-[105px] w-[105px] shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--base-gray-200)]">
-            {photoUrl ? (
-              <Image src={photoUrl} alt="" fill sizes="105px" className="object-cover" />
-            ) : null}
-          </span>
+          <p className="flex items-center gap-[3px] text-[12px] font-light leading-none">
+            <ArrowFatUp size={16} weight="fill" aria-hidden="true" className="text-[var(--accent-success)]" />
+            0
+            <DotOutline size={12} aria-hidden="true" className="text-[var(--base-gray-400)]" />0 comments
+          </p>
         </div>
+
+        <span className="relative grid h-[100px] w-[100px] shrink-0 place-items-center overflow-hidden rounded-[16px] bg-[#e1e1e1]">
+          {photoUrl ? (
+            <Image src={photoUrl} alt="" fill sizes="100px" className="object-cover" />
+          ) : (
+            <ImageSquare size={28} weight="light" aria-hidden="true" className="text-[var(--base-gray-400)]" />
+          )}
+        </span>
+
+        {/* Drawn, not wired: there is nothing yet for a menu to act on. */}
+        <DotsThree size={24} aria-hidden="true" className="absolute right-3 top-3" />
       </div>
     </div>
   );

@@ -10,6 +10,13 @@ import { markInteraction } from "@/lib/reading-telemetry-events";
  * mutates on submit, going through the BFF (`/api/bff/...`) so the session token
  * stays on the server.
  *
+ * NO FIGMA FRAME: the file has no report component. It is set as the file's
+ * sheets are ("Sort", 1591:5408) — radius 20 in the page colour, the glyph and
+ * a 16px Bold title over a 30% hairline, 20px ring radios filled brand when
+ * chosen with 16px Light labels, the composers' 14px field, and the text
+ * action against a 38px pill — so reporting reads as part of the same product.
+ * The pill stays danger red: sending a report is not a neutral action.
+ *
  * The reasons mirror the backend `ModerationReason` enum exactly — a value the
  * API doesn't know is a 422, so these are not free text.
  *
@@ -49,6 +56,11 @@ const REASONS: { value: string; label: string; hint: string }[] = [
 ];
 
 type State = "idle" | "sending" | "done";
+
+const FOCUS =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+const TEXT_ACTION = `cursor-pointer text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)] ${FOCUS}`;
+const PILL = `h-[38px] cursor-pointer rounded-[20px] px-3 text-[16px] leading-none tracking-[0.8px] text-[var(--text-on-brand)] ${FOCUS}`;
 
 export function ReportDialog({
   reviewId,
@@ -134,78 +146,73 @@ export function ReportDialog({
         // dialog (BUG-012) instead of there being a second report path with its
         // own copy of the reasons and the self-report rule.
         id={`report-trigger-${reviewId}`}
-        className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-2.5 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--line-hairline-10)] hover:text-[var(--accent-danger)]"
+        className={`inline-flex h-8 cursor-pointer items-center gap-1 rounded-[16px] border border-[var(--text-primary)] px-[11px] text-[12px] font-light leading-none text-[var(--text-primary)] hover:border-[var(--accent-danger)] hover:text-[var(--accent-danger)] ${FOCUS}`}
       >
-        <Flag size={16} />
+        <Flag size={20} weight="light" aria-hidden="true" />
         Report
       </button>
 
       <dialog
         ref={dialogRef}
         aria-labelledby="report-dialog-title"
-        className="m-auto w-[min(30rem,calc(100vw-2rem))] rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-0 text-[var(--text-primary)] shadow-[var(--shadow-sheet)] backdrop:bg-black/40"
+        className="m-auto max-h-[90dvh] w-[min(390px,calc(100vw-2rem))] overflow-y-auto rounded-[20px] bg-[var(--surface-app)] p-0 text-[var(--text-primary)] shadow-[var(--shadow-sheet)] backdrop:bg-[var(--overlay-scrim-25)]"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] p-5">
-          <div>
-            <h2
-              id="report-dialog-title"
-              className="text-[16px] font-semibold text-[var(--text-primary)]"
-            >
+        <div className="flex items-start gap-2 px-6 pt-6">
+          <Flag size={20} aria-hidden="true" className="shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 id="report-dialog-title" className="mt-0.5 text-[16px] font-bold leading-none">
               Report this review
             </h2>
-            <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
-              A moderator will look at it. Your name isn&rsquo;t shown to the
-              reviewer.
+            <p className="mt-2 text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+              A moderator will look at it. Your name isn&rsquo;t shown to the reviewer.
             </p>
           </div>
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}
             aria-label="Close"
-            className="rounded-full p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--line-hairline-10)]"
+            className={`-my-2 -mr-2 grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full hover:bg-[var(--line-hairline-10)] ${FOCUS}`}
           >
-            <X size={18} />
+            <X size={28} aria-hidden="true" />
           </button>
         </div>
+        <hr className="mx-6 mt-[22px] border-0 border-t border-[var(--line-hairline-30)]" />
 
         {state === "done" ? (
-          <div className="p-5">
-            <p className="text-[14px] text-[var(--text-primary)]">
-              Thanks — your report is with the moderators.
-            </p>
-            <button
-              type="button"
-              onClick={() => dialogRef.current?.close()}
-              className="mt-4 inline-flex h-10 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--accent-primary)] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-[var(--accent-primary-strong)]"
-            >
-              Done
-            </button>
+          <div className="px-6 pb-8 pt-[15px]">
+            <p className="text-[14px] leading-[21px]">Thanks — your report is with the moderators.</p>
+            <div className="mt-[38px] flex justify-end">
+              <button
+                type="button"
+                onClick={() => dialogRef.current?.close()}
+                className={`${PILL} bg-[var(--accent-primary)] hover:bg-[var(--accent-primary-strong)]`}
+              >
+                Done
+              </button>
+            </div>
           </div>
         ) : (
-          <form onSubmit={submit} className="p-5">
-            <fieldset>
-              <legend className="text-[13px] font-medium text-[var(--text-primary)]">
-                What&rsquo;s wrong with it?
-              </legend>
-              <div className="mt-3 flex flex-col gap-1">
+          <form onSubmit={submit} className="px-6 pb-8 pt-[15px]">
+            <fieldset className="min-w-0">
+              <legend className="text-[16px] font-semibold leading-none">What&rsquo;s wrong with it?</legend>
+              <div className="mt-6 flex flex-col gap-[14px]">
                 {REASONS.map((r) => (
-                  <label
-                    key={r.value}
-                    className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-sm)] p-2 transition-colors hover:bg-[var(--line-hairline-10)]"
-                  >
+                  <label key={r.value} className="relative flex cursor-pointer items-start gap-3">
                     <input
                       type="radio"
                       name="reason"
                       value={r.value}
                       checked={reason === r.value}
                       onChange={() => setReason(r.value)}
-                      className="mt-1 accent-[var(--accent-primary)]"
+                      className="peer sr-only"
                     />
-                    <span>
-                      <span className="block text-[13px] font-medium text-[var(--text-primary)]">
-                        {r.label}
-                      </span>
-                      <span className="block text-[12px] text-[var(--text-muted)]">
+                    <span
+                      aria-hidden="true"
+                      className="h-5 w-5 shrink-0 rounded-full border border-[var(--line-hairline-30)] peer-checked:bg-[var(--accent-primary)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--accent-primary)]"
+                    />
+                    <span className="min-w-0 pt-0.5">
+                      <span className="block text-[16px] font-light leading-none">{r.label}</span>
+                      <span className="mt-1.5 block text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
                         {r.hint}
                       </span>
                     </span>
@@ -214,12 +221,9 @@ export function ReportDialog({
               </div>
             </fieldset>
 
-            <label className="mt-4 block">
-              <span className="text-[13px] font-medium text-[var(--text-primary)]">
-                Anything to add?{" "}
-                <span className="font-normal text-[var(--text-muted)]">
-                  (optional)
-                </span>
+            <label className="mt-7 block">
+              <span className="text-[16px] font-semibold leading-none">
+                Anything to add? <span className="text-[12px] font-light text-[rgba(32,32,32,0.7)]">(optional)</span>
               </span>
               <textarea
                 value={notes}
@@ -227,28 +231,24 @@ export function ReportDialog({
                 maxLength={1000}
                 rows={3}
                 placeholder="What should the moderator look at?"
-                className="mt-1.5 w-full resize-y rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-3 text-[13px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
+                className="mt-3 block min-h-[96px] w-full resize-y rounded-[16px] border border-transparent bg-[var(--surface-card)] px-[15px] py-3 text-[14px] leading-[21px] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:border-[var(--accent-primary)]"
               />
             </label>
 
             {error ? (
-              <p role="alert" className="mt-3 text-[12px] text-[var(--accent-danger)]">
+              <p role="alert" className="mt-3 text-[12px] leading-[18px] text-[var(--accent-danger)]">
                 {error}
               </p>
             ) : null}
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => dialogRef.current?.close()}
-                className="inline-flex h-10 items-center justify-center rounded-[var(--radius-pill)] px-5 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--line-hairline-10)]"
-              >
+            <div className="mt-[38px] flex items-center justify-between">
+              <button type="button" onClick={() => dialogRef.current?.close()} className={TEXT_ACTION}>
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!reason || state === "sending"}
-                className="inline-flex h-10 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--accent-danger)] px-5 text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+                className={`${PILL} bg-[var(--accent-danger)] disabled:cursor-not-allowed disabled:bg-[var(--disabled-surface)] disabled:text-[var(--disabled-text)]`}
               >
                 {state === "sending" ? "Sending…" : "Send report"}
               </button>

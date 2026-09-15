@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { DotOutline, Medal, QuestionMark } from "@phosphor-icons/react/dist/ssr";
 
+import { splitQuestionBody } from "@/components/qa/ask-question-model";
 import { questionSubject } from "@/components/qa/question-subject-model";
 import type { Question } from "@/lib/qa";
+import { relativeTime } from "@/lib/relative-time";
 
 /**
  * A question in the Questions tab of /search: Figma "QuestionPreviewCard"
@@ -13,6 +15,9 @@ import type { Question } from "@/lib/qa";
  * ExtraLight, the product in 14px Bold, the question quoted in 14px Italic
  * within 226px, and the answer summary — 16px QuestionMark and Medal glyphs
  * with 12px Light labels, split by a 12px DotOutline.
+ *
+ * The quote is the asker's words only: the "Looking for:" line the composer
+ * adds is read off (ask-question-model) rather than quoted as if they wrote it.
  *
  * INTENTIONAL PRODUCT DIFFERENCES, because no data behind them exists and
  * inventing it would make the card lie:
@@ -28,24 +33,9 @@ const Dot = () => (
   <DotOutline size={12} aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
 );
 
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.round(days / 7);
-  if (weeks < 52) return `${weeks}w ago`;
-  return `${Math.round(weeks / 52)}y ago`;
-}
-
 export function QuestionResultRow({ question }: { question: Question }) {
   const answers = question.answer_count;
+  const { text } = splitQuestionBody(question.body);
 
   return (
     <li className="border-b border-[var(--line-hairline-10)]">
@@ -60,7 +50,7 @@ export function QuestionResultRow({ question }: { question: Question }) {
         <h2 className="text-[14px] font-bold leading-[21px]">{questionSubject(question).label}</h2>
 
         <p className="line-clamp-2 text-[14px] italic leading-[21px] max-md:max-w-[226px]">
-          “{question.body}”
+          “{text}”
         </p>
 
         <p className="flex flex-wrap items-center gap-1 text-[12px] font-light leading-none">

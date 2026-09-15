@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -15,17 +14,19 @@ import {
 import {
   ArrowRight,
   Check,
+  Cloud,
   Equals,
   Image as ImageIcon,
-  MagnifyingGlass,
-  Link as LinkIcon,
   Plus,
+  QuestionMark,
   Star,
+  User,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
-import { ComposerHeader } from "@/components/reviews/ComposerHeader";
+import { ComposerGrid, ComposerHeader } from "@/components/reviews/ComposerHeader";
+import { CurrentlyReviewingCard } from "@/components/reviews/CurrentlyReviewingCard";
 import {
   MAX_TITLE,
   blockerFor,
@@ -34,31 +35,20 @@ import {
   counterLabel,
 } from "@/components/reviews/composer-gate-model";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
-import { ProductStepDecor } from "@/components/reviews/ProductStepDecor";
 import { DisclosureField } from "@/components/reviews/DisclosureField";
 import type { MaterialRelationship } from "@/components/reviews/disclosure-model";
 import { PriceCaptureCard } from "@/components/reviews/PriceCaptureCard";
 import { pricePayload, type PricePlatform } from "@/components/reviews/price-capture-model";
 import { ReceiptField } from "@/components/reviews/ReceiptField";
+import { LatestStats } from "@/components/reviews/LatestStats";
+import { ProductPicker, type PickedProduct } from "@/components/reviews/ProductPicker";
 import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
+import { DONE_CARDS, TiltedRatingCards } from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
-import { prepareImageForUpload, usablePhoto } from "@/lib/image";
+import { prepareImageForUpload } from "@/lib/image";
 
-type Product = {
-  id: string;
-  canonical_name: string | null;
-  category: string | null;
-  /**
-   * The product photo the catalogue already stores.
-   *
-   * QA-001: the picker drew a grey square for every result and never asked for
-   * this, so a reviewer choosing between "Anker 737" and "Aukey 10000mAh" had
-   * two identical blank tiles to tell them apart. `ProductOut` has served
-   * `image_url` all along; only this type omitted it.
-   */
-  image_url: string | null;
-};
+type Product = PickedProduct;
 type Verdict = "yes_absolutely" | "it_depends" | "hard_pass";
 
 const VERDICTS: {
@@ -66,6 +56,8 @@ const VERDICTS: {
   label: string;
   hint: string;
   ring: string;
+  /** The glyph's own colour in Figma 4435:1092: green check, black equals, red X. */
+  iconColor: string;
   Icon: Icon;
 }[] = [
   {
@@ -73,6 +65,7 @@ const VERDICTS: {
     label: "Yes, absolutely!",
     hint: "You'd tell a friend to buy it.",
     ring: "var(--accent-success)",
+    iconColor: "var(--accent-success)",
     Icon: Check,
   },
   {
@@ -80,6 +73,7 @@ const VERDICTS: {
     label: "It depends",
     hint: "Right for some people, wrong for others.",
     ring: "var(--accent-star)",
+    iconColor: "var(--base-black)",
     Icon: Equals,
   },
   {
@@ -87,14 +81,15 @@ const VERDICTS: {
     label: "Hard pass",
     hint: "You'd tell a friend to save their money.",
     ring: "var(--accent-danger)",
+    iconColor: "var(--accent-danger)",
     Icon: X,
   },
 ];
 
 /**
  * The rating row is drawn as an arc: same-size stars whose vertical offset dips
- * away from the middle. Measured from "Reviewer Page - Step 3.1.png", where the
- * five 45x44 stars sit at y 373, 362, 357, 362, 373.
+ * away from the middle. Figma "Reviewer Page - Step 3.1" (4435:1344): five 52px
+ * stars on a 60px pitch at y 370, 359, 354, 359, 370.
  */
 const STAR_ARC = [16, 5, 0, 5, 16] as const;
 
@@ -353,6 +348,16 @@ const STEP_COPY: Record<number, { title: string; blurb: string }> = {
   },
 };
 
+/**
+ * Where each step's body starts under its blurb's 18px line, measured against
+ * its frame: the product card at y174, the verdict bubble at 190, the pros card,
+ * photo card and title field at 204 / 204 / 186, the crowd at 192. The stars
+ * carry their own offset.
+ */
+const BODY_TOP = ["mt-[19px]", "mt-[35px]", "", "mt-[31px]", "mt-[19px]", "mt-[31px]", "mt-[31px]"] as const;
+
+type Submitted = { productName: string | null; title: string; photoUrl: string | null };
+
 const STEPS = [
   "Your experience",
   "Your verdict",
@@ -367,6 +372,8 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [product, setProduct] = useState<Product | null>(null);
   const [phase, setPhase] = useState<"product" | "steps" | "done">("product");
+  // What was sent, for the All done screen's preview once the draft is cleared.
+  const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const router = useRouter();
 
   const hydrated = useHydrated();
@@ -421,18 +428,28 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
 
   return (
     <>
-      <ComposerHeader user={user} onBack={back.run} backLabel={back.label} />
+      <ComposerHeader
+        user={user}
+        onBack={back.run}
+        backLabel={back.label}
+        progress={phase === "done" ? 1 : phase === "steps" && product ? (step + 1) / STEPS.length : 0}
+      />
 
+      <ComposerGrid />
       {/* pb clears the bottom-anchored Continue (56px pill + 32px inset). */}
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-3 pb-[120px] sm:px-6">
+      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-4 pb-[120px] sm:px-6">
         {phase === "done" ? (
-          <DoneStep />
+          <DoneStep user={user} submitted={submitted} />
         ) : (
           <>
             <ResumeList drafts={resumable} onResume={resume} onDiscard={discard} />
 
             {phase === "product" ? (
-              <ProductStep
+              <ProductPicker
+                title="What did you buy?"
+                blurb="Find the product. Your review will matter."
+                placeholder="e.g Jisulife Fanlife 9"
+                searchLabel="Search for the product you bought"
                 onPick={(p) => {
                   setProduct(p);
                   patch({ step: 0 });
@@ -446,8 +463,9 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
                 patch={patch}
                 user={user}
                 onChangeProduct={() => setPhase("product")}
-                onDone={() => {
+                onDone={(snapshot) => {
                   clearDraft(draftSlot(product));
+                  setSubmitted(snapshot);
                   setPhase("done");
                 }}
               />
@@ -571,14 +589,10 @@ const CON_SUGGESTIONS = [
 ];
 
 /**
- * Step 7's title field.
- *
- * Measured from "Reviewer Page - Step 7.png" at 390:
- *
- *   field        x16..373 (358 wide), y228..280 — 53 tall, white, 16px radius
- *   placeholder  "Your interesting title here...", 15px, 17px in from the
- *                left, ink-800 at ~.30 (darkest pixel 189 over white)
- *   counter      "0/30 characters", 11px, right-aligned to the field's edge
+ * Step 7's title field: Figma "Reviewer Page - Step 7" (4452:748), read
+ * 2026-09-15 — a 53px white field at radius 16, the placeholder "Your
+ * interesting title here..." 16px in, in 14px Regular at 30% ink, and the
+ * counter 4px under it, right-aligned, in 10px Light.
  *
  * There is no visible label — the frame shows placeholder text only — so the
  * real label is present and hidden rather than dropped: a placeholder is not
@@ -603,9 +617,9 @@ function TitleField({
         onChange={(e) => onChange(e.target.value.slice(0, MAX_TITLE))}
         autoFocus
         placeholder="Your interesting title here..."
-        className={`h-[53px] w-full rounded-[var(--radius-md)] bg-[var(--surface-card)] px-[17px] ${CHIP_FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+        className="h-[53px] w-full rounded-[16px] bg-[var(--surface-card)] px-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]"
       />
-      <p className={`mt-2 text-right ${CHIP_FACE} text-[11px] text-[var(--text-secondary)]`}>
+      <p className="mt-1 text-right text-[10px] font-light leading-none text-[var(--text-primary)]">
         {value.length}/{MAX_TITLE} characters
       </p>
     </div>
@@ -615,18 +629,12 @@ function TitleField({
 /**
  * Step 6: one upload target, the whole card.
  *
- * Measured from "Reviewer Page - Step 6.png" / "6.1.png" at 390:
- *
- *   card    x16..373 (358 wide), y246..635 — 390 tall, white, 16px radius
- *   icon    52x44 at pure black, centred, top edge 100px into the card.
- *           Phosphor's Image at fill weight draws well inside its box, so
- *           that is size 64 — at 52 it renders 42x36
- *   line 1  "Tap to upload your product photo", 15px ink-800, y409
- *   line 2  "Use your own photo of the product", 13px, y434, and light:
- *           the darkest pixel is 197 over white, so ink-800 at ~.26
- *   skip    "Skip - I'll add a photo later", 14px ink-800, centred, 22px
- *           under the card
- *   6.1     the photo covers the card edge to edge, same rounding
+ * Figma "Reviewer Page - Step 6" (4443:555), read 2026-09-15: a 390px white
+ * card at radius 16; the 64px Image glyph in black 90px down; "Tap to upload
+ * your product photo" in 14px Regular 8px under it and "Use your own photo of
+ * the product" in 12px Regular at 30% ink 11px lower; "Skip – I'll add a photo
+ * later" in 14px Regular 20px under the card. In 6.1 the photo covers the card
+ * edge to edge, same rounding.
  *
  * Continue is grey in 6 and orange in 6.1, so the photo gates the step and
  * Skip is the way past it.
@@ -694,22 +702,22 @@ function ProductPhotoCard({
         onClick={() => input.current?.click()}
         disabled={busy}
         aria-label={url ? "Replace your product photo" : "Upload your product photo"}
-        className="relative block h-[390px] w-full cursor-pointer overflow-hidden rounded-[var(--radius-md)] bg-[var(--surface-card)] shadow-[var(--shadow-card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)] disabled:cursor-wait"
+        className="relative block h-[390px] w-full cursor-pointer overflow-hidden rounded-[16px] bg-[var(--surface-card)] shadow-[var(--shadow-card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)] disabled:cursor-wait"
       >
         {url ? (
           <Image src={url} alt="" fill sizes="358px" className="object-cover" />
         ) : (
-          <span className="flex h-full flex-col items-center pt-[100px]">
+          <span className="flex h-full flex-col items-center pt-[90px]">
             <ImageIcon
               size={64}
               weight="fill"
               aria-hidden="true"
               className="text-[var(--base-black)]"
             />
-            <span className={`mt-[14px] ${CHIP_FACE} text-[15px] text-[var(--text-primary)]`}>
+            <span className="mt-2 text-[14px] leading-none text-[var(--text-primary)]">
               {busy ? "Uploading…" : "Tap to upload your product photo"}
             </span>
-            <span className={`mt-[6px] ${CHIP_FACE} text-[13px] text-[rgba(32,32,32,0.26)]`}>
+            <span className="mt-[11px] text-[12px] leading-none text-[rgba(32,32,32,0.3)]">
               Use your own photo of the product
             </span>
           </span>
@@ -730,7 +738,7 @@ function ProductPhotoCard({
       <button
         type="button"
         onClick={onSkip}
-        className={`mt-[22px] block w-full cursor-pointer text-center ${CHIP_FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}
+        className="mt-5 block w-full cursor-pointer text-center text-[14px] leading-none text-[var(--text-primary)] underline-offset-4 hover:underline"
       >
         Skip &ndash; I&apos;ll add a photo later
       </button>
@@ -760,86 +768,87 @@ function ProductPhotoCard({
 }
 
 /**
- * The clouds behind step 3's stars.
- *
- * "Reviewer Page - Step 3.1.png" scatters outlined clouds across the whole
- * step. An autocorrelation over the band finds no repeat — they are placed by
- * hand, not tiled — so the layer is lifted from the frame the way the crowd
- * tile is: alpha = (242 - value) / 210, keeping only pixels under 232 so the
- * export's layout grid drops out, with the star row masked off. Composited
- * back over the page colour it reproduces the frame's clouds exactly.
- *
- * Frame coordinates, so MOBILE ONLY, like ProductStepDecor: the artwork spans
- * y247..757 of a 390-wide frame — down to the row above the Continue pill,
- * which starts at y759 — putting its top 205px below the header rule. There is no desktop frame for this step to place it against.
+ * The clouds behind step 3's stars: Figma "Reviewer Page - Step 3.1" (4435:1344)
+ * places eleven Icon/Cloud glyphs — Phosphor Cloud, 24 to 64px, several turned
+ * 180deg — in a 1px outline at 20% ink. Coordinates are the frame's, relative
+ * to the step body, which starts under the blurb. MOBILE ONLY: there is no
+ * desktop frame to place them against. Decorative and unclickable.
  */
+const CLOUDS: { left: number; top: number; size: number; flip?: boolean }[] = [
+  { left: 24, top: 74, size: 32 },
+  { left: -2, top: 325, size: 32 },
+  { left: 30, top: 300, size: 52 },
+  { left: 62, top: 36, size: 64 },
+  { left: 255, top: 213, size: 64 },
+  { left: 321, top: 277, size: 32, flip: true },
+  { left: 341, top: 74, size: 32, flip: true },
+  { left: 96, top: 309, size: 24, flip: true },
+  { left: 243, top: 443, size: 32, flip: true },
+  { left: 191, top: 398, size: 52, flip: true },
+  { left: 153, top: 483, size: 24 },
+];
+
 function RatingStepDecor() {
   return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute -left-4 -right-4 -z-10 hidden h-[511px] select-none bg-[length:390px_511px] bg-top bg-no-repeat max-sm:block"
-      style={{
-        // The artwork starts 205px below the header rule in the frame. Measured
-        // on the deployed page, the layer landed 92px lower than that; the
-        // cluster tops now line up at 205 / 382 / 440 / 565 / 645 / 714.
-        top: "-107px",
-        backgroundImage: "url(/patterns/step3-clouds.png)",
-      }}
-    />
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 hidden select-none max-sm:block">
+      {CLOUDS.map((c, i) => (
+        <Cloud
+          key={i}
+          size={c.size}
+          weight="thin"
+          className={`absolute text-[rgba(32,32,32,0.2)] ${c.flip ? "rotate-180" : ""}`}
+          style={{ left: c.left, top: c.top }}
+        />
+      ))}
+    </span>
   );
 }
 
 /**
- * The crowd behind step 5's mascot.
- *
- * "Reviewer Page - Step 5.png" fills y238..419 edge to edge with a lattice of
- * outlined person glyphs. An autocorrelation over a clean 105x143 patch of it
- * puts the repeat at 41x31 (41x62 and 82x31 score no better, being two copies
- * of the same cell), with the seam at x31,y238.
- *
- * The tile in public/patterns is that cell, lifted straight out of the frame
- * rather than redrawn from an eyeballed circle-and-arc: each pixel's alpha is
- * (242 - value) / 210, i.e. how much ink-800 the export laid over the page
- * colour, with anything under 4% dropped to erase the faint layout grid the
- * export carries. Tiled back over #f2f2f2 it reproduces the band seamlessly.
- *
- * Purely decorative: hidden from assistive tech, and behind everything.
+ * The crowd behind step 5's mascot: Figma "Reviewer Page - Step 5" (4519:5414)
+ * fills a 192px band edge to edge with Icon/User — Phosphor User at 32px in a
+ * 1px outline at 30% ink — six rows of twenty, about 20px apart, every other
+ * figure dropped 5px. Drawn from the glyph rather than a texture. Decorative.
  */
+const CROWD_ROWS = [0, 32, 62, 93, 125, 155];
+
 function CrowdBand() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute -left-4 -right-4 top-0 -z-10 h-[182px] select-none bg-repeat sm:-left-6 sm:-right-6"
-      style={{
-        backgroundImage: "url(/patterns/crowd.png)",
-        backgroundSize: "41px 31px",
-      }}
-    />
+      className="pointer-events-none absolute -left-4 -right-4 top-0 -z-10 h-[192px] select-none overflow-hidden sm:-left-6 sm:-right-6"
+    >
+      {CROWD_ROWS.flatMap((top, row) =>
+        Array.from({ length: 21 }, (_, i) => (
+          <User
+            key={`${row}-${i}`}
+            size={32}
+            weight="thin"
+            className="absolute text-[rgba(32,32,32,0.3)]"
+            style={{ left: (row % 3 === 0 ? -14 : -13) + i * 20.3, top: top + (i % 2 ? 5 : 0) }}
+          />
+        )),
+      )}
+    </span>
   );
 }
 
-
 /**
- * The frame's big write-it-here card, shared by step 1 and step 5.
- *
- * They are the same control in the pack — "Reviewer Page - Step 1.1.png" and
- * "Step 5.png" both draw a 358x231 white card at 12px radius with 20px of
- * padding, the placeholder "Write it *bluntly* here..." with the one word in
- * italics, 15px text on a 21px line, and a right-aligned counter under it.
+ * The frame's big write-it-here card, shared by step 1 and step 5: Figma
+ * "Reviewer Page - Step 1.1" (4435:863) and "Step 5" (4519:5414), read
+ * 2026-09-15 — a 358x231 white card at radius 16 with the card shadow, the text
+ * 20px in and 16px down in 14px Regular on a 21px line, the placeholder "Write
+ * it *bluntly* here..." at 30% ink with the one word in italics, and the
+ * counter 4px under the card, right-aligned, in 10px Light.
  *
  * The counter is the step's gate written down. Empty, both read "30
- * characters remaining" in grey; satisfied, step 1 reads "Solid review!" and
- * step 5 "I'm sure someone will appreciate this", both in orange, and both
- * frames turn Continue from grey to orange at the same moment. So 30 is a
- * floor, not a limit.
+ * characters remaining"; satisfied, step 1 reads "Solid review!" and step 5
+ * "I'm sure someone will appreciate this", in orange, and Continue turns orange
+ * at the same moment. So 30 is a floor, not a limit.
  *
- * The card grows with the text: step 1.2's is well past 231px, while step
- * 5.1's four lines leave it at the minimum. `field-sizing: content` does that
- * without measuring scrollHeight in an effect, and where it is unsupported
- * the card stays at its minimum and scrolls.
- *
- * The italic word rules out the placeholder attribute, which is plain text
- * only, so it is drawn as an overlay — and the real label stays, hidden.
+ * The card grows with the text (`field-sizing: content`); where that is
+ * unsupported it stays at its minimum and scrolls. The italic word rules out
+ * the placeholder attribute, so it is an overlay, and the real label stays.
  */
 function BluntlyTextarea({
   label,
@@ -869,12 +878,12 @@ function BluntlyTextarea({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoFocus={autoFocus}
-          className={`field-sizing-content block min-h-[231px] w-full resize-none rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+          className="field-sizing-content block min-h-[231px] w-full resize-none rounded-[16px] bg-[var(--surface-card)] px-5 py-4 text-[14px] leading-[21px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]"
         />
         {value.length === 0 ? (
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute left-5 top-5 ${CHIP_FACE} text-[15px] leading-[21px] text-[var(--text-muted)]`}
+            className="pointer-events-none absolute left-5 top-4 text-[14px] leading-[21px] text-[rgba(32,32,32,0.3)]"
           >
             Write it <em>bluntly</em> here...
           </span>
@@ -882,10 +891,8 @@ function BluntlyTextarea({
       </div>
       <p
         aria-live="polite"
-        className={`mt-2 text-right ${CHIP_FACE} text-[11px] ${
-          counterIsSatisfied(value)
-            ? "text-[var(--accent-primary)]"
-            : "text-[var(--base-gray-400)]"
+        className={`mt-1 text-right text-[10px] font-light leading-none ${
+          counterIsSatisfied(value) ? "text-[var(--accent-primary)]" : "text-[var(--text-primary)]"
         }`}
       >
         {counterLabel(value, satisfied)}
@@ -897,16 +904,11 @@ function BluntlyTextarea({
 /**
  * "Who is it right for?" — the other half of FR-3's audience pair.
  *
- * Not in the reference frame, and required anyway: FR-3 specifies the
- * structured format as "all required" and names target-audience in it, and
- * `reviews.target_audience` has been a column since the schema was written.
- * Removing the input to match the still left the column receiving null on
- * every submission.
- *
- * Drawn in the frame's own language — the same white card, radius, padding and
- * grotesque as the field above — at the single-line height the pack uses for
- * short answers elsewhere, so it reads as part of the step rather than as
- * something bolted on.
+ * INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY. Not in the frame:
+ * FR-3 lists the structured format as "all required" and names target
+ * audience in it, and `reviews.target_audience` is a real column, so the field
+ * stays, drawn like the step's other fields — 12px Light prompt, a 53px white
+ * field at radius 16, 14px Regular with the placeholder at 30% ink.
  */
 function TargetAudienceField({
   value,
@@ -918,10 +920,7 @@ function TargetAudienceField({
   const id = useId();
   return (
     <div className="mt-6">
-      <label
-        htmlFor={id}
-        className={`block ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}
-      >
+      <label htmlFor={id} className="block text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
         And who is it right for?
       </label>
       <input
@@ -929,86 +928,37 @@ function TargetAudienceField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Commuters who want something light"
-        className={`mt-2 h-[53px] w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-5 ${CHIP_FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`}
+        className="mt-2 h-[53px] w-full rounded-[16px] bg-[var(--surface-card)] px-4 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]"
       />
     </div>
   );
 }
 
 /**
- * Step 1's product card: "Currently reviewing", the name, and a way out.
- *
- * Measured from "Reviewer Page - Step 1.1.png": card x16..373 y216..293,
- * white, 12px radius; the label 13px at rgb(55,113,200) — accent-trust to the
- * unit — the name 18px ink-800, and "Change" 16px in grey against the right
- * edge. This is the one place the pack names the product mid-flow, which is
- * why no other step draws it.
+ * The chip shell, Figma "Reviewer Page - Step 4" (4512:5073): 52px tall, white
+ * at 30% over the card, radius 12, 16px sides, a 20px Plus 8px before 14px
+ * Regular, and a soft 0 4px 4px shadow at 10%.
  */
-function CurrentlyReviewingCard({
-  name,
-  onChange,
-}: {
-  name: string | null;
-  onChange: () => void;
-}) {
-  return (
-    <div className="flex items-end gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]">
-      <div className="min-w-0 flex-1">
-        <p className={`${CHIP_FACE} text-[13px] text-[var(--accent-trust)]`}>
-          Currently reviewing
-        </p>
-        <p className={`mt-1 truncate ${CHIP_FACE} text-[18px] text-[var(--text-primary)]`}>
-          {name ?? "your product"}
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onChange}
-        className={`shrink-0 cursor-pointer ${CHIP_FACE} text-[16px] text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text-primary)] hover:underline`}
-      >
-        Change
-      </button>
-    </div>
-  );
-}
-
-/**
- * The chip shell, measured from "Reviewer Page - Step 4.png" at 390:
- *
- *   card        x16..373 (358 wide), fill #f2f2f2 — the page colour, told
- *               apart from the page by its shadow alone — 12px radius, 20px pad
- *   chip        52px tall, fill #f6f6f6, 12px radius, NO border, soft shadow
- *   row pitch   64px  (so a 12px vertical gap), ~10px horizontal gap
- *   plus        16px glyph at x54 — an 18px inset — then 10px to the label
- *   label       x80, a grotesque at ~15px, not Poppins: "Worth it!" is 58px
- *               wide with a 10px cap, where 13px Poppins renders it 67px wide
- *               with a 9px cap
- *
- * The live chips were 37px tall, white, and outlined in a hard grey hairline.
- */
-const CHIP_FACE = "font-[family-name:var(--font-system)]";
 const CHIP_SHELL =
-  `inline-flex h-[52px] items-center gap-[10px] rounded-[var(--radius-sm)] ` +
-  `bg-[rgb(246,246,246)] px-[18px] text-[15px] ` +
-  `shadow-[0_4px_4px_0_var(--shadow-color-10)] ${CHIP_FACE}`;
+  "inline-flex h-[52px] items-center gap-2 rounded-[12px] bg-[rgba(255,255,255,0.3)] px-4 text-[14px] leading-none " +
+  "shadow-[0_4px_4px_0_var(--shadow-color-10)]";
 
 /**
- * The plus in front of a chip's label.
- *
- * Every state is the same glyph at half opacity over the chip fill, which is
- * how the frame's exact values fall out: grey-400 at .5 over #f6f6f6 is the
- * measured rgb(193,193,193), success-600 is rgb(138,210,151), and danger is
- * rgb(231,123,142) — all three to the unit. Selection is carried by this
- * colour and by the label turning brand orange; the frame adds no border, and
- * the live chip's orange outline was not in it.
+ * The plus in front of a chip's label: #8c8c8c at rest, as drawn; a chosen
+ * phrase takes its column's colour on the glyph and brand orange on the label.
  */
 function ChipPlus({ color }: { color: string }) {
-  return <Plus size={16} aria-hidden="true" className="shrink-0 opacity-50" style={{ color }} />;
+  return <Plus size={20} weight="light" aria-hidden="true" className="shrink-0" style={{ color }} />;
 }
 
 /**
  * Chips plus free text, over the same newline-joined string the draft and the
  * submit payload already use — so nothing downstream changes shape.
+ *
+ * The card, Figma 4512:5073: --surface-app at radius 12 with the card shadow,
+ * 20px in; the column name in 12px Regular (trust blue for Pros, danger red for
+ * Cons), the prompt 5px under it in 12px Light at 70%, and the chips 14px lower
+ * with 12px between them.
  */
 function PhrasePicker({
   tone,
@@ -1059,13 +1009,13 @@ function PhrasePicker({
     tone === "pro" ? "text-[var(--accent-trust)]" : "text-[var(--accent-danger)]";
 
   return (
-    <div className="rounded-[var(--radius-sm)] bg-[var(--surface-app)] p-5 shadow-[var(--shadow-card)]">
-      <p className={`text-[13px] font-semibold ${accent}`}>{label}</p>
-      <p className={`mt-0.5 ${CHIP_FACE} text-[13px] text-[var(--text-secondary)]`}>
-        {prompt}
-      </p>
+    <div className="rounded-[12px] bg-[var(--surface-app)] px-5 pb-7 pt-5 shadow-[var(--shadow-card)]">
+      <p className={`text-[12px] leading-none ${accent}`}>{label}</p>
+      <p className="mt-[5px] text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">{prompt}</p>
 
-      <ul className="mt-3 flex flex-wrap gap-x-[10px] gap-y-3">
+      {/* 8px across, 12px down: at 12px across the frame's first pair of pros
+          ("Worth it!", "Good build quality") no longer fits one 318px row. */}
+      <ul className="mt-[14px] flex flex-wrap gap-x-2 gap-y-3">
         {[...suggestions, ...extras].map((phrase) => {
           const on = has(phrase);
           return (
@@ -1094,10 +1044,9 @@ function PhrasePicker({
         })}
       </ul>
 
-      {/* The frame draws this as one more chip — same 52px shell, same grey
-          plus — that happens to accept typing, not as a bordered form input.
-          A placeholder is not an accessible name and disappears on focus, so
-          the real label is still there, just visually hidden. */}
+      {/* The frame draws this as one more chip, the full row wide, that
+          happens to accept typing. A placeholder is not an accessible name,
+          so the real label is still there, visually hidden. */}
       <div className={`mt-3 ${CHIP_SHELL} w-full text-[var(--text-primary)]`}>
         <ChipPlus color="var(--base-gray-400)" />
         <label className="sr-only" htmlFor={addId}>
@@ -1117,253 +1066,9 @@ function PhrasePicker({
           }}
           onBlur={addCustom}
           placeholder={addLabel}
-          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--text-muted)]"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[rgba(32,32,32,0.3)]"
         />
       </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------------- product */
-
-/**
- * A product's photo in the picker, or a neutral tile when there isn't one.
- *
- * Most of the catalogue has no image yet, so the tile stays — but it is now a
- * fallback rather than the only thing this component could draw.
- */
-function ProductThumb({ product }: { product: Product }) {
-  const src = usablePhoto(product.image_url);
-  if (!src) {
-    return (
-      <span
-        aria-hidden="true"
-        className="h-9 w-9 shrink-0 rounded-[8px] bg-[var(--base-gray-200)]"
-      />
-    );
-  }
-  return (
-    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-[8px] bg-[var(--base-gray-200)]">
-      <Image
-        src={src}
-        alt=""
-        fill
-        sizes="36px"
-        className="object-cover"
-      />
-    </span>
-  );
-}
-
-function ProductStep({ onPick }: { onPick: (p: Product) => void }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<Product[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [showSubmit, setShowSubmit] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const query = q.trim();
-  const searching = query.length >= 2;
-
-  useEffect(() => {
-    if (!searching) return;
-    const t = setTimeout(async () => {
-      setBusy(true);
-      try {
-        const res = await fetch(
-          `/api/bff/api/v1/products?q=${encodeURIComponent(query)}&limit=8`,
-        );
-        setResults(res.ok ? await res.json() : []);
-      } catch {
-        setResults([]);
-      } finally {
-        setBusy(false);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [query, searching]);
-
-  const visibleResults = searching ? results : [];
-
-  /**
-   * Submit an unlisted product (BUG-020).
-   *
-   * A marketplace link, not a name the reviewer invents. The API stores the row
-   * `pending` for a moderator to name canonically — otherwise "Jisulife fan"
-   * and "JISULIFE Life 9" become separate products and their reviews never
-   * meet. The review can be written against it immediately either way.
-   */
-  async function submitByLink() {
-    const url = sourceUrl.trim();
-    if (!url || submitting) return;
-    if (!/^https?:\/\//i.test(url)) {
-      setError("Paste the full link, starting with https://");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/bff/api/v1/products", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: query || url, source_url: url }),
-      });
-      if (!res.ok) {
-        const p = (await res.json().catch(() => ({}))) as { detail?: string };
-        setError(p.detail ?? "Couldn't submit that product.");
-        return;
-      }
-      onPick(await res.json());
-    } catch {
-      setError("Couldn't reach the server.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    // `relative` so the decorative rating cards can be positioned against this
-    // step, and `isolate` so they are actually visible: they sit at -z-10, and
-    // without a stacking context here that puts them behind the page's own
-    // background rather than behind this step's content.
-    <div className="relative isolate">
-      <ProductStepDecor />
-      {/* This screen's heading block is set like every other step's, which it
-          was not: "Reviewer Page - Step 1.png" puts glyph tops at 89 / 111 /
-          141, an eyebrow and a subtitle in the file's grotesque, and the
-          heading in Poppins at 24/600 — 226px wide with 2px stems, where
-          26px bold renders it 248px wide with 4px stems. */}
-      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>
-        Let&rsquo;s get started!
-      </p>
-      <h1 className="mt-[3px] text-[24px] font-semibold leading-[25px] text-[var(--accent-primary)]">
-        What did you buy?
-      </h1>
-      <p className={`mt-[7px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
-        Find the product. Your review will matter.
-      </p>
-
-      {/* x16..373 and 56 tall at y174, the page colour inside a hairline pill
-          — not a raised white card, and with no magnifier in it. The glyph was
-          this field's only decoration and the frame does not draw one. */}
-      <div className="mt-[19px]">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g Jisulife Fanlife 9"
-          className={`h-[56px] w-full rounded-[var(--radius-pill)] bg-[var(--surface-app)] px-5 ${CHIP_FACE} text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]`}
-        />
-      </div>
-
-      <ul className="mt-4 flex flex-col gap-2">
-        {visibleResults.map((p) => (
-          <li key={p.id}>
-            <button
-              type="button"
-              onClick={() => onPick(p)}
-              className="flex w-full items-center gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-3 text-left shadow-[var(--shadow-hairline-inset)] hover:outline hover:outline-1 hover:outline-[var(--accent-primary)]"
-            >
-              <ProductThumb product={p} />
-              <span className="text-[14px] font-medium text-[var(--text-primary)]">
-                {p.canonical_name ?? "Unnamed product"}
-              </span>
-              {p.category ? (
-                <span className="ml-auto text-[12px] capitalize text-[var(--text-muted)]">
-                  {p.category}
-                </span>
-              ) : null}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {/* The reference fills the space under the field with an empty state:
-          a magnifier, "Find the product you bought", and the two-line hint,
-          its block running y411..545 below the header.
-          The composer never had it, which is why the page — and desktop in
-          particular, where the column is only 672px of a much wider viewport —
-          read as an empty grey void below the search box. */}
-      {!searching ? (
-        <div className="flex flex-col items-center pb-16 pt-[159px] text-center">
-          <MagnifyingGlass size={40} className="text-[var(--text-muted)]" />
-          <p className="mt-4 text-[16px] font-semibold text-[var(--text-primary)]">
-            Find the product you bought
-          </p>
-          <p className="mt-1 max-w-[22rem] text-[14px] text-[var(--text-secondary)]">
-            No need for the exact model.
-            <br />
-            Just type what you know
-          </p>
-        </div>
-      ) : null}
-
-      {searching && !busy ? (
-        <div className="mt-4 rounded-[var(--radius-sm)] border border-dashed border-[var(--line-hairline-30)] p-4">
-          {showSubmit ? (
-            <>
-              <p className="text-[13px] font-medium text-[var(--text-primary)]">
-                Paste the Shopee or Lazada link
-              </p>
-              <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
-                A moderator names it properly so every review of this product
-                ends up in one place. You can write your review right away.
-              </p>
-              <div className="relative mt-3">
-                <LinkIcon
-                  size={18}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-                />
-                <input
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.target.value)}
-                  placeholder="https://shopee.ph/…"
-                  inputMode="url"
-                  className={`${inputCls} pl-9`}
-                />
-              </div>
-              {error ? (
-                <p role="alert" className="mt-2 text-[12px] text-[var(--accent-danger)]">
-                  {error}
-                </p>
-              ) : null}
-              <div className="mt-3 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={submitByLink}
-                  disabled={!sourceUrl.trim() || submitting}
-                >
-                  {submitting ? "Submitting…" : "Use this product"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setShowSubmit(false)}
-                >
-                  Back to search
-                </Button>
-              </div>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSubmit(true)}
-              className="text-left"
-            >
-              <span className="text-[14px] text-[var(--text-primary)]">
-                Can&rsquo;t find &ldquo;
-                <span className="font-semibold">{query}</span>&rdquo;?
-              </span>
-              <span className="mt-0.5 block text-[12px] text-[var(--accent-primary)]">
-                Add it with a marketplace link
-              </span>
-            </button>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1385,7 +1090,7 @@ function StepsFlow({
   user: PanelUser;
   /** Step 1's card offers "Change" beside the product name. */
   onChangeProduct: () => void;
-  onDone: () => void;
+  onDone: (submitted: Submitted) => void;
 }) {
   const [busy, setBusy] = useState(false);
   // "Let's talk money" — the reference asks for the price on the way to
@@ -1438,7 +1143,11 @@ function StepsFlow({
         return;
       }
       setAskingPrice(false);
-      onDone();
+      onDone({
+        productName: product.canonical_name,
+        title: draft.title.trim(),
+        photoUrl: draft.photoUrl,
+      });
     } catch {
       setError("Couldn't reach the server. Try again.");
     } finally {
@@ -1448,44 +1157,25 @@ function StepsFlow({
 
   return (
     <div>
-      {/* Back lives in the header now, as a bare arrow — the frames draw no
-          breadcrumb here. No progress bar either: measured across steps 2,
-          3.1, 5 and 7, there are zero wide orange horizontal runs anywhere in
-          the header band. The step count is the only progress the design shows.
-
-          Type measured from "Reviewer Page - Step 2.png" at 390:
-            step count  13px, ink-800 at full strength (darkest pixel 32, not
-                        the muted grey this drew at 158)
-            title       Poppins 20px / weight 500 — "Your verdict" is 120px
-                        wide with 2px stems, where 22px bold renders it 137px
-                        wide with 4px stems and twice the ink
-            blurb       13px, text-secondary (darkest pixel 95 = ink-800 @ .7)
-          Vertical rhythm, glyph tops measured from the header rule: step
-          count 89, title 112, blurb 144 and 162 — an 18px line. The live page
-          sat at 92/123/158/177 before these margins were cut.
-
-          The count and the blurb are set in the file's grotesque, not Poppins:
-          "Your unfiltered words. Make it count." is 212px wide in the frame
-          and 233px in 13px Poppins, and the letterforms in a 3x crop are a
-          different face entirely. The orange title stays Poppins. */}
-      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>
+      {/* Figma "Reviewer Page - Step N" (4435:863 … 4452:748), read 2026-09-15:
+          "Step N out of 7" in 12px Regular 16px under the bar; the title 10px
+          lower in 20px Medium brand orange; the blurb 10px lower in 12px Light
+          at 70% on an 18px line. Each step's body then starts where its frame
+          puts it. */}
+      <p className="text-[12px] leading-none text-[var(--text-primary)]">
         Step {step + 1} out of {STEPS.length}
       </p>
 
-      <h1
-        // Orange on every step: the reference draws each heading in the accent,
-        // not just the ones with their own line underneath.
-        className="mt-[6px] text-[length:var(--text-lg)] font-[number:var(--weight-medium)] leading-[21px] text-[var(--accent-primary)]"
-      >
+      <h1 className="mt-2.5 text-[20px] font-medium leading-none text-[var(--accent-primary)]">
         {STEP_COPY[step]?.title ?? STEPS[step]}
       </h1>
       {STEP_COPY[step] ? (
-        <p className={`mt-[10px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
+        <p className="mt-[7px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
           {STEP_COPY[step].blurb}
         </p>
       ) : null}
 
-      <div className="mt-5">
+      <div className={BODY_TOP[step] ?? "mt-5"}>
         {step === 0 ? (
           <>
             <CurrentlyReviewingCard
@@ -1506,80 +1196,72 @@ function StepsFlow({
         ) : null}
 
         {step === 1 ? (
-          <div className="flex flex-col gap-3">
-            {/* The references switch treatment here: step 2 and 2.1 draw the
-                flat silhouette while nothing is chosen, and step 2.2 — the frame
-                where a verdict HAS been picked and Bunbun asks why — draws the
-                full illustration. So the mascot reacts to the answer. */}
-            <MascotPrompt
-              className="mb-2"
-              variant={draft.verdict ? "detailed" : "simple"}
-            >
+          <div className="relative isolate">
+            {/* The frame's two Icon/QuestionMark glyphs at 10% ink either side
+                of Bunbun (4435:1092). */}
+            <QuestionMark
+              size={32}
+              weight="thin"
+              aria-hidden="true"
+              className="pointer-events-none absolute left-[26px] top-[53px] -z-10 text-[var(--line-hairline-10)]"
+            />
+            <QuestionMark
+              size={32}
+              weight="thin"
+              aria-hidden="true"
+              className="pointer-events-none absolute left-[310px] top-[69px] -z-10 text-[var(--line-hairline-10)]"
+            />
+            {/* The mascot reacts to the answer: the silhouette while nothing is
+                chosen, the full illustration once a verdict is picked (2.2). */}
+            <MascotPrompt className="mb-5" variant={draft.verdict ? "detailed" : "simple"}>
               {draft.verdict
                 ? "Woah, mind telling us why?"
                 : "Would you recommend this to a friend?"}
             </MascotPrompt>
-            {VERDICTS.map((v) => (
-              <button
-                key={v.value}
-                type="button"
-                onClick={() => patch({ verdict: v.value })}
-                aria-pressed={draft.verdict === v.value}
-                // As drawn: a white card with a soft drop shadow and no outline
-                // at rest; the chosen one takes the verdict's own colour as a
-                // ring, which is how step 2.2 shows the selection.
-                className="flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-4 py-4 text-left shadow-[var(--shadow-card)] transition-shadow"
-                style={
-                  draft.verdict === v.value
-                    ? { boxShadow: `inset 0 0 0 2px ${v.ring}` }
-                    : undefined
-                }
-              >
-                {/* The reference marks each choice with its own glyph, always in
-                    that choice's colour rather than only once selected — it is
-                    what makes the three readable at a glance. Decorative: the
-                    label already names the verdict. */}
-                <v.Icon
-                  size={22}
-                  aria-hidden="true"
-                  className="shrink-0"
-                  style={{ color: v.ring }}
-                />
-                {/* One line, as drawn. The hint that used to sit under each label
-                    is gone: the reference shows the label alone, and the design
-                    is the visual contract rather than an engineering preference.
-                    `v.hint` still describes the option to assistive tech, so the
-                    guidance is kept where it costs nothing visually. */}
-                <span
-                  className="text-[16px] font-medium"
-                  style={{
-                    color: draft.verdict === v.value ? v.ring : "var(--text-primary)",
-                  }}
-                >
-                  {v.label}
-                </span>
-                <span className="sr-only">{v.hint}</span>
-              </button>
-            ))}
+            {/* 53px white answers at radius 16, 12px apart: a 20px glyph 16px in
+                and the label in 14px Regular 12px after it. The chosen one takes
+                its verdict's colour as a ring. */}
+            <div className="flex flex-col gap-3">
+              {VERDICTS.map((v) => {
+                const selected = draft.verdict === v.value;
+                return (
+                  <button
+                    key={v.value}
+                    type="button"
+                    onClick={() => patch({ verdict: v.value })}
+                    aria-pressed={selected}
+                    className="flex h-[53px] cursor-pointer items-center gap-3 rounded-[16px] bg-[var(--surface-card)] px-4 text-left shadow-[var(--shadow-card)] transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+                    style={selected ? { boxShadow: `var(--shadow-card), inset 0 0 0 2px ${v.ring}` } : undefined}
+                  >
+                    <v.Icon
+                      size={20}
+                      weight={v.value === "it_depends" ? "regular" : "bold"}
+                      aria-hidden="true"
+                      className="shrink-0"
+                      style={{ color: v.iconColor }}
+                    />
+                    <span
+                      className="text-[14px] leading-none"
+                      style={{ color: selected ? v.ring : "var(--text-primary)" }}
+                    >
+                      {v.label}
+                    </span>
+                    <span className="sr-only">{v.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 
         {step === 2 ? (
           <div className="relative isolate">
             <RatingStepDecor />
-            {/* An arc, not a flat row. Measured from the reference: five stars
-                of the SAME size, 45x44, at a 60px pitch, with the middle one
-                highest and the outer pair dropped 16px — 16, 5, 0, 5, 16.
-
-                A Star glyph fills about 85% of its Phosphor box: the frame's
-                middle star measures 46x44, which is size 53, and 53 + a 7px
-                gap is the 60px pitch that was measured. At size 45 with a 15px
-                gap the pitch was right and every star was 7px too small.
-
-                "Reviewer Page - Step 3.1.png" puts the row at y315..374 below
-                the header rule and its blurb's glyph top at 144, so the stars
-                sit 171px under the blurb. The live page had 42. */}
-            <div className="mt-[153px] flex items-start justify-center gap-[7px]">
+            {/* Figma 4435:1344: five 52px stars on a 60px pitch, the middle one
+                highest and the outer pair 16px lower; empty ones #8c8c8c, chosen
+                ones the rating green. The top of the arc is 154px under the
+                blurb. */}
+            <div className="mt-[154px] flex items-start justify-center gap-2">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
@@ -1591,12 +1273,12 @@ function StepsFlow({
                   style={{ marginTop: STAR_ARC[n - 1] }}
                 >
                   <Star
-                    size={53}
+                    size={52}
                     weight="fill"
                     className={
                       n <= draft.rating
-                        ? "text-[var(--accent-star)]"
-                        : "text-[var(--base-gray-300)]"
+                        ? "text-[var(--semantic-success-500)]"
+                        : "text-[var(--base-gray-400)]"
                     }
                   />
                 </button>
@@ -1606,7 +1288,7 @@ function StepsFlow({
         ) : null}
 
         {step === 3 ? (
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-7 sm:grid-cols-2">
             <PhrasePicker
               tone="pro"
               label="Pros"
@@ -1631,11 +1313,8 @@ function StepsFlow({
         {step === 4 ? (
           <div className="relative isolate">
             <CrowdBand />
-            {/* "not" is red in the frame — rgb(216,0,39), the danger token to
-                the unit — as well as bold and underlined. It was black here.
-                Steps 5 and 5.1 both draw the silhouette; the illustration
-                never appears on this step in the reference pack. */}
-            <MascotPrompt variant="simple" className="pt-[59px]">
+            {/* "not" is bold, underlined and the danger red in the frame. */}
+            <MascotPrompt variant="simple" className="pt-[62px]">
               Who should{" "}
               <strong className="font-bold text-[var(--accent-danger)] underline">
                 not
@@ -1651,14 +1330,6 @@ function StepsFlow({
               className="mt-8"
             />
 
-            {/* INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY.
-                The frame draws one card here. FR-3 lists the structured format
-                as "all required" and names target-audience among them, and
-                `reviews.target_audience` is a real column, so the field stays
-                and is drawn in the same language as the one above it rather
-                than dropped to reproduce the still. Without it the composer
-                posts target_audience: null on every review — which is what it
-                did after the field was removed to match the frame. */}
             <TargetAudienceField
               value={draft.target}
               onChange={(target) => patch({ target })}
@@ -1733,10 +1404,10 @@ function StepsFlow({
             onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
             disabled={Boolean(blocker) || busy}
             fullWidth
-            className="pointer-events-auto"
+            className="pointer-events-auto gap-1"
           >
             {buttonLabel(step, STEPS.length, busy)}
-            {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+            {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
           </Button>
         </div>
       </div>
@@ -1749,40 +1420,64 @@ function StepsFlow({
 
 /* ------------------------------------------------------------------ shared */
 
-function DoneStep() {
+/**
+ * The All done screen, Figma "Reviewer Page - All done" (4550:8882), read
+ * 2026-09-15: "All done!" in 12px Regular, the headline in 20px Medium brand
+ * orange, the blurb in 12px Light at 70%; "See what your review looks like:"
+ * in 12px Regular trust blue over the tilted preview card; "Your latest stats:"
+ * over three figures in 28px Medium brand orange with 12px Light labels, 20px
+ * apart; the full-width pill 32px from the bottom.
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES:
+ *  - The frame says "Your review is now live!" and "View my review". It is not
+ *    live: every review is held for moderation first. So the layout is the
+ *    frame's and the words are true — "submitted", with the check stated — and
+ *    the pill opens the reviewer's own submissions, where the pending review is.
+ *  - The stats are the reviewer's real dashboard figures over the last 90 days
+ *    (GET /users/me/dashboard), not the frame's sample numbers, and the block is
+ *    left out when they cannot be read.
+ */
+function DoneStep({ user, submitted }: { user: PanelUser; submitted: Submitted | null }) {
   return (
-    <div className="pt-6">
-      {/* The frame's headline is "Your review is now live!". It is not: every
-          review is held for moderation before it publishes, which is what the
-          submit flow does and what the gate exists for. So the layout is the
-          frame's and the wording is true — "submitted", with the check that
-          follows stated plainly. The CTA goes to the reviewer's own history,
-          where the pending review actually is, rather than pointing the public
-          at something nobody else can see yet. */}
-      <p className={`${CHIP_FACE} text-[13px] text-[var(--text-primary)]`}>All done!</p>
-      <h1 className="mt-[6px] text-[24px] font-semibold leading-[25px] text-[var(--accent-primary)]">
-        Your review has been submitted!
-      </h1>
-      <p className={`mt-[10px] ${CHIP_FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
-        A moderator checks every review before it goes public. You&rsquo;ll hear
-        from us once it&rsquo;s been through.
-      </p>
+    <div className="relative">
+      <TiltedRatingCards cards={DONE_CARDS} className="fixed inset-x-0 bottom-0 z-0 hidden h-[340px] max-sm:block" />
+      <div className="relative z-10">
+        <p className="text-[12px] leading-none text-[var(--text-primary)]">All done!</p>
+        <h1 className="mt-2.5 text-[20px] font-medium leading-none text-[var(--accent-primary)]">
+          Your review has been submitted!
+        </h1>
+        <p className="mt-[7px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+          A moderator checks every review before it goes public. You&rsquo;ll hear from us once
+          it&rsquo;s been through.
+        </p>
 
-      <div className="mt-10 flex flex-col items-center gap-3">
-        <Button href="/dashboard/history" fullWidth>
-          See my submissions
-          <ArrowRight size={18} weight="bold" aria-hidden="true" />
-        </Button>
-        <Link
-          href="/reviews/new"
-          className={`${CHIP_FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}
-        >
-          Write another
-        </Link>
+        {submitted ? (
+          <>
+            <p className="mt-8 text-[12px] leading-none text-[var(--accent-trust)]">
+              See what your review looks like:
+            </p>
+            <ReviewPreviewCard
+              username={user?.username ?? null}
+              avatarUrl={user?.avatarUrl ?? null}
+              productName={submitted.productName}
+              title={submitted.title}
+              photoUrl={submitted.photoUrl}
+              className="mt-[18px]"
+            />
+          </>
+        ) : null}
+
+        <LatestStats className="mt-[35px]" />
+      </div>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
+        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
+          <Button href="/dashboard/history" fullWidth className="pointer-events-auto gap-1">
+            See my submissions
+            <ArrowRight size={20} aria-hidden="true" />
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
-
-const inputCls =
-  "w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 py-2.5 text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[0_0_0_2px_var(--accent-primary)]";

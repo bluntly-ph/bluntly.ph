@@ -64,11 +64,17 @@ export function MascotPrompt({
           — duck x53..115 (the same 63x60), bubble x97..310 (214 wide) — so the
           insets are 29 and 72 there. The gap between them is 43 either way,
           which is why only the mark's inset is a prop. */}
-      <div className="max-w-[216px]" style={{ marginLeft: markInset + 43 }}>
-        <div className="relative rounded-[var(--radius-md)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-          <p className="text-[15px] leading-[22px] text-[var(--text-primary)]">
-            {children}
-          </p>
+      {/* Figma "Reviewer Page - Step 2" / "Step 5" (4435:1092, 4519:5414): a
+          216px bubble at radius 12, 20px sides and 16px top and bottom, 14px
+          Regular on a 21px line, with a drop shadow (0 4px 2px, 25%) that takes
+          in the tail — so it is a filter on the wrapper, not a box-shadow on
+          the box — and the mark 15px under it. */}
+      <div
+        className="max-w-[216px] drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
+        style={{ marginLeft: markInset + 43 }}
+      >
+        <div className="relative flex min-h-[74px] items-center rounded-[12px] bg-[var(--surface-card)] px-5 py-4">
+          <p className="text-[14px] leading-[21px] text-[var(--text-primary)]">{children}</p>
           <span
             aria-hidden="true"
             className="absolute -bottom-[7px] left-[20px] h-4 w-4 rotate-45 rounded-[3px] bg-[var(--surface-card)]"
@@ -76,7 +82,7 @@ export function MascotPrompt({
         </div>
       </div>
 
-      <div className="mt-4" style={{ marginLeft: markInset }}>
+      <div className="mt-[15px]" style={{ marginLeft: markInset }}>
         {variant === "simple" ? (
           // 63x60 native; the reference draws it unscaled.
           <SimpleBunbunMark />

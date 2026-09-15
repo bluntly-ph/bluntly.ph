@@ -1,9 +1,16 @@
-import { Tag } from "@phosphor-icons/react/dist/ssr";
+import { ChartLine } from "@phosphor-icons/react/dist/ssr";
 
 import { peso, type PricePanel as PanelData } from "@/lib/products";
 
 /**
  * The FR-2 community price panel.
+ *
+ * NO FIGMA FRAME for the panel itself — the file draws only the "Price History"
+ * Chip/Action that opens it (Question Page 4218:1856) — so it is set in the
+ * file's card language: a white card at radius 16 with the card shadow, 20px
+ * in; the ChartLine glyph of that chip 4px before the heading in 16px
+ * SemiBold; figures in 20px SemiBold with 12px Light labels; notes in 12px
+ * Light at 70% on 18px lines.
  *
  * Three distinct states, all of them required by the requirement rather than
  * invented: enough data, not enough data yet, and the server being unreachable.
@@ -17,6 +24,20 @@ import { peso, type PricePanel as PanelData } from "@/lib/products";
  * provenance reads like a listing price and this platform's whole argument is
  * that it does not make claims it cannot back.
  */
+const CARD = "rounded-[16px] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]";
+const NOTE = "text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]";
+
+function Heading() {
+  return (
+    <div className="flex items-center gap-1">
+      <ChartLine size={20} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
+      <h2 id="price-panel-heading" className="text-[16px] font-semibold leading-none text-[var(--text-primary)]">
+        What people paid
+      </h2>
+    </div>
+  );
+}
+
 export function PricePanel({
   panel,
   compact = false,
@@ -32,17 +53,9 @@ export function PricePanel({
   const outer = compact ? "" : "mt-8 ";
   if (panel === null) {
     return (
-      <section
-        aria-labelledby="price-panel-heading"
-        className={`${outer}rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]`}
-      >
-        <h2 id="price-panel-heading" className="text-[15px] font-semibold text-[var(--text-primary)]">
-          What people paid
-        </h2>
-        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-          We couldn&rsquo;t load price observations just now. They&rsquo;ll be
-          back shortly.
-        </p>
+      <section aria-labelledby="price-panel-heading" className={`${outer}${CARD}`}>
+        <Heading />
+        <p className={`mt-3 ${NOTE}`}>We couldn&rsquo;t load price observations just now. They&rsquo;ll be back shortly.</p>
       </section>
     );
   }
@@ -50,41 +63,32 @@ export function PricePanel({
   const needed = Math.max(0, panel.required_independent - panel.independent_count);
 
   return (
-    <section
-      aria-labelledby="price-panel-heading"
-      className={`${outer}rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-hairline-inset)]`}
-    >
-      <div className="flex items-center gap-2">
-        <Tag size={18} weight="fill" className="text-[var(--accent-primary)]" aria-hidden="true" />
-        <h2 id="price-panel-heading" className="text-[15px] font-semibold text-[var(--text-primary)]">
-          What people paid
-        </h2>
-      </div>
+    <section aria-labelledby="price-panel-heading" className={`${outer}${CARD}`}>
+      <Heading />
 
       {panel.sufficient ? (
         <>
           {/* Range first: it is the honest headline for a community sample.
               The median sits beside it rather than above it, because one
               number would read as "the price" and this is not that. */}
-          <p className="mt-3 text-[24px] font-bold leading-tight text-[var(--text-primary)]">
-            {peso(panel.low)} <span className="text-[var(--text-secondary)]">–</span>{" "}
-            {peso(panel.high)}
+          <p className="mt-4 text-[20px] font-semibold leading-none text-[var(--text-primary)]">
+            {peso(panel.low)} <span className="text-[var(--base-gray-400)]">–</span> {peso(panel.high)}
           </p>
-          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
-            <div className="flex gap-1.5">
-              <dt className="text-[var(--text-secondary)]">Typical</dt>
-              <dd className="font-medium text-[var(--text-primary)]">{peso(panel.median)}</dd>
+          <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-3">
+            <div className="flex flex-col-reverse gap-1">
+              <dt className="text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">Typical</dt>
+              <dd className="text-[14px] font-medium leading-none text-[var(--text-primary)]">{peso(panel.median)}</dd>
             </div>
-            <div className="flex gap-1.5">
-              <dt className="text-[var(--text-secondary)]">Reports</dt>
-              <dd className="font-medium text-[var(--text-primary)]">
+            <div className="flex flex-col-reverse gap-1">
+              <dt className="text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">Reports</dt>
+              <dd className="text-[14px] font-medium leading-none text-[var(--text-primary)]">
                 {panel.observation_count} from {panel.independent_count} buyers
               </dd>
             </div>
             {panel.latest_observed_at ? (
-              <div className="flex gap-1.5">
-                <dt className="text-[var(--text-secondary)]">Latest</dt>
-                <dd className="font-medium text-[var(--text-primary)]">
+              <div className="flex flex-col-reverse gap-1">
+                <dt className="text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">Latest</dt>
+                <dd className="text-[14px] font-medium leading-none text-[var(--text-primary)]">
                   {new Date(panel.latest_observed_at).toLocaleDateString("en-PH", {
                     month: "short",
                     day: "numeric",
@@ -95,18 +99,16 @@ export function PricePanel({
             ) : null}
           </dl>
           {panel.platforms.length > 0 ? (
-            <p className="mt-2 text-[12px] capitalize text-[var(--text-muted)]">
-              Seen on {panel.platforms.join(", ")}
-            </p>
+            <p className={`mt-3 capitalize ${NOTE}`}>Seen on {panel.platforms.join(", ")}</p>
           ) : null}
-          <p className="mt-3 text-[12px] text-[var(--text-muted)]">
-            Prices buyers here reported paying, each checked by a moderator.
-            Not a listing price, and never collected from a marketplace.
+          <p className={`mt-3 ${NOTE}`}>
+            Prices buyers here reported paying, each checked by a moderator. Not a listing price, and never
+            collected from a marketplace.
           </p>
         </>
       ) : (
         <>
-          <p className="mt-2 text-[13px] text-[var(--text-secondary)]">
+          <p className="mt-3 text-[14px] leading-[21px] text-[var(--text-primary)]">
             {panel.observation_count === 0
               ? panel.pending_count > 0
                 ? "No checked reports yet."
@@ -117,20 +119,20 @@ export function PricePanel({
               checked them, so they cannot open the range. Saying they exist
               keeps "nobody has reported" from being false. */}
           {panel.pending_count > 0 ? (
-            <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+            <p className="mt-1 text-[14px] leading-[21px] text-[var(--text-primary)]">
               {panel.pending_count === 1
                 ? "1 more report is waiting for a moderator to check."
                 : `${panel.pending_count} more reports are waiting for a moderator to check.`}
             </p>
           ) : null}
-          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          <p className="mt-1 text-[14px] leading-[21px] text-[var(--text-primary)]">
             {needed === 1
               ? "One more buyer and we can show a price range."
               : `${needed} more buyers and we can show a price range.`}
           </p>
-          <p className="mt-3 text-[12px] text-[var(--text-muted)]">
-            We wait for {panel.required_independent} independent reports so one
-            person&rsquo;s price can&rsquo;t stand in for everyone&rsquo;s.
+          <p className={`mt-3 ${NOTE}`}>
+            We wait for {panel.required_independent} independent reports so one person&rsquo;s price
+            can&rsquo;t stand in for everyone&rsquo;s.
           </p>
         </>
       )}

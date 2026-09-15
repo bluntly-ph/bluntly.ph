@@ -5,22 +5,43 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowRight,
-  Asterisk,
+  AsteriskSimple,
   Check,
+  Cloud,
+  DotOutline,
   Image as ImageIcon,
   LinkSimple,
   MagnifyingGlass,
+  NumberFive,
+  NumberFour,
+  NumberOne,
+  NumberThree,
+  NumberTwo,
   Plus,
+  SealCheck,
   Star,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
-import { ComposerHeader } from "@/components/reviews/ComposerHeader";
+import { COMPOSER_FOCUS_RING, COMPOSER_HEADING, COMPOSER_HINT } from "@/components/reviews/composer-styles";
+import { ComposerGrid, ComposerHeader } from "@/components/reviews/ComposerHeader";
+import { CurrentlyReviewingCard } from "@/components/reviews/CurrentlyReviewingCard";
+import { LatestStats } from "@/components/reviews/LatestStats";
+import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
+import {
+  DONE_CARDS,
+  STAR_CORAL,
+  STAR_GREEN,
+  STAR_YELLOW,
+  TiltedRatingCards,
+  fadedStar,
+  starRow,
+  type TiltedCard,
+} from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
 import { prepareImageForUpload } from "@/lib/image";
 
-import { ClaimStatusLine, SellerAvatar, StarRow } from "./SellerIdentity";
 import {
   DIMENSION_PROMPT,
   MAX_SELLER_COMMENT,
@@ -32,6 +53,7 @@ import {
   emptySellerDraft,
   missingDimension,
   ratingPrompt,
+  sellerInitials,
   toSellerReviewPayload,
   type SellerDraft,
   type SellerPlatform,
@@ -39,17 +61,37 @@ import {
 } from "./seller-model";
 
 /**
- * The seller-review composer (FR-4), built to the "Seller Review" frames:
+ * The seller-review composer (FR-4), built to the "Seller Review" frames, read
+ * from Figma 2026-09-15:
  *
- *   Step 1 / 1-1   find the store by name
- *   Step 2 .. 2.6  stars, recommend, service, packaging, accuracy, completeness
- *   Step 3 .. 3.3  title, prose, photos
- *   All done       the posted review
+ *   find    Step 1 (4611:9344, empty) and Step 1 with results (4627:9403)
+ *   rate    Step 2 (4627:9613) and Step 2.6 (4652:12139, everything chosen)
+ *   write   Step 3 (4645:10125) and Step 3.3 (4652:12635, filled)
+ *   done    All done (4652:12914)
+ *
+ * The progress line under the bar is the frames' own: grey on find, 39 of
+ * 390px orange on rate, 312px on write, all green on done.
  *
  * Seller reviews publish immediately — they carry no affiliate link and earn
  * nothing, so they skip the product-review moderation gate (DEVIATIONS §37);
- * a moderator can remove one afterwards. The done screen says that, rather
- * than the product composer's "held for moderation".
+ * a moderator can remove one afterwards. That is why this done screen can say
+ * "now live" when the product composer's cannot.
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES:
+ *  - The headline restores a dropped word: the frame reads "Who are rating
+ *    today?". The empty state speaks of a seller; the frame kept the product
+ *    composer's "Find the product you bought / No need for the exact model".
+ *  - A result shows the marketplace where the frame shows "39 questions
+ *    answered" (no answered-question count is served) and the store's
+ *    initials where it shows a logo (stores carry none).
+ *  - "Can't find seller? Paste Shopee link here" opens "Add a seller" with the
+ *    link filled in and the marketplace read from the link's domain. A link
+ *    alone cannot name a store without fetching the marketplace page, which
+ *    this product does not do. A search with no results also offers to add
+ *    the typed name, so a buyer with no link is not stranded.
+ *  - The stats are the reviewer's real dashboard figures (see LatestStats).
+ *  - "Make it pop" lines up with the other write-step headings at 28px; the
+ *    frame alone sets it 4px further left.
  */
 
 export type PickedSeller = {
@@ -62,8 +104,14 @@ export type PickedSeller = {
 
 type Stage = "find" | "rate" | "write" | "done";
 
-const FACE = "font-[family-name:var(--font-system)]";
-const SELECTED_RING = "shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]";
+const PROGRESS: Record<Stage, number> = { find: 0, rate: 39 / 390, write: 312 / 390, done: 1 };
+
+const HEADING = COMPOSER_HEADING;
+const HINT = COMPOSER_HINT;
+const FOCUS_RING = COMPOSER_FOCUS_RING;
+/** The white 53px field at radius 16 the write step draws; the 1px border takes an orange line once filled. */
+const FIELD =
+  "w-full rounded-[16px] border bg-[var(--surface-card)] px-[15px] text-[14px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[rgba(32,32,32,0.3)] focus-visible:border-[var(--accent-primary)]";
 
 export function RateSellerForm({
   user,
@@ -90,12 +138,6 @@ export function RateSellerForm({
   function pick(next: PickedSeller) {
     setSeller(next);
     go("rate");
-  }
-
-  function startOver() {
-    setSeller(null);
-    setDraft(emptySellerDraft());
-    go("find");
   }
 
   async function submit() {
@@ -145,16 +187,29 @@ export function RateSellerForm({
         ? () => go("find")
         : stage === "write"
           ? () => go("rate")
-          : undefined;
+          : seller
+            ? () => router.push(`/sellers/${seller.id}`)
+            : undefined;
 
   return (
     <>
       <ComposerHeader
         user={user}
         onBack={back}
-        backLabel={stage === "write" ? "Back to the ratings" : stage === "rate" ? "Choose another seller" : "Leave"}
+        backLabel={
+          stage === "write"
+            ? "Back to the ratings"
+            : stage === "rate"
+              ? "Choose another seller"
+              : stage === "done"
+                ? "Go to the seller"
+                : "Leave"
+        }
+        progress={PROGRESS[stage]}
       />
-      <main className="relative mx-auto w-full max-w-[42rem] flex-1 px-4 pb-[140px] pt-5 sm:px-6">
+      <ComposerGrid />
+      {/* pb clears the bottom-anchored pill (56px + 32px inset) and the link field. */}
+      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pb-[120px] pt-4 sm:px-6">
         {stage === "find" ? <FindSeller onPick={pick} /> : null}
         {stage === "rate" && seller ? (
           <RateStep seller={seller} draft={draft} patch={patch} onChangeSeller={() => go("find")} />
@@ -171,32 +226,31 @@ export function RateSellerForm({
             }
           />
         ) : null}
-        {stage === "done" && seller ? (
-          <DoneStep seller={seller} draft={draft} user={user} onAgain={startOver} />
-        ) : null}
-
-        {error ? (
-          <p
-            role="alert"
-            className="relative z-10 mt-6 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-danger)_10%,white)] px-4 py-3 text-[13px] text-[var(--accent-danger)]"
-          >
-            {error}
-          </p>
-        ) : null}
+        {stage === "done" && seller ? <DoneStep seller={seller} draft={draft} user={user} /> : null}
       </main>
 
+      {/* Pinned to the viewport, as every frame draws it: y757 in an 844 device
+          even on the 1192px rate frame. */}
       {stage === "rate" || stage === "write" ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
           <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
+            {error ? (
+              <p
+                role="alert"
+                className="pointer-events-auto mb-2 rounded-[12px] bg-[var(--surface-card)] px-4 py-3 text-[12px] leading-[18px] text-[var(--accent-danger)] shadow-[var(--shadow-card)]"
+              >
+                {error}
+              </p>
+            ) : null}
             <Button
               type="button"
               onClick={stage === "rate" ? () => go("write") : submit}
               disabled={Boolean(blocker) || busy}
               fullWidth
-              className="pointer-events-auto"
+              className="pointer-events-auto gap-1"
             >
               {stage === "rate" ? "Continue" : busy ? "Posting…" : "Submit"}
-              {busy ? null : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+              {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
             </Button>
           </div>
         </div>
@@ -210,10 +264,32 @@ export function RateSellerForm({
 
 /* ------------------------------------------------------------------- find */
 
+/**
+ * Step 1's cards: three sliding in from the left at mid-height and three from
+ * the bottom right, faces at 70%. Measured below the bar (frame y114).
+ */
+const FIND_CARDS: TiltedCard[] = [
+  { x: -133, top: 315, tilt: 5, faded: true, stars: starRow(5, STAR_GREEN) },
+  { x: -116, top: 261, tilt: 5, faded: true, stars: starRow(4, STAR_GREEN) },
+  { x: -100, top: 206, tilt: 5, faded: true, stars: starRow(2, fadedStar(STAR_CORAL)) },
+  { x: 363, bottom: -8, tilt: -5, faded: true, anchorRight: true, starsStart: true, stars: starRow(5, STAR_GREEN) },
+  { x: 347, bottom: 46, tilt: -5, faded: true, anchorRight: true, starsStart: true, stars: starRow(4, STAR_GREEN) },
+  { x: 330, bottom: 101, tilt: -5, faded: true, anchorRight: true, starsStart: true, stars: starRow(3, fadedStar(STAR_YELLOW)) },
+];
+
+/**
+ * Figma 4611:9344 / 4627:9403: "Let's get started!" in 12px Regular, the
+ * question 10px lower in 20px Medium brand orange, the blurb 10px lower in 12px
+ * Light at 70%; a 56px pill field with a 1px #323232 outline, the query 24px in
+ * at 16px Regular and 0.8px tracking. Results: "N results found" 25px under the
+ * field, a hairline 17px lower, then 112px rows.
+ */
 function FindSeller({ onPick }: { onPick: (seller: PickedSeller) => void }) {
-  const id = useId();
+  const inputId = useId();
+  const linkId = useId();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<PickedSeller[]>([]);
+  const [link, setLink] = useState("");
   const [adding, setAdding] = useState(false);
 
   const query = q.trim();
@@ -238,113 +314,220 @@ function FindSeller({ onPick }: { onPick: (seller: PickedSeller) => void }) {
 
   return (
     <div>
-      <p className={`${FACE} text-[13px] text-[var(--text-primary)]`}>Let&rsquo;s get started!</p>
-      {/* The frame reads "Who are rating today?"; the missing word is restored. */}
-      <h1 className="mt-[6px] text-[length:var(--text-lg)] font-[number:var(--weight-medium)] leading-[26px] text-[var(--accent-primary)]">
+      {visible === null && !adding ? (
+        <TiltedRatingCards cards={FIND_CARDS} className="fixed inset-x-0 bottom-0 top-[72px] -z-10 hidden max-sm:block" />
+      ) : null}
+
+      <p className="text-[12px] leading-none text-[var(--text-primary)]">Let&rsquo;s get started!</p>
+      <h1 className="mt-2.5 text-[20px] font-medium leading-none text-[var(--accent-primary)]">
         Who are you rating today?
       </h1>
-      <p className={`mt-[6px] ${FACE} text-[13px] text-[var(--text-secondary)]`}>
+      <p className="mt-[7px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
         Find the seller. Help people buy from the right place
       </p>
 
-      <label htmlFor={id} className="sr-only">
+      <label htmlFor={inputId} className="sr-only">
         Store name
       </label>
       <input
-        id={id}
+        id={inputId}
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        autoFocus
         autoComplete="off"
         placeholder="e.g Jisulife Official Store"
-        className={`mt-6 h-[56px] w-full rounded-[var(--radius-pill)] border border-[var(--base-gray-600)] bg-transparent px-6 ${FACE} text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]`}
+        className="mt-[19px] h-14 w-full rounded-[var(--radius-pill)] border border-[var(--base-gray-600)] bg-[var(--surface-app)] px-6 text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[rgba(32,32,32,0.4)] focus-visible:border-[var(--accent-primary)]"
       />
 
-      {visible === null ? (
-        adding ? null : (
-          <div className="flex flex-col items-center py-20 text-center">
-            <MagnifyingGlass size={56} aria-hidden="true" className="text-[var(--text-primary)]" />
-            <p className={`mt-4 ${FACE} text-[16px] text-[var(--text-primary)]`}>
-              Find the seller you bought from
-            </p>
-            <p className={`mt-1 ${FACE} text-[13px] text-[var(--text-secondary)]`}>
-              No need for the exact store name.
-              <br />
-              Just type what you know.
-            </p>
-          </div>
-        )
+      {adding ? (
+        <AddSellerForm
+          initialName={query}
+          initialLink={link.trim()}
+          onAdded={onPick}
+          onCancel={() => setAdding(false)}
+        />
+      ) : visible === null ? (
+        // The empty state, 174px under the field: a 64px MagnifyingGlass in a
+        // 2px line, a line of 16px Regular at 0.8px tracking, and the hint in
+        // 12px Light at 70% on 18px lines, 180px wide.
+        <div className="flex flex-col items-center pt-[174px] text-center">
+          <MagnifyingGlass size={64} weight="thin" aria-hidden="true" className="text-[var(--base-black)]" />
+          <p className="mt-4 text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
+            Find the seller you bought from
+          </p>
+          <p className="mt-[9px] text-[12px] font-light leading-[1.5] text-[rgba(32,32,32,0.7)]">
+            No need for the exact store name.
+            <br />
+            Just type what you know
+          </p>
+        </div>
       ) : (
         <>
-          <p className={`mt-6 ${FACE} text-[13px] text-[var(--text-primary)]`} aria-live="polite">
+          <p aria-live="polite" className="mt-[25px] text-[12px] leading-none text-[var(--text-primary)]">
             {visible.length} {visible.length === 1 ? "result" : "results"} found
           </p>
-          <ul className="mt-3 border-t border-[var(--line-hairline-10)]">
-            {visible.map((s) => (
-              <li key={s.id} className="border-b border-[var(--line-hairline-10)]">
-                <button
-                  type="button"
-                  onClick={() => onPick(s)}
-                  className="flex w-full cursor-pointer items-center gap-4 py-4 text-left hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
-                >
-                  <SellerAvatar name={s.display_name} size={80} />
-                  <span className="min-w-0">
-                    <ClaimStatusLine status={s.claim_status} />
-                    <span className="mt-0.5 block truncate text-[16px] font-bold text-[var(--text-primary)]">
-                      {s.display_name}
-                    </span>
-                    <span className={`mt-1 block ${FACE} text-[13px] text-[var(--text-secondary)]`}>
-                      {s.review_count} {s.review_count === 1 ? "review" : "reviews"} ·{" "}
-                      {PLATFORM_LABEL[s.platform]}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {visible.length > 0 ? (
+            <ul className="-mx-4 mt-[17px] border-t border-[var(--line-hairline-10)] sm:-mx-6">
+              {visible.map((s) => (
+                <li key={s.id} className="border-b border-[var(--line-hairline-10)]">
+                  <SellerPick seller={s} onPick={onPick} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className={`mt-5 cursor-pointer text-[14px] leading-none text-[var(--accent-primary)] underline-offset-4 hover:underline ${FOCUS_RING}`}
+            >
+              Add &ldquo;{query}&rdquo; as a new seller
+            </button>
+          )}
         </>
       )}
 
-      {adding ? (
-        <AddSellerForm initialName={query} onAdded={onPick} onCancel={() => setAdding(false)} />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className={`mt-8 flex h-[48px] w-full cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-5 ${FACE} text-[15px] text-[var(--text-muted)] shadow-[var(--shadow-card)] hover:text-[var(--text-primary)]`}
+      {/* Figma "LinkField" (6943:925) 35px above the bottom edge: 52px, white at
+          30% with a 0 4px 4px shadow at 10%, radius 12; a 20px LinkSimple 8px
+          before 14px Regular at 30% ink. It is the paste field itself. */}
+      {adding ? null : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (link.trim()) setAdding(true);
+          }}
+          className="fixed inset-x-0 bottom-[35px] z-20 px-4 sm:px-6"
         >
-          <LinkSimple size={20} aria-hidden="true" />
-          Can&rsquo;t find the seller? Add it
-        </button>
+          <div className="mx-auto flex h-[52px] w-full max-w-[42rem] items-center gap-2 rounded-[12px] bg-[rgba(255,255,255,0.3)] px-4 shadow-[0_4px_4px_0_var(--shadow-color-10)] backdrop-blur-sm">
+            <LinkSimple size={20} weight="light" aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
+            <label className="sr-only" htmlFor={linkId}>
+              Can&rsquo;t find the seller? Paste the store&rsquo;s Shopee or Lazada link
+            </label>
+            <input
+              id={linkId}
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              inputMode="url"
+              autoComplete="off"
+              placeholder="Can’t find seller? Paste Shopee link here"
+              className="min-w-0 flex-1 bg-transparent text-[14px] leading-none text-[var(--text-primary)] outline-none placeholder:text-[rgba(32,32,32,0.3)]"
+            />
+            {link.trim() ? (
+              <button
+                type="submit"
+                className="shrink-0 cursor-pointer rounded-[20px] bg-[var(--accent-primary)] px-3 py-2 text-[12px] font-light leading-none text-[var(--text-on-brand)]"
+              >
+                Add seller
+              </button>
+            ) : null}
+          </div>
+        </form>
       )}
     </div>
   );
 }
 
 /**
- * INTENTIONAL PRODUCT DIFFERENCE — REQUIRED FUNCTIONALITY.
+ * A result row, Figma 4627:9403: an 80px white disc 16px in, and 12px after it
+ * the claim line (a 16px SealCheck and 12px Regular, at 70%), the store 2px
+ * under it in 16px SemiBold, the counts 16px lower in 12px Light split by a
+ * 12px DotOutline. 16px above and below; a hairline between rows.
+ */
+function SellerPick({ seller, onPick }: { seller: PickedSeller; onPick: (seller: PickedSeller) => void }) {
+  const claimed = seller.claim_status === "claimed";
+  const count = seller.review_count;
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(seller)}
+      className="flex w-full cursor-pointer items-start gap-3 px-4 pb-4 pt-[15px] text-left text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-primary)] sm:px-6"
+    >
+      <span
+        aria-hidden="true"
+        className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-[var(--surface-card)] text-[24px] text-[var(--base-gray-400)]"
+      >
+        {sellerInitials(seller.display_name)}
+      </span>
+      <span className="min-w-0 flex-1 pt-1">
+        <span className="flex h-4 items-center gap-1 text-[12px] leading-none text-[rgba(32,32,32,0.7)]">
+          {claimed ? <SealCheck size={16} aria-hidden="true" /> : null}
+          {claimed ? "Claimed Profile" : "Unclaimed Profile"}
+        </span>
+        <span className="mt-0.5 block truncate text-[16px] font-semibold leading-none">{seller.display_name}</span>
+        <span className="mt-4 flex items-center gap-1 text-[12px] font-light leading-none">
+          {count} {count === 1 ? "review" : "reviews"}
+          <DotOutline size={12} aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
+          {PLATFORM_LABEL[seller.platform]}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** The marketplace named by a pasted link's own domain, or nothing. */
+function platformFromLink(link: string): SellerPlatform | null {
+  let host: string;
+  try {
+    host = new URL(link).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  for (const key of ["shopee", "lazada", "amazon"] as const) {
+    if (host.startsWith(`${key}.`) || host.includes(`.${key}.`)) return key;
+  }
+  return null;
+}
+
+function FieldHeading({
+  htmlFor,
+  hintId,
+  title,
+  hint,
+  className = "",
+}: {
+  htmlFor: string;
+  hintId: string;
+  title: string;
+  hint: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={htmlFor} className={`block ${HEADING}`}>
+        {title}
+      </label>
+      <p id={hintId} className={HINT}>
+        {hint}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * No frame draws this form (see the docblock at the top). It is built from the
+ * write step's parts: 14px Medium headings over 12px Light hints, 53px white
+ * fields at radius 16, and the marketplace as small pills — Button/Pill Small,
+ * 32px at radius 20 in 12px Light.
  *
- * The frame offers "Can't find seller? Paste Shopee link here" and nothing
- * else. A link alone cannot name a store without fetching the marketplace
- * page, which this product does not do — and guessing a store from a URL is
- * how a rating lands on the wrong seller. So the link is kept, optional, next
- * to the store name and marketplace the API needs. The API matches by name and
- * marketplace, so adding a store that already exists returns that store.
+ * The API matches by name and marketplace, so adding a store that already
+ * exists returns that store.
  */
 function AddSellerForm({
   initialName,
+  initialLink,
   onAdded,
   onCancel,
 }: {
   initialName: string;
+  initialLink: string;
   onAdded: (seller: PickedSeller) => void;
   onCancel: () => void;
 }) {
   const nameId = useId();
+  const nameHint = useId();
   const linkId = useId();
+  const linkHint = useId();
   const [name, setName] = useState(initialName);
-  const [platform, setPlatform] = useState<SellerPlatform>("shopee");
-  const [link, setLink] = useState("");
+  const [platform, setPlatform] = useState<SellerPlatform>(platformFromLink(initialLink) ?? "shopee");
+  const [link, setLink] = useState(initialLink);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -376,34 +559,34 @@ function AddSellerForm({
     }
   }
 
-  const field = `h-[48px] w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-4 ${FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`;
-
   return (
-    <form onSubmit={add} className="mt-8 flex flex-col gap-4">
-      <p className={`${FACE} text-[15px] font-medium text-[var(--text-primary)]`}>Add a seller</p>
-      <div>
-        <label htmlFor={nameId} className={`${FACE} text-[13px] text-[var(--text-secondary)]`}>
-          Store name, as the marketplace shows it
-        </label>
-        <input
-          id={nameId}
-          value={name}
-          onChange={(e) => setName(e.target.value.slice(0, 160))}
-          className={`mt-2 ${field}`}
-        />
-      </div>
-      <fieldset>
-        <legend className={`${FACE} text-[13px] text-[var(--text-secondary)]`}>Marketplace</legend>
-        <div className="mt-2 flex flex-wrap gap-2">
+    <form onSubmit={add} className="mt-9">
+      <FieldHeading
+        htmlFor={nameId}
+        hintId={nameHint}
+        title="Add a seller"
+        hint="The store’s name, as the marketplace shows it"
+      />
+      <input
+        id={nameId}
+        aria-describedby={nameHint}
+        value={name}
+        onChange={(e) => setName(e.target.value.slice(0, 160))}
+        className={`mt-[18px] h-[53px] ${FIELD} ${name.trim() ? "border-[rgba(239,88,33,0.8)]" : "border-transparent"}`}
+      />
+
+      <fieldset className="mt-9 min-w-0">
+        <legend className={HEADING}>Marketplace</legend>
+        <div className="mt-[18px] flex flex-wrap gap-2">
           {(Object.keys(PLATFORM_LABEL) as SellerPlatform[]).map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => setPlatform(key)}
               aria-pressed={platform === key}
-              className={`h-10 cursor-pointer rounded-[var(--radius-pill)] px-4 ${FACE} text-[14px] ${
+              className={`h-8 cursor-pointer rounded-[20px] px-4 text-[12px] font-light leading-none ${FOCUS_RING} ${
                 platform === key
-                  ? "bg-[var(--accent-primary)] text-white"
+                  ? "bg-[var(--accent-primary)] text-[var(--text-on-brand)]"
                   : "bg-[var(--surface-card)] text-[var(--text-primary)] shadow-[var(--shadow-card)]"
               }`}
             >
@@ -412,32 +595,38 @@ function AddSellerForm({
           ))}
         </div>
       </fieldset>
-      <div>
-        <label htmlFor={linkId} className={`${FACE} text-[13px] text-[var(--text-secondary)]`}>
-          Store link (optional)
-        </label>
-        <input
-          id={linkId}
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          inputMode="url"
-          placeholder="Paste the store's Shopee or Lazada link"
-          className={`mt-2 ${field}`}
-        />
-      </div>
+
+      <FieldHeading
+        htmlFor={linkId}
+        hintId={linkHint}
+        title="Store link"
+        hint="Optional. The store’s page, not a product’s"
+        className="mt-9"
+      />
+      <input
+        id={linkId}
+        aria-describedby={linkHint}
+        value={link}
+        onChange={(e) => setLink(e.target.value)}
+        inputMode="url"
+        placeholder="Paste the store’s link"
+        className={`mt-[18px] h-[53px] ${FIELD} border-transparent`}
+      />
+
       {error ? (
-        <p role="alert" className="text-[13px] text-[var(--accent-danger)]">
+        <p role="alert" className="mt-4 text-[12px] leading-[18px] text-[var(--accent-danger)]">
           {error}
         </p>
       ) : null}
-      <div className="flex items-center gap-4">
-        <Button type="submit" disabled={!name.trim() || busy}>
+      <div className="mt-8 flex items-center gap-6">
+        <Button type="submit" disabled={!name.trim() || busy} className="gap-1">
           {busy ? "Adding…" : "Add seller"}
+          {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
         </Button>
         <button
           type="button"
           onClick={onCancel}
-          className={`cursor-pointer ${FACE} text-[14px] text-[var(--text-secondary)] underline-offset-4 hover:underline`}
+          className={`cursor-pointer text-[14px] leading-none text-[rgba(32,32,32,0.3)] hover:text-[var(--text-primary)] ${FOCUS_RING}`}
         >
           Cancel
         </button>
@@ -448,6 +637,33 @@ function AddSellerForm({
 
 /* ------------------------------------------------------------------- rate */
 
+/**
+ * The clouds behind the stars, Figma 4627:9613: eleven Icon/Cloud glyphs, 24 to
+ * 64px, several turned 180deg, in a 1px line at 20% ink. Frame coordinates,
+ * measured below the bar. Step 2.6 draws the same clouds in the rating green,
+ * so they take it once a star rating is chosen.
+ */
+const CLOUDS: { left: number; top: number; size: number; flip?: boolean }[] = [
+  { left: 35, top: -8, size: 32 },
+  { left: 9, top: 243, size: 32 },
+  { left: 41, top: 218, size: 52 },
+  { left: 73, top: -46, size: 64 },
+  { left: 288, top: 51, size: 64, flip: true },
+  { left: 342, top: 138, size: 32, flip: true },
+  { left: 352, top: -8, size: 32, flip: true },
+  { left: 107, top: 227, size: 24, flip: true },
+  { left: 254, top: 361, size: 32, flip: true },
+  { left: 202, top: 316, size: 52, flip: true },
+  { left: 164, top: 401, size: 24 },
+];
+
+/**
+ * Figma 4627:9613 / 4652:12139: the reviewing card; "How was the seller?" 47px
+ * under it in 20px Medium brand orange, centred; five 40px stars 8px apart 31px
+ * lower; the two recommend cards 32px lower, 8px apart; and 56px lower the white
+ * sheet at radius 32 holding the four dimensions, 36px in from its top and 28px
+ * from its sides.
+ */
 function RateStep({
   seller,
   draft,
@@ -459,28 +675,29 @@ function RateStep({
   patch: (change: Partial<SellerDraft>) => void;
   onChangeSeller: () => void;
 }) {
+  const rated = draft.overall !== null;
   return (
-    <div>
-      <div className="flex items-end gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]">
-        <div className="min-w-0 flex-1">
-          <p className={`${FACE} text-[13px] text-[var(--accent-trust)]`}>Currently reviewing</p>
-          <p className={`mt-1 truncate ${FACE} text-[18px] text-[var(--text-primary)]`}>
-            {seller.display_name}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onChangeSeller}
-          className={`shrink-0 cursor-pointer ${FACE} text-[16px] text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text-primary)] hover:underline`}
-        >
-          Change
-        </button>
-      </div>
+    <div className="relative">
+      <span aria-hidden="true" className="pointer-events-none absolute -left-4 -top-4 -z-10 hidden select-none max-sm:block">
+        {CLOUDS.map((c, i) => (
+          <Cloud
+            key={i}
+            size={c.size}
+            weight="thin"
+            className={`absolute ${rated ? "text-[var(--semantic-success-500)]" : "text-[rgba(32,32,32,0.2)]"} ${
+              c.flip ? "rotate-180" : ""
+            }`}
+            style={{ left: c.left, top: c.top }}
+          />
+        ))}
+      </span>
 
-      <h1 className="mt-12 text-center text-[length:var(--text-lg)] font-[number:var(--weight-medium)] text-[var(--accent-primary)]">
+      <CurrentlyReviewingCard name={seller.display_name} onChange={onChangeSeller} />
+
+      <h1 className="mt-[47px] text-center text-[20px] font-medium leading-none text-[var(--accent-primary)]">
         How was the seller?
       </h1>
-      <div className="mt-5 flex justify-center gap-[6px]">
+      <div className="mt-[31px] flex justify-center gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
@@ -488,15 +705,15 @@ function RateStep({
             onClick={() => patch({ overall: n })}
             aria-label={`${n} star${n > 1 ? "s" : ""}`}
             aria-pressed={draft.overall === n}
-            className="cursor-pointer rounded-[6px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+            className={`grid h-10 w-10 cursor-pointer place-items-center rounded-[6px] ${FOCUS_RING}`}
           >
             <Star
-              size={48}
+              size={40}
               weight="fill"
               aria-hidden="true"
               className={
                 draft.overall !== null && n <= draft.overall
-                  ? "text-[var(--accent-success)]"
+                  ? "text-[var(--semantic-success-500)]"
                   : "text-[var(--base-gray-400)]"
               }
             />
@@ -504,28 +721,19 @@ function RateStep({
         ))}
       </div>
 
-      <div className="mt-6 flex flex-col gap-3">
-        <ChoiceCard
-          tone="yes"
-          value={draft.recommend}
-          choice
-          onPick={(recommend) => patch({ recommend })}
-        >
+      <div className="mt-8 flex flex-col gap-2">
+        <ChoiceCard tone="yes" value={draft.recommend} choice full onPick={(recommend) => patch({ recommend })}>
           I recommend this seller
         </ChoiceCard>
-        <ChoiceCard
-          tone="no"
-          value={draft.recommend}
-          choice={false}
-          onPick={(recommend) => patch({ recommend })}
-        >
+        <ChoiceCard tone="no" value={draft.recommend} choice={false} full onPick={(recommend) => patch({ recommend })}>
           I don&rsquo;t recommend this seller
         </ChoiceCard>
       </div>
 
-      {/* The white sheet the frame draws under the stars, run to the bottom of
-          the page — the main column's bottom padding is taken back into it. */}
-      <section className="-mx-4 -mb-[140px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[180px] pt-10 sm:-mx-6 sm:px-8">
+      {/* Run to the bottom of the page: the main column's bottom padding is
+          taken back into the sheet, which keeps enough of its own to clear the
+          pinned pill. */}
+      <section className="-mx-4 -mb-[120px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8">
         <GradeQuestion
           title="Customer Service Responsiveness"
           hint="How was their response to your inquiries?"
@@ -537,6 +745,7 @@ function RateStep({
           hint="How well did they pack your order?"
           value={draft.packaging}
           onPick={(packaging) => patch({ packaging })}
+          className="mt-[30px]"
         />
         <BinaryQuestion
           title="Ad Accuracy"
@@ -545,6 +754,7 @@ function RateStep({
           no="Not the same"
           value={draft.accuracy}
           onPick={(accuracy) => patch({ accuracy })}
+          className="mt-[30px]"
         />
         <BinaryQuestion
           title="Order completeness"
@@ -553,6 +763,7 @@ function RateStep({
           no="Missing item"
           value={draft.completeness}
           onPick={(completeness) => patch({ completeness })}
+          className="mt-7"
         />
       </section>
     </div>
@@ -560,19 +771,23 @@ function RateStep({
 }
 
 /**
- * A yes/no card. As in step 2.6: the chosen card takes an orange hairline and
- * the other fades, while both keep their green tick or red cross.
+ * A yes/no card, Figma 4627:9613: 53px white at radius 16 with the card
+ * shadow, a 20px Check (green) or X (red) 16px in and 16px Regular... 14px
+ * Regular 8px after it; the binary pairs hug their label, 12px apart. Step 2.6:
+ * the chosen card takes a 1px orange line at 80%, the other drops to 60%.
  */
 function ChoiceCard({
   tone,
   value,
   choice,
+  full = false,
   onPick,
   children,
 }: {
   tone: "yes" | "no";
   value: boolean | null;
   choice: boolean;
+  full?: boolean;
   onPick: (choice: boolean) => void;
   children: React.ReactNode;
 }) {
@@ -584,61 +799,70 @@ function ChoiceCard({
       type="button"
       onClick={() => onPick(choice)}
       aria-pressed={selected}
-      className={`flex cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-5 py-[14px] text-left transition-opacity ${
-        selected ? SELECTED_RING : "shadow-[var(--shadow-card)]"
-      } ${dimmed ? "opacity-60" : ""}`}
+      className={`flex h-[53px] cursor-pointer items-center gap-2 rounded-[16px] border bg-[var(--surface-card)] px-[15px] text-left text-[14px] leading-none text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-opacity ${FOCUS_RING} ${
+        selected ? "border-[rgba(239,88,33,0.8)]" : "border-transparent"
+      } ${dimmed ? "opacity-60" : ""} ${full ? "w-full" : ""}`}
     >
       <Icon
-        size={22}
+        size={20}
         weight="bold"
         aria-hidden="true"
         className={`shrink-0 ${tone === "yes" ? "text-[var(--accent-success)]" : "text-[var(--accent-danger)]"}`}
       />
-      <span className={`${FACE} text-[15px] text-[var(--text-primary)]`}>{children}</span>
+      {children}
     </button>
   );
 }
 
-function QuestionHeading({ title, hint }: { title: string; hint: string }) {
-  return (
-    <>
-      <legend className={`${FACE} text-[15px] font-medium text-[var(--text-primary)]`}>{title}</legend>
-      <p className={`mt-1 ${FACE} text-[12px] text-[var(--text-secondary)]`}>{hint}</p>
-    </>
-  );
-}
+const NUMERALS = [NumberOne, NumberTwo, NumberThree, NumberFour, NumberFive] as const;
 
+/**
+ * Figma 4627:9613: the dimension in 14px Medium, its hint 7px under it in 12px
+ * Light at 70%, and 12px lower five 52px discs 12px apart, in the page colour
+ * under a 0 4px 2px shadow at 10%, each carrying a 20px Phosphor numeral in a
+ * 2px line. Chosen (2.6): brand orange with the numeral in the page colour.
+ */
 function GradeQuestion({
   title,
   hint,
   value,
   onPick,
+  className = "",
 }: {
   title: string;
   hint: string;
   value: number | null;
   onPick: (grade: number) => void;
+  className?: string;
 }) {
+  const hintId = useId();
   return (
-    <fieldset className="mt-8 first:mt-0">
-      <QuestionHeading title={title} hint={hint} />
-      <div className="mt-3 flex flex-wrap gap-3">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onPick(n)}
-            aria-pressed={value === n}
-            aria-label={`${n} out of 5`}
-            className={`grid h-[52px] w-[52px] cursor-pointer place-items-center rounded-full ${FACE} text-[18px] ${
-              value === n
-                ? "bg-[var(--accent-primary)] text-white"
-                : "bg-[rgb(242,242,242)] text-[var(--text-primary)] shadow-[0_4px_4px_0_var(--shadow-color-10)]"
-            }`}
-          >
-            {n}
-          </button>
-        ))}
+    <fieldset aria-describedby={hintId} className={`min-w-0 ${className}`}>
+      <legend className={HEADING}>{title}</legend>
+      <p id={hintId} className={HINT}>
+        {hint}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-3 drop-shadow-[0_4px_2px_rgba(0,0,0,0.1)]">
+        {NUMERALS.map((Numeral, i) => {
+          const n = i + 1;
+          const chosen = value === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onPick(n)}
+              aria-pressed={chosen}
+              aria-label={`${n} out of 5`}
+              className={`grid h-[52px] w-[52px] cursor-pointer place-items-center rounded-full transition-colors ${FOCUS_RING} ${
+                chosen
+                  ? "bg-[var(--accent-primary)] text-[var(--surface-app)]"
+                  : "bg-[var(--surface-app)] text-[var(--text-primary)]"
+              }`}
+            >
+              <Numeral size={20} weight="bold" aria-hidden="true" />
+            </button>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -651,6 +875,7 @@ function BinaryQuestion({
   no,
   value,
   onPick,
+  className = "",
 }: {
   title: string;
   hint: string;
@@ -658,11 +883,16 @@ function BinaryQuestion({
   no: string;
   value: boolean | null;
   onPick: (answer: boolean) => void;
+  className?: string;
 }) {
+  const hintId = useId();
   return (
-    <fieldset className="mt-8">
-      <QuestionHeading title={title} hint={hint} />
-      <div className="mt-3 flex flex-wrap gap-3">
+    <fieldset aria-describedby={hintId} className={`min-w-0 ${className}`}>
+      <legend className={HEADING}>{title}</legend>
+      <p id={hintId} className={HINT}>
+        {hint}
+      </p>
+      <div className="mt-[18px] flex flex-wrap gap-3">
         <ChoiceCard tone="yes" value={value} choice onPick={onPick}>
           {yes}
         </ChoiceCard>
@@ -676,6 +906,30 @@ function BinaryQuestion({
 
 /* ------------------------------------------------------------------ write */
 
+/**
+ * The three cards tumbling in over step 3, Figma 4645:10125: a 140px square
+ * and two 185x95 cards, all turned -10deg with full faces, starting under the
+ * bar. Frame coordinates below the bar.
+ */
+const WRITE_CARDS: TiltedCard[] = [
+  { x: 118, top: -46, w: 140, h: 140, tilt: -10, stars: starRow(5, STAR_GREEN) },
+  { x: -76, top: 30, tilt: -10, stars: starRow(3, STAR_YELLOW) },
+  {
+    x: 275,
+    top: -32,
+    tilt: -10,
+    anchorRight: true,
+    stars: [STAR_CORAL, STAR_CORAL, STAR_GREEN, STAR_GREEN, STAR_GREEN],
+  },
+];
+
+/**
+ * Figma 4645:10125 / 4652:12635: the rating prompt card 84px under the bar's
+ * content line — 80px white at radius 12, a 40px green AsteriskSimple disc 20px
+ * in, the prompt 17px after it in 14px Regular on 21px lines — then 32px lower
+ * the white sheet: headings 36px apart, each 14px Medium over a 12px Light hint,
+ * fields 18px under the hint, counters 4px under the field in 10px Light.
+ */
 function WriteStep({
   draft,
   patch,
@@ -692,26 +946,23 @@ function WriteStep({
   const bodyId = useId();
   const bodyHint = useId();
   const short = MIN_SELLER_PROSE - draft.comment.trim().length;
-  const input = `w-full rounded-[var(--radius-sm)] bg-[var(--surface-card)] ${FACE} text-[15px] text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:shadow-[var(--shadow-card),inset_0_0_0_1px_var(--accent-primary)]`;
 
   return (
-    <div>
-      <div className="mt-20 flex items-center gap-4 rounded-[var(--radius-sm)] bg-[var(--surface-card)] px-6 py-5 shadow-[var(--shadow-card)]">
+    <div className="relative">
+      <TiltedRatingCards
+        cards={WRITE_CARDS}
+        className="absolute -left-4 -right-4 -top-4 -z-10 hidden h-[190px] max-sm:block"
+      />
+
+      <div className="mt-[84px] flex min-h-20 items-center gap-[17px] rounded-[12px] bg-[var(--surface-card)] px-5 py-[19px] shadow-[var(--shadow-card)]">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--accent-success)] text-white">
-          <Asterisk size={24} weight="bold" aria-hidden="true" />
+          <AsteriskSimple size={24} weight="bold" aria-hidden="true" />
         </span>
-        <p className={`${FACE} text-[15px] leading-[21px] text-[var(--text-primary)]`}>
-          {ratingPrompt(draft.overall)}
-        </p>
+        <p className="text-[14px] leading-[21px] text-[var(--text-primary)]">{ratingPrompt(draft.overall)}</p>
       </div>
 
-      <section className="-mx-4 -mb-[140px] mt-8 rounded-t-[32px] bg-[var(--surface-card)] px-6 pb-[180px] pt-10 sm:-mx-6 sm:px-8">
-        <label htmlFor={titleId} className={`block ${FACE} text-[15px] font-medium text-[var(--text-primary)]`}>
-          Make it pop
-        </label>
-        <p id={titleHint} className={`mt-1 ${FACE} text-[12px] text-[var(--text-secondary)]`}>
-          Summarize your experience in a few words
-        </p>
+      <section className="-mx-4 -mb-[120px] mt-8 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8">
+        <FieldHeading htmlFor={titleId} hintId={titleHint} title="Make it pop" hint="Summarize your experience in a few words" />
         <input
           id={titleId}
           aria-describedby={titleHint}
@@ -719,30 +970,31 @@ function WriteStep({
           onChange={(e) => patch({ title: e.target.value.slice(0, MAX_SELLER_TITLE) })}
           maxLength={MAX_SELLER_TITLE}
           placeholder="Your interesting title here..."
-          className={`mt-3 h-[53px] px-4 ${input}`}
+          className={`mt-[18px] h-[53px] ${FIELD} ${draft.title ? "border-[rgba(239,88,33,0.8)]" : "border-transparent"}`}
         />
-        <p className={`mt-2 text-right ${FACE} text-[11px] text-[var(--text-secondary)]`}>
+        <p className="mt-1 text-right text-[10px] font-light leading-none text-[var(--text-primary)]">
           {draft.title.length}/{MAX_SELLER_TITLE} characters
         </p>
 
-        <label htmlFor={bodyId} className={`mt-6 block ${FACE} text-[15px] font-medium text-[var(--text-primary)]`}>
-          A penny for your thoughts
-        </label>
-        <p id={bodyHint} className={`mt-1 ${FACE} text-[12px] text-[var(--text-secondary)]`}>
-          Elaborate on why you gave the rating
-        </p>
-        <div className="relative mt-3">
+        <FieldHeading
+          htmlFor={bodyId}
+          hintId={bodyHint}
+          title="A penny for your thoughts"
+          hint="Elaborate on why you gave the rating"
+          className="mt-9"
+        />
+        <div className="relative mt-[18px]">
           <textarea
             id={bodyId}
             aria-describedby={bodyHint}
             value={draft.comment}
             onChange={(e) => patch({ comment: e.target.value.slice(0, MAX_SELLER_COMMENT) })}
-            className={`field-sizing-content block min-h-[150px] resize-none p-4 leading-[21px] ${input}`}
+            className={`field-sizing-content block min-h-[156px] resize-none py-4 leading-[21px] ${FIELD} border-transparent`}
           />
           {draft.comment.length === 0 ? (
             <span
               aria-hidden="true"
-              className={`pointer-events-none absolute left-4 top-4 ${FACE} text-[15px] leading-[21px] text-[var(--text-muted)]`}
+              className="pointer-events-none absolute left-4 top-4 text-[14px] leading-[21px] text-[rgba(32,32,32,0.3)]"
             >
               Write it <em>bluntly</em> here..
             </span>
@@ -750,19 +1002,15 @@ function WriteStep({
         </div>
         <p
           aria-live="polite"
-          className={`mt-2 text-right ${FACE} text-[11px] ${
-            short > 0 ? "text-[var(--base-gray-400)]" : "text-[var(--accent-primary)]"
+          className={`mt-1 text-right text-[10px] font-light leading-none ${
+            short > 0 ? "text-[var(--text-primary)]" : "text-[var(--accent-primary)]"
           }`}
         >
           {short > 0 ? `${short} characters remaining` : "I’m sure someone will appreciate this"}
         </p>
 
-        <p className={`mt-6 ${FACE} text-[15px] font-medium text-[var(--text-primary)]`}>
-          A picture speaks a thousand words
-        </p>
-        <p className={`mt-1 ${FACE} text-[12px] text-[var(--text-secondary)]`}>
-          Share some photos of your experience
-        </p>
+        <p className={`mt-9 ${HEADING}`}>A picture speaks a thousand words</p>
+        <p className={HINT}>Share some photos of your experience</p>
         <PhotoTiles urls={draft.photoUrls} onAdd={addPhoto} onRemove={removePhoto} />
       </section>
     </div>
@@ -772,6 +1020,11 @@ function WriteStep({
 /**
  * Public photos, through the same endpoint a product review's photo uses. The
  * API accepts only URLs this reviewer uploaded (photo_not_owned otherwise).
+ *
+ * Figma 4645:10125 / 4652:12635: 120px white tiles at radius 16 with the card
+ * shadow, 12px apart, 26px under the hint. Empty: a filled 32px Image 32px from
+ * the top and "Tap to upload" in 10px Regular #8c8c8c; after a photo, a 32px
+ * Plus and "Add more". The remove control is not drawn; a photo needs one.
  */
 function PhotoTiles({
   urls,
@@ -814,12 +1067,12 @@ function PhotoTiles({
   }
 
   return (
-    <div className="mt-4">
-      <ul className="flex flex-wrap gap-4">
+    <div className="mt-[26px]">
+      <ul className="flex flex-wrap gap-3">
         {urls.map((url, i) => (
           <li
             key={url}
-            className="relative h-[120px] w-[120px] overflow-hidden rounded-[var(--radius-md)] shadow-[var(--shadow-card)]"
+            className="relative h-[120px] w-[120px] overflow-hidden rounded-[16px] shadow-[var(--shadow-card)]"
           >
             <Image src={url} alt="" fill sizes="120px" className="object-cover" />
             <button
@@ -838,14 +1091,14 @@ function PhotoTiles({
               type="button"
               onClick={() => input.current?.click()}
               disabled={busy}
-              className={`flex h-[120px] w-[120px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--surface-card)] ${FACE} text-[11px] text-[var(--text-secondary)] shadow-[var(--shadow-card)] disabled:cursor-wait`}
+              className={`flex h-[120px] w-[120px] cursor-pointer flex-col items-center rounded-[16px] bg-[var(--surface-card)] pt-8 text-[10px] leading-none text-[var(--base-gray-400)] shadow-[var(--shadow-card)] disabled:cursor-wait ${FOCUS_RING}`}
             >
               {urls.length === 0 ? (
-                <ImageIcon size={30} weight="fill" aria-hidden="true" className="text-[var(--base-black)]" />
+                <ImageIcon size={32} weight="fill" aria-hidden="true" className="text-[var(--base-black)]" />
               ) : (
-                <Plus size={30} aria-hidden="true" className="text-[var(--base-black)]" />
+                <Plus size={32} aria-hidden="true" className="text-[var(--base-black)]" />
               )}
-              {busy ? "Uploading…" : urls.length === 0 ? "Tap to upload" : "Add more"}
+              <span className="mt-[9px]">{busy ? "Uploading…" : urls.length === 0 ? "Tap to upload" : "Add more"}</span>
             </button>
           </li>
         ) : null}
@@ -861,7 +1114,7 @@ function PhotoTiles({
         }}
       />
       {error ? (
-        <p role="alert" className="mt-3 text-[13px] text-[var(--accent-danger)]">
+        <p role="alert" className="mt-3 text-[12px] leading-[18px] text-[var(--accent-danger)]">
           {error}
         </p>
       ) : null}
@@ -872,66 +1125,51 @@ function PhotoTiles({
 /* ------------------------------------------------------------------- done */
 
 /**
- * "Seller Review - All done.png", with two things left out on purpose.
+ * Figma "Seller Review - All done" (4652:12914): "All done!", "Your review is
+ * now live!" and "Make sure all the details are accurate!" in the composer's
+ * heading stack; "See what your review looks like:" 35px lower and 19px in, in
+ * 12px Regular trust blue, over the tilted ReviewCard; "Your latest stats:"
+ * 33px under the card and 11px in; the six tilted cards from the bottom
+ * corners; "View my review" pinned 32px from the bottom.
  *
- * "Your latest stats" (reviews posted, people helped, commission earned) and
- * the preview card's vote and comment counts: a review posted seconds ago has
- * no votes or comments, and seller reviews earn nothing, so every one of those
- * figures would be invented. The preview keeps what is real — the reviewer,
- * the stars, the title and the first photo.
+ * The preview is the draft as posted: the title and the first photo, with
+ * the real zero engagement a review posted seconds ago has (ReviewPreviewCard).
  */
-function DoneStep({
-  seller,
-  draft,
-  user,
-  onAgain,
-}: {
-  seller: PickedSeller;
-  draft: SellerDraft;
-  user: PanelUser;
-  onAgain: () => void;
-}) {
+function DoneStep({ seller, draft, user }: { seller: PickedSeller; draft: SellerDraft; user: PanelUser }) {
   return (
-    <div className="pt-6">
-      <p className={`${FACE} text-[13px] text-[var(--text-primary)]`}>All done!</p>
-      <h1 className="mt-[6px] text-[24px] font-semibold leading-[28px] text-[var(--accent-primary)]">
-        Your seller review is posted!
-      </h1>
-      <p className={`mt-[10px] ${FACE} text-[13px] leading-[18px] text-[var(--text-secondary)]`}>
-        It&rsquo;s on {seller.display_name}&rsquo;s page now. Moderators can still remove a review
-        that breaks the community guidelines.
-      </p>
+    <div className="relative">
+      <TiltedRatingCards cards={DONE_CARDS} className="fixed inset-x-0 bottom-0 z-0 hidden h-[340px] max-sm:block" />
+      <div className="relative z-10">
+        <p className="text-[12px] leading-none text-[var(--text-primary)]">All done!</p>
+        <h1 className="mt-2.5 text-[20px] font-medium leading-none text-[var(--accent-primary)]">
+          Your review is now live!
+        </h1>
+        <p className="mt-[7px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+          Make sure all the details are accurate!
+        </p>
 
-      <p className={`mt-8 ${FACE} text-[13px] text-[var(--accent-trust)]`}>
-        See what your review looks like:
-      </p>
-      <div className="mt-4 flex gap-4 rounded-[var(--radius-md)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)]">
-        <div className="min-w-0 flex-1">
-          <p className={`${FACE} text-[13px] text-[var(--text-secondary)]`}>
-            {user?.username ?? "You"}
-          </p>
-          <StarRow value={draft.overall} size={16} className="mt-2" />
-          <p className="mt-2 text-[16px] font-bold text-[var(--text-primary)]">{draft.title.trim()}</p>
-        </div>
-        {draft.photoUrls[0] ? (
-          <span className="relative h-[100px] w-[100px] shrink-0 overflow-hidden rounded-[var(--radius-md)]">
-            <Image src={draft.photoUrls[0]} alt="" fill sizes="100px" className="object-cover" />
-          </span>
-        ) : null}
+        <p className="ml-[19px] mt-[35px] text-[12px] leading-none text-[var(--accent-trust)]">
+          See what your review looks like:
+        </p>
+        <ReviewPreviewCard
+          username={user?.username ?? null}
+          avatarUrl={user?.avatarUrl ?? null}
+          productName={null}
+          title={draft.title}
+          photoUrl={draft.photoUrls[0] ?? null}
+          className="mt-5"
+        />
+
+        <LatestStats className="mt-[33px] [&>p]:ml-[11px]" />
       </div>
 
-      <div className="mt-10 flex flex-col items-center gap-3">
-        <Button href={`/sellers/${seller.id}`} fullWidth>
-          View my review
-          <ArrowRight size={18} weight="bold" aria-hidden="true" />
-        </Button>
-        <button
-          type="button"
-          onClick={onAgain}
-          className={`cursor-pointer ${FACE} text-[14px] text-[var(--text-primary)] underline-offset-4 hover:underline`}
-        >
-          Rate another seller
-        </button>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
+        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
+          <Button href={`/sellers/${seller.id}`} fullWidth className="pointer-events-auto gap-1">
+            View my review
+            <ArrowRight size={20} aria-hidden="true" />
+          </Button>
+        </div>
       </div>
     </div>
   );

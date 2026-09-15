@@ -15,7 +15,7 @@ export default async function NewReviewPage() {
     // No SiteHeader: the reviewer frames draw a composer-specific header — a
     // back arrow and the avatar — and the form owns it, because only the form
     // knows what "back" means at each step.
-    <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
+    <div className="flex min-h-dvh flex-col">
       <WriteReviewForm user={{ username: me.username, avatarUrl: me.avatar_url }} />
     </div>
   );
