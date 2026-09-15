@@ -26,6 +26,7 @@ const GATED = [
   "/questions/new",
   "/requests/new",
   "/sellers/rate",
+  "/notifications",
 ] as const;
 
 const PUBLIC = [

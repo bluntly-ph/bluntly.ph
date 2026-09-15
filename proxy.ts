@@ -43,6 +43,9 @@ const PROTECTED = [
   // The seller composer, opened from the mobile action menu. Its page guards
   // with requireOnboardedUser, which alone would drop the return path.
   "/sellers/rate",
+  // Reached from the avatar menu; its page guards with requireUser, which
+  // alone sent a signed-out reader to a bare /login.
+  "/notifications",
 ];
 
 /** Routes that make no sense while already signed in. */

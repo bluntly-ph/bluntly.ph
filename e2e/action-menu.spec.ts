@@ -105,6 +105,26 @@ test.describe("mobile action menu", () => {
     });
   }
 
+  // "Seller Page - Review" (4218:2148) draws the menu too (4797:16411). It needs a
+  // store to exist, so it is skipped — and says why — where the API has none.
+  test("a store page carries the FAB, and Rate a Seller keeps that store", async ({ page }) => {
+    await page.goto("/search?q=store&tab=sellers");
+    const store = page.locator("main a[href^='/sellers/']:not([href^='/sellers/rate'])").first();
+    test.skip((await store.count()) === 0, "No seller record to render a store page against.");
+    const href = (await store.getAttribute("href"))!;
+    await page.goto(href);
+    await expect(fab(page)).toHaveCount(1);
+    const box = await fab(page).boundingBox();
+    expect(Math.round(MOBILE.width - (box!.x + box!.width))).toBe(32);
+    expect(Math.round(MOBILE.height - (box!.y + box!.height))).toBe(32);
+    await fab(page).click();
+    const sellerId = href.split("/")[2];
+    await expect(panel(page).getByRole("link", { name: "Rate a Seller" })).toHaveAttribute(
+      "href",
+      `/sellers/rate?seller=${sellerId}`,
+    );
+  });
+
   for (const path of NO_FAB) {
     test(`no FAB on ${path}, which the Figma file does not draw it on`, async ({ page }) => {
       await page.goto(path);
