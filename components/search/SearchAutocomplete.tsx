@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
+import { ClockCounterClockwise, MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 
+import { RECENT_SEARCHES_KEY, parseRecentSearches } from "./recent-searches-model";
 import { comboKeyAction } from "./search-combobox-model";
 
 /**
@@ -44,12 +45,19 @@ export function SearchAutocomplete({
   inputClassName,
   showClear = false,
   tone = "muted",
+  recents = false,
 }: {
   defaultValue?: string;
   placeholder?: string;
   inputClassName: string;
   showClear?: boolean;
   tone?: "muted" | "strong";
+  /**
+   * The typing state of "Screen/Mobile Search" (6852:641): while the field has
+   * focus and no product suggestions are showing, the reader's recent searches
+   * on this device. See RecentSearchesPanel.
+   */
+  recents?: boolean;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -82,6 +90,10 @@ export function SearchAutocomplete({
   const active = highlight.q === trimmed && highlight.i < items.length ? highlight.i : -1;
   const open = !dismissed && items.length > 0;
   const strong = tone === "strong";
+  // Read from storage when the field gains focus — in the event handler, not an
+  // effect — so the list is current without a cascading render.
+  const [history, setHistory] = useState<string[] | null>(null);
+  const showRecents = recents && history !== null && history.length > 0 && !open;
 
   const setActive = (i: number) => setHighlight({ q: trimmed, i });
 
@@ -180,7 +192,19 @@ export function SearchAutocomplete({
             setQuery(e.target.value);
             setDismissed(false);
           }}
-          onKeyDown={onKeyDown}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && showRecents) setHistory(null);
+            onKeyDown(e);
+          }}
+          onFocus={() => {
+            if (!recents) return;
+            try {
+              setHistory(parseRecentSearches(window.localStorage.getItem(RECENT_SEARCHES_KEY)));
+            } catch {
+              setHistory([]);
+            }
+          }}
+          onBlur={() => setHistory(null)}
           placeholder={placeholder}
           aria-label="Search"
           role="combobox"
@@ -216,6 +240,41 @@ export function SearchAutocomplete({
           </button>
         ) : null}
       </form>
+
+      {/* Figma "Screen/Mobile Search" (6852:641), read 2026-09-14: 24px under
+          the field and 8px further in, rows of a 32px ClockCounterClockwise 12px
+          before the query in 16px Regular at 0.8px tracking, on a 48px pitch.
+          Choosing one keeps focus in the field until the search runs, so the
+          panel does not blink shut under the pointer.
+
+          INTENTIONAL PRODUCT DIFFERENCE: the frame's divider and "Most
+          searched today:" rows are not drawn. Nothing counts searches across
+          readers, and a list of popular queries with no data behind it would
+          be invented. */}
+      {showRecents && history ? (
+        <div className="absolute inset-x-0 top-full z-30 min-h-[50dvh] bg-[var(--surface-app)] px-2 pb-8 pt-6">
+          <ul aria-label="Recent searches" className="flex flex-col gap-4">
+            {history.map((item) => (
+              <li key={item}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setQuery(item);
+                    setHistory(null);
+                    setDismissed(true);
+                    router.push(`/search?q=${encodeURIComponent(item)}`);
+                  }}
+                  className="flex h-8 w-full cursor-pointer items-center gap-3 text-left text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)] hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
+                >
+                  <ClockCounterClockwise size={32} aria-hidden="true" className="shrink-0" />
+                  <span className="min-w-0 truncate">{item}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {open ? (
         <ul

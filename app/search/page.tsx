@@ -4,6 +4,7 @@ import { CaretLeft, ChatCircle, MagnifyingGlass, Storefront } from "@phosphor-ic
 
 import { QuestionResultRow } from "@/components/search/QuestionResultRow";
 import { SellerResultRow } from "@/components/sellers/SellerResultRow";
+import { RememberSearch } from "@/components/search/RememberSearch";
 import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
@@ -94,11 +95,13 @@ export default async function SearchPage({
             28px magnifier 16px in, the query in 16px Poppins at 0.8px tracking
             56px in, and a 28px clear glyph 16px from the right edge. */}
         <div className="max-w-[40rem]">
+          <RememberSearch q={q} />
           <SearchAutocomplete
             defaultValue={q}
             placeholder="Search products, reviews, or ask a question"
             showClear
             tone="strong"
+            recents
             inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
           />
         </div>
