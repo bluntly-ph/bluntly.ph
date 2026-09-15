@@ -27,6 +27,8 @@ const GATED = [
   "/requests/new",
   "/sellers/rate",
   "/notifications",
+  // A dynamic segment: the proxy matches this one by pattern (lib/route-access.ts).
+  "/sellers/any-store/dashboard",
 ] as const;
 
 const PUBLIC = [

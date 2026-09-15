@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextProxy } from "next/server";
 
+import { isAuthOnlyPath, isProtectedPath } from "@/lib/route-access";
 import { trafficBeacon } from "@/lib/traffic-beacon";
 
 /**
@@ -19,37 +20,7 @@ import { trafficBeacon } from "@/lib/traffic-beacon";
 
 const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME ?? "bluntly_session";
 
-/**
- * Routes that require a session.
- *
- * Every route guarded by `requireUser`/`requireRole` belongs here. Those guards
- * redirect to a bare `/login` because a Server Component cannot see its own
- * pathname — so a route missing from this list still ends up at the login page,
- * just without the `?next=` that brings the user back. Someone who clicks
- * "Write a review" while signed out should land on the review form after
- * signing in, not on the homepage.
- */
-const PROTECTED = [
-  "/dashboard",
-  "/contracts",
-  "/profile",
-  "/settings",
-  "/admin",
-  "/moderate",
-  "/onboarding",
-  "/reviews/new",
-  "/questions/new",
-  "/requests/new",
-  // The seller composer, opened from the mobile action menu. Its page guards
-  // with requireOnboardedUser, which alone would drop the return path.
-  "/sellers/rate",
-  // Reached from the avatar menu; its page guards with requireUser, which
-  // alone sent a signed-out reader to a bare /login.
-  "/notifications",
-];
-
-/** Routes that make no sense while already signed in. */
-const AUTH_ONLY = ["/login", "/signup", "/welcome"];
+// Which routes need a session, and which make no sense with one: lib/route-access.ts.
 
 export const proxy: NextProxy = (request, event) => {
   const { pathname } = request.nextUrl;
@@ -63,13 +34,13 @@ export const proxy: NextProxy = (request, event) => {
   const beacon = trafficBeacon(request);
   if (beacon) event.waitUntil(beacon);
 
-  if (!hasSession && PROTECTED.some((p) => pathname.startsWith(p))) {
+  if (!hasSession && isProtectedPath(pathname)) {
     const url = new URL("/login", request.url);
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  if (hasSession && AUTH_ONLY.some((p) => pathname.startsWith(p))) {
+  if (hasSession && isAuthOnlyPath(pathname)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
