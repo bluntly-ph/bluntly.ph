@@ -26,6 +26,13 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 
 import { ComposerGrid, ComposerHeader } from "@/components/reviews/ComposerHeader";
+import {
+  COMPOSER_ACTION_BUTTON,
+  ComposerActions,
+  ComposerLayout,
+  ComposerSteps,
+  type ComposerStep,
+} from "@/components/reviews/ComposerLayout";
 import { CurrentlyReviewingCard } from "@/components/reviews/CurrentlyReviewingCard";
 import {
   MAX_TITLE,
@@ -46,6 +53,7 @@ import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
 import { DONE_CARDS, TiltedRatingCards } from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
+import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
 import { prepareImageForUpload } from "@/lib/image";
 
 type Product = PickedProduct;
@@ -426,18 +434,56 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
         : { label: "Change product", run: () => setPhase("product") }
       : { label: "Go back", run: () => router.back() };
 
+  // A new step starts at its top. On the website the action sits under the
+  // step, so without this the next step would open scrolled to wherever the
+  // last one ended.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step, phase]);
+
+  const inSteps = phase === "steps" && product !== null;
+  const panelSteps: ComposerStep[] = [
+    {
+      label: "Choose the product",
+      state: phase === "product" ? "current" : "done",
+      onSelect: inSteps ? () => setPhase("product") : undefined,
+    },
+    ...STEPS.map(
+      (label, i): ComposerStep => ({
+        label,
+        number: i + 1,
+        state: phase === "done" ? "done" : !inSteps ? "todo" : i < step ? "done" : i === step ? "current" : "todo",
+        onSelect: inSteps && i < step ? () => patch({ step: i }) : undefined,
+      }),
+    ),
+  ];
+
   return (
     <>
       <ComposerHeader
         user={user}
+        title="Write a review"
         onBack={back.run}
         backLabel={back.label}
         progress={phase === "done" ? 1 : phase === "steps" && product ? (step + 1) / STEPS.length : 0}
       />
 
       <ComposerGrid />
-      {/* pb clears the bottom-anchored Continue (56px pill + 32px inset). */}
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pt-4 pb-[120px] sm:px-6">
+      <ComposerLayout
+        aside={
+          <ComposerSteps
+            flow="Write a review"
+            subjectLabel="Reviewing"
+            subject={phase === "done" ? (submitted?.productName ?? null) : (product?.canonical_name ?? null)}
+            steps={panelSteps}
+            note={
+              phase === "done"
+                ? "A moderator checks every review before it goes public."
+                : "Your draft is saved on this device as you type, so you can pick it up later."
+            }
+          />
+        }
+      >
         {phase === "done" ? (
           <DoneStep user={user} submitted={submitted} />
         ) : (
@@ -472,7 +518,7 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
             ) : null}
           </>
         )}
-      </main>
+      </ComposerLayout>
     </>
   );
 }
@@ -790,6 +836,7 @@ const CLOUDS: { left: number; top: number; size: number; flip?: boolean }[] = [
 
 function RatingStepDecor() {
   return (
+    // Phone only: every cloud is placed in the 390 frame's content box.
     <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 hidden select-none max-sm:block">
       {CLOUDS.map((c, i) => (
         <Cloud
@@ -809,6 +856,10 @@ function RatingStepDecor() {
  * fills a 192px band edge to edge with Icon/User — Phosphor User at 32px in a
  * 1px outline at 30% ink — six rows of twenty, about 20px apart, every other
  * figure dropped 5px. Drawn from the glyph rather than a texture. Decorative.
+ *
+ * On the phone it bleeds to the screen edges. On the website it would bleed
+ * into the side panel's gutter, so from `md` it is the column's width with
+ * rounded ends, and each row carries enough figures to fill 42rem.
  */
 const CROWD_ROWS = [0, 32, 62, 93, 125, 155];
 
@@ -816,10 +867,10 @@ function CrowdBand() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute -left-4 -right-4 top-0 -z-10 h-[192px] select-none overflow-hidden sm:-left-6 sm:-right-6"
+      className="pointer-events-none absolute -left-4 -right-4 top-0 -z-10 h-[192px] select-none overflow-hidden sm:-left-6 sm:-right-6 md:left-0 md:right-0 md:rounded-[16px]"
     >
       {CROWD_ROWS.flatMap((top, row) =>
-        Array.from({ length: 21 }, (_, i) => (
+        Array.from({ length: 34 }, (_, i) => (
           <User
             key={`${row}-${i}`}
             size={32}
@@ -1211,9 +1262,11 @@ function StepsFlow({
               aria-hidden="true"
               className="pointer-events-none absolute left-[310px] top-[69px] -z-10 text-[var(--line-hairline-10)]"
             />
-            {/* The mascot reacts to the answer: the silhouette while nothing is
-                chosen, the full illustration once a verdict is picked (2.2). */}
-            <MascotPrompt className="mb-5" variant={draft.verdict ? "detailed" : "simple"}>
+            {/* One mascot for the whole step. Frame 2.2 draws the full
+                illustration once a verdict is picked, but swapping it mid-answer
+                read as the mascot changing out of nowhere (owner review,
+                2026-09-16), so only the prompt's words react. */}
+            <MascotPrompt className="mb-5" variant="simple">
               {draft.verdict
                 ? "Woah, mind telling us why?"
                 : "Would you recommend this to a friend?"}
@@ -1255,13 +1308,17 @@ function StepsFlow({
         ) : null}
 
         {step === 2 ? (
-          <div className="relative isolate">
+          // On the website the stars sit on a white stage rather than 154px
+          // down an empty column — the clouds that fill that space belong to
+          // the phone frame.
+          <div className="relative isolate md:mt-8 md:rounded-[32px] md:bg-[var(--surface-card)] md:px-8 md:pb-16 md:pt-12 md:shadow-[var(--shadow-card)]">
             <RatingStepDecor />
             {/* Figma 4435:1344: five 52px stars on a 60px pitch, the middle one
                 highest and the outer pair 16px lower; empty ones #8c8c8c, chosen
-                ones the rating green. The top of the arc is 154px under the
-                blurb. */}
-            <div className="mt-[154px] flex items-start justify-center gap-2">
+                ones the rating ladder's colour for the value picked (Icon/Star:
+                1–2 coral, 3 yellow, 4–5 green). The top of the arc is 154px
+                under the blurb. */}
+            <div className="mt-[154px] flex items-start justify-center gap-2 md:mt-0 lg:gap-4">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
@@ -1275,11 +1332,8 @@ function StepsFlow({
                   <Star
                     size={52}
                     weight="fill"
-                    className={
-                      n <= draft.rating
-                        ? "text-[var(--semantic-success-500)]"
-                        : "text-[var(--base-gray-400)]"
-                    }
+                    className="transition-colors"
+                    style={{ color: n <= draft.rating ? starColor(draft.rating) : STAR_EMPTY }}
                   />
                 </button>
               ))}
@@ -1396,21 +1450,22 @@ function StepsFlow({
 
           The frames draw no helper text beside the button, so neither does
           this — but a disabled control still has to say why, so the reason
-          moved into a live region instead of off the screen entirely. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-          <Button
-            type="button"
-            onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
-            disabled={Boolean(blocker) || busy}
-            fullWidth
-            className="pointer-events-auto gap-1"
-          >
-            {buttonLabel(step, STEPS.length, busy)}
-            {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
-          </Button>
-        </div>
-      </div>
+          moved into a live region instead of off the screen entirely.
+
+          The website has no frame: there the pill sits inline under the step
+          with the reason beside it (ComposerActions). */}
+      <ComposerActions hint={blocker}>
+        <Button
+          type="button"
+          onClick={isLast ? () => setAskingPrice(true) : () => patch({ step: step + 1 })}
+          disabled={Boolean(blocker) || busy}
+          fullWidth
+          className={COMPOSER_ACTION_BUTTON}
+        >
+          {buttonLabel(step, STEPS.length, busy)}
+          {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
+        </Button>
+      </ComposerActions>
       <p role="status" className="sr-only">
         {blocker ?? "Saved as you type."}
       </p>
@@ -1462,22 +1517,20 @@ function DoneStep({ user, submitted }: { user: PanelUser; submitted: Submitted |
               productName={submitted.productName}
               title={submitted.title}
               photoUrl={submitted.photoUrl}
-              className="mt-[18px]"
+              className="mt-[18px] md:max-w-[26rem]"
             />
           </>
         ) : null}
 
-        <LatestStats className="mt-[35px]" />
+        <LatestStats className="mt-[35px] md:[&>dl]:justify-start" />
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-          <Button href="/dashboard/history" fullWidth className="pointer-events-auto gap-1">
-            See my submissions
-            <ArrowRight size={20} aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
+      <ComposerActions>
+        <Button href="/dashboard/history" fullWidth className={COMPOSER_ACTION_BUTTON}>
+          See my submissions
+          <ArrowRight size={20} aria-hidden="true" />
+        </Button>
+      </ComposerActions>
     </div>
   );
 }

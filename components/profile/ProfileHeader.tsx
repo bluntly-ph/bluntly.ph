@@ -108,6 +108,21 @@ export function ProfileHeader({
 }
 
 /**
+ * The profile page's frame. Phone: one column, as the frame draws it. From
+ * `lg` the identity card stands on its own at the left and stays in view
+ * while the reviews scroll beside it, so a monitor is not one 42rem strip of
+ * square photos down the middle (owner review, 2026-09-16).
+ */
+export function ProfileLayout({ header, children }: { header: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto w-full max-w-[42rem] flex-1 pb-16 md:px-6 md:pt-6 lg:grid lg:max-w-[72rem] lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-10 lg:pt-10">
+      <div className="lg:sticky lg:top-[96px]">{header}</div>
+      <div className="min-w-0">{children}</div>
+    </main>
+  );
+}
+
+/**
  * The profile's section tabs, 16px under the panel: 14px Regular 60px apart,
  * the current one in ink and the rest in #8c8c8c, over a full-bleed hairline
  * 23px lower. Only sections that exist are listed — the frame's "Comments"
@@ -116,7 +131,7 @@ export function ProfileHeader({
 export function ProfileTabs({ statsHref }: { statsHref?: string }) {
   return (
     <nav aria-label="Profile sections" className="border-b border-[var(--line-hairline-10)]">
-      <ul className="flex justify-center gap-[60px] pb-[23px] pt-4 text-[14px] leading-none">
+      <ul className="flex justify-center gap-[60px] pb-[23px] pt-4 text-[14px] leading-none lg:justify-start lg:gap-10 lg:pt-1">
         <li>
           <span aria-current="page" className="text-[var(--text-primary)]">
             Reviews

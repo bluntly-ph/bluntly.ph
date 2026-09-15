@@ -30,9 +30,12 @@ import {
  * The design is a 390px phone frame, so the geometry below is its geometry:
  * a 72px nav, the earnings figure centred at y=168, a 300x72 action bar
  * floating over the curve at y=321, a 358px card, and 120px list rows with
- * 80x80 thumbnails under 32px medals. Wider screens keep that composition and
- * centre it rather than inventing a desktop layout the design does not
- * specify.
+ * 80x80 thumbnails under 32px medals.
+ *
+ * WEBSITE: centring that phone composition on a monitor is what the owner
+ * rejected (review, 2026-09-16). From `md` the column widens; from `lg` the
+ * earnings hero, its action bar and the Est. Comm card form the left column and
+ * the ranked reviews sit beside them as their own card.
  *
  * Every number here comes from `/users/me/dashboard`. Where the design shows a
  * figure nothing measures — average read time — the tile says so instead of
@@ -59,13 +62,15 @@ export function ReviewerDashboard({
     DASHBOARD_RANGES.find((r) => r.key === range)?.label ?? "This week";
 
   return (
-    <div className="mx-auto w-full max-w-[430px] lg:max-w-[46rem]">
-      <EarningsHero
-        amount={summary ? peso(summary.estimated_commission) : peso(0)}
-        trustLevel={trustLevel}
-      />
-      <ActionBar />
-      <EstCommCard summary={summary} rangeLabel={rangeLabel} range={range} />
+    <div className="mx-auto w-full max-w-[430px] md:max-w-[40rem] md:pt-6 lg:grid lg:max-w-[64rem] lg:grid-cols-[26rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-10 lg:pt-10">
+      <div>
+        <EarningsHero
+          amount={summary ? peso(summary.estimated_commission) : peso(0)}
+          trustLevel={trustLevel}
+        />
+        <ActionBar />
+        <EstCommCard summary={summary} rangeLabel={rangeLabel} range={range} />
+      </div>
       <Leaderboard summary={summary} displayName={displayName} />
     </div>
   );
@@ -79,7 +84,7 @@ function EarningsHero({ amount, trustLevel }: { amount: string; trustLevel: stri
     // and hid its header row — positioned elements win against non-positioned
     // siblings regardless of document order.
     <div
-      className="rounded-b-[28px]"
+      className="rounded-b-[28px] md:rounded-[28px]"
       style={{
         background:
           "linear-gradient(160deg, var(--accent-primary) 0%, var(--accent-strong, #c2410c) 100%)",
@@ -178,7 +183,7 @@ function EstCommCard({
     <section
       id="insights"
       aria-labelledby="est-comm-heading"
-      className="mx-4 mt-5 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-6 py-4 shadow-[var(--shadow-card)]"
+      className="mx-4 mt-5 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-6 py-4 shadow-[var(--shadow-card)] md:mx-0"
     >
       <div className="flex items-center justify-between">
         <h2
@@ -297,12 +302,15 @@ function Leaderboard({
   const reviews = summary?.reviews ?? [];
 
   return (
-    <section aria-labelledby="leaderboard-heading" className="mt-6">
+    <section
+      aria-labelledby="leaderboard-heading"
+      className="mt-6 lg:mt-0 lg:rounded-[var(--radius-md)] lg:bg-[var(--surface-card)] lg:py-2 lg:shadow-[var(--shadow-card)]"
+    >
       <h2 id="leaderboard-heading" className="sr-only">
         {displayName}&rsquo;s reviews, ranked
       </h2>
 
-      <div className="border-t border-[var(--border-subtle)] pt-4">
+      <div className="border-t border-[var(--border-subtle)] pt-4 lg:border-t-0">
         {/* Reviews / Answers. Answers is not a dashboard surface yet, so it is
             a link to the Q&A the reviewer has answered rather than a tab that
             switches to an empty panel. */}

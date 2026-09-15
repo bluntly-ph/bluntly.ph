@@ -20,6 +20,9 @@ import { splitHeadline } from "@/lib/reviews";
  * served to the feed), the overflow menu and the share circle (both live on
  * the review page, where there is a review to act on) are not drawn; a review
  * without a photo drops the square rather than showing an empty 358px block.
+ *
+ * From `md` the feed is a two-column grid (beside the profile card from `lg`), so each
+ * review becomes its own white card instead of a hairline-separated row.
  */
 export function ProfileReviewCard({ review, priority = false }: { review: ReviewCardData; priority?: boolean }) {
   const headline = splitHeadline(review.title, review.product);
@@ -27,7 +30,7 @@ export function ProfileReviewCard({ review, priority = false }: { review: Review
     "inline-flex h-8 items-center gap-1 rounded-[20px] border border-[rgba(32,32,32,0.3)] px-[11px] text-[12px] leading-none text-[var(--text-primary)]";
 
   return (
-    <li className="border-b border-[var(--line-hairline-10)] px-4 py-5 md:px-0">
+    <li className="border-b border-[var(--line-hairline-10)] px-4 py-5 md:rounded-[16px] md:border-b-0 md:bg-[var(--surface-card)] md:p-4 md:shadow-[var(--shadow-card)]">
       <article className="mx-auto w-full max-w-[358px] md:max-w-none">
         <Link href={`/reviews/${review.id}`} className="block text-[var(--text-primary)] no-underline">
           <div className="flex h-9 items-center gap-2">
@@ -62,7 +65,7 @@ export function ProfileReviewCard({ review, priority = false }: { review: Review
                 src={review.imageUrl}
                 alt=""
                 fill
-                sizes="(min-width: 768px) 640px, 358px"
+                sizes="(min-width: 768px) 380px, 358px"
                 priority={priority}
                 className="object-cover"
               />

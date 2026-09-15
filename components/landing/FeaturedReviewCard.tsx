@@ -22,7 +22,10 @@ import type { FeaturedData } from "@/lib/reviews";
  */
 export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
   const handle = featured.username ?? featured.author;
-  const layer = "absolute h-[172px] w-[358px] rounded-[12px] bg-[rgba(239,88,33,0.1)]";
+  // The layers take the column's width rather than a fixed 358px: at 390 the
+  // column IS 358px, so the frame is unchanged, and on a narrower phone (360,
+  // 375) the stack narrows with it instead of running off the right edge.
+  const layer = "absolute h-[172px] w-full rounded-[12px] bg-[rgba(239,88,33,0.1)]";
 
   return (
     <div className="relative h-[209px] w-full">
@@ -33,7 +36,7 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
         href={featured.id ? `/reviews/${featured.id}` : "/search"}
         // Hover eases the rotation rather than translating, so the card stays
         // seated in its stack.
-        className="absolute left-[7px] top-[15px] flex h-[172px] w-[358px] -rotate-[5deg] flex-col gap-2 overflow-hidden rounded-[12px] bg-[var(--surface-app)] p-3 text-[var(--text-primary)] no-underline shadow-[0px_4px_4px_0px_#bcaca6] transition-transform duration-[var(--duration-base)] hover:-rotate-[3deg]"
+        className="absolute left-[7px] top-[15px] flex h-[172px] w-full -rotate-[5deg] flex-col gap-2 overflow-hidden rounded-[12px] bg-[var(--surface-app)] p-3 text-[var(--text-primary)] no-underline shadow-[0px_4px_4px_0px_#bcaca6] transition-transform duration-[var(--duration-base)] hover:-rotate-[3deg]"
       >
         <div className="flex items-center gap-2 pr-8">
           {featured.avatarUrl ? (

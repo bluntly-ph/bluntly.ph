@@ -6,6 +6,13 @@ import { ArrowRight, Coin, Coins, PiggyBank, Plus, Storefront, Users } from "@ph
 
 import { COMPOSER_FOCUS_RING, COMPOSER_HEADING, COMPOSER_HINT } from "@/components/reviews/composer-styles";
 import { ComposerGrid, ComposerHeader } from "@/components/reviews/ComposerHeader";
+import {
+  COMPOSER_ACTION_BUTTON,
+  ComposerActions,
+  ComposerLayout,
+  ComposerSteps,
+  type ComposerStep,
+} from "@/components/reviews/ComposerLayout";
 import { CurrentlyReviewingCard } from "@/components/reviews/CurrentlyReviewingCard";
 import { LatestStats } from "@/components/reviews/LatestStats";
 import { MascotPrompt } from "@/components/reviews/MascotPrompt";
@@ -144,16 +151,43 @@ export function AskQuestionForm({ user }: { user: PanelUser }) {
         ? () => go("product")
         : () => router.push(postedId ? `/questions/${postedId}` : "/questions");
 
+  const panelSteps: ComposerStep[] = [
+    {
+      label: "Choose the product",
+      number: 1,
+      state: stage === "product" ? "current" : "done",
+      onSelect: stage === "question" ? () => go("product") : undefined,
+    },
+    { label: "Write your question", number: 2, state: stage === "question" ? "current" : stage === "done" ? "done" : "todo" },
+  ];
+
   return (
     <>
       <ComposerHeader
         user={user}
+        title="Ask a question"
         onBack={back}
         backLabel={stage === "question" ? "Choose another product" : stage === "done" ? "Go to your question" : "Leave"}
         progress={PROGRESS[stage]}
       />
       <ComposerGrid />
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pb-[120px] pt-4 sm:px-6">
+      <ComposerLayout
+        aside={
+          <ComposerSteps
+            flow="Ask a question"
+            subjectLabel="Product in question"
+            subject={stage === "product" ? null : (product?.canonical_name ?? null)}
+            steps={panelSteps}
+            note={
+              audience === "seller"
+                ? "You're asking the seller to answer."
+                : audience === "buyers"
+                  ? "You're asking other buyers to answer."
+                  : null
+            }
+          />
+        }
+      >
         {stage === "product" ? (
           <ProductPicker
             title="Mirror, mirror on the wall"
@@ -183,34 +217,25 @@ export function AskQuestionForm({ user }: { user: PanelUser }) {
         {stage === "done" && product && postedId ? (
           <DoneStep user={user} product={product} audience={audience ?? "buyers"} text={text} questionId={postedId} />
         ) : null}
-      </main>
 
-      {stage === "product" && audience === null ? <AudienceDialog onChoose={setAudience} /> : null}
-
-      {stage === "question" ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-          <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-            {error ? (
-              <p
-                role="alert"
-                className="pointer-events-auto mb-2 rounded-[12px] bg-[var(--surface-card)] px-4 py-3 text-[12px] leading-[18px] text-[var(--accent-danger)] shadow-[var(--shadow-card)]"
-              >
-                {error}
-              </p>
-            ) : null}
+        {/* Pinned to the viewport on the phone, inline on the website. */}
+        {stage === "question" ? (
+          <ComposerActions hint={blocker} error={error}>
             <Button
               type="button"
               onClick={submit}
               disabled={Boolean(blocker) || busy}
               fullWidth
-              className="pointer-events-auto gap-1"
+              className={COMPOSER_ACTION_BUTTON}
             >
               {busy ? "Posting…" : "Submit"}
               {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
             </Button>
-          </div>
-        </div>
-      ) : null}
+          </ComposerActions>
+        ) : null}
+      </ComposerLayout>
+
+      {stage === "product" && audience === null ? <AudienceDialog onChoose={setAudience} /> : null}
       <p role="status" className="sr-only">
         {blocker ?? ""}
       </p>
@@ -346,7 +371,7 @@ function QuestionStep({
         onChange={onChangeProduct}
       />
 
-      <section className="-mx-4 -mb-[120px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8">
+      <section className="-mx-4 -mb-[120px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8 md:mx-0 md:mb-0 md:rounded-[32px] md:px-10 md:pb-10">
         <label htmlFor={bodyId} className={`block ${COMPOSER_HEADING}`}>
           What&rsquo;s your main question?
         </label>
@@ -458,20 +483,18 @@ function DoneStep({
           productName={null}
           title={text}
           photoUrl={usablePhoto(product.image_url) ?? null}
-          className="mt-[21px]"
+          className="mt-[21px] md:max-w-[26rem]"
         />
 
-        <LatestStats className="mt-8 [&>p]:ml-[11px]" />
+        <LatestStats className="mt-8 [&>p]:ml-[11px] md:[&>dl]:justify-start" />
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-          <Button href={`/questions/${questionId}`} fullWidth className="pointer-events-auto gap-1">
-            View my question
-            <ArrowRight size={20} aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
+      <ComposerActions>
+        <Button href={`/questions/${questionId}`} fullWidth className={COMPOSER_ACTION_BUTTON}>
+          View my question
+          <ArrowRight size={20} aria-hidden="true" />
+        </Button>
+      </ComposerActions>
     </div>
   );
 }

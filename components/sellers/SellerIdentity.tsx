@@ -1,5 +1,7 @@
 import { SealCheck, Star } from "@phosphor-icons/react/dist/ssr";
 
+import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
+
 import { sellerInitials } from "./seller-model";
 
 /**
@@ -75,8 +77,9 @@ export function ClaimStatusLine({ status }: { status: string }) {
 /**
  * Display only. A store with no rating draws grey stars and says so.
  *
- * Figma "Icon/Star" (6805:431): Filled is the rating green (#34ca43,
- * --semantic-success-500), Empty a solid #8c8c8c silhouette (--base-gray-400).
+ * Figma "Icon/Star" (6805:431): Filled takes the rating ladder's colour — coral
+ * for 1–2, yellow for 3, the rating green for 4–5 — and Empty is a solid #8c8c8c
+ * silhouette (--base-gray-400).
  */
 export function StarRow({
   value,
@@ -104,7 +107,7 @@ export function StarRow({
           size={size}
           weight="fill"
           aria-hidden="true"
-          className={n <= filled ? "text-[var(--semantic-success-500)]" : "text-[var(--base-gray-400)]"}
+          style={{ color: n <= filled ? starColor(value) : STAR_EMPTY }}
         />
       ))}
     </span>

@@ -43,7 +43,10 @@ export function ReviewPreviewCard({
   className?: string;
 }) {
   const trimmed = title.trim();
-  const layer = "absolute h-[172px] w-[358px] rounded-[12px] bg-[rgba(239,88,33,0.1)]";
+  // The group reaches 9px into the left gutter, so it is 9px wider than the
+  // column; the layers take that width less the 9px, which is 358px at 390 and
+  // narrows with a 360 or 375px phone instead of running off the right edge.
+  const layer = "absolute h-[172px] w-[calc(100%-9px)] rounded-[12px] bg-[rgba(239,88,33,0.1)]";
 
   return (
     // The frames place this group 9px left of the content edge.
@@ -51,7 +54,7 @@ export function ReviewPreviewCard({
       <div aria-hidden="true" className={`${layer} left-[11px] top-[21px] rotate-[5deg]`} />
       <div aria-hidden="true" className={`${layer} left-[11px] top-5`} />
 
-      <div className="absolute left-[7px] top-[15px] flex h-[172px] w-[358px] -rotate-[5deg] items-center gap-3 overflow-hidden rounded-[12px] bg-[var(--surface-app)] p-3 text-[var(--text-primary)] shadow-[0px_4px_4px_0px_#bcaca6]">
+      <div className="absolute left-[7px] top-[15px] flex h-[172px] w-[calc(100%-9px)] -rotate-[5deg] items-center gap-3 overflow-hidden rounded-[12px] bg-[var(--surface-app)] p-3 text-[var(--text-primary)] shadow-[0px_4px_4px_0px_#bcaca6]">
         <div className="flex min-w-0 flex-1 flex-col gap-2 self-stretch overflow-hidden">
           <div className="flex items-center gap-2">
             <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-[var(--base-gray-200)]">

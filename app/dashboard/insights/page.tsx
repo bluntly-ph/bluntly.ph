@@ -67,20 +67,22 @@ export default async function InsightsPage() {
     <>
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
 
-      <div className="mx-auto w-full max-w-[430px] lg:max-w-[46rem]">
+      {/* From `md` the column widens and the band becomes a card; from `lg` the
+          streak and the chart sit side by side instead of a phone column. */}
+      <div className="mx-auto w-full max-w-[430px] md:max-w-[40rem] md:pt-6 lg:max-w-[64rem] lg:px-10 lg:pt-10">
         {/* The frame's shallow gradient band between the header and the sheet. */}
         <div
-          className="h-[212px]"
+          className="h-[212px] md:rounded-[28px] lg:h-[160px]"
           style={{
             background:
               "linear-gradient(160deg, var(--accent-primary) 0%, var(--accent-strong, #c2410c) 100%)",
           }}
         />
 
-        <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] px-5 pb-12 pt-8">
+        <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] px-5 pb-12 pt-8 lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-8">
           <StreakCard streak={streak} />
 
-          <section aria-labelledby="views-heading" className="mt-10">
+          <section aria-labelledby="views-heading" className="mt-10 lg:mt-0">
             <h2 id="views-heading" className="sr-only">
               Daily views
             </h2>
@@ -130,7 +132,7 @@ export default async function InsightsPage() {
             )}
           </section>
 
-          <p className="mt-10 text-[12px] text-[var(--text-muted)]">
+          <p className="mt-10 text-[12px] text-[var(--text-muted)] lg:col-span-2 lg:mt-0">
             <Link
               href="/dashboard/history"
               className="underline hover:text-[var(--accent-primary)]"

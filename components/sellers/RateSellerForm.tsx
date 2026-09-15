@@ -25,6 +25,13 @@ import {
 
 import { COMPOSER_FOCUS_RING, COMPOSER_HEADING, COMPOSER_HINT } from "@/components/reviews/composer-styles";
 import { ComposerGrid, ComposerHeader } from "@/components/reviews/ComposerHeader";
+import {
+  COMPOSER_ACTION_BUTTON,
+  ComposerActions,
+  ComposerLayout,
+  ComposerSteps,
+  type ComposerStep,
+} from "@/components/reviews/ComposerLayout";
 import { CurrentlyReviewingCard } from "@/components/reviews/CurrentlyReviewingCard";
 import { LatestStats } from "@/components/reviews/LatestStats";
 import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
@@ -40,6 +47,7 @@ import {
 } from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
+import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
 import { prepareImageForUpload } from "@/lib/image";
 
 import {
@@ -191,10 +199,27 @@ export function RateSellerForm({
             ? () => router.push(`/sellers/${seller.id}`)
             : undefined;
 
+  const panelSteps: ComposerStep[] = [
+    {
+      label: "Find the seller",
+      number: 1,
+      state: stage === "find" ? "current" : "done",
+      onSelect: stage === "rate" || stage === "write" ? () => go("find") : undefined,
+    },
+    {
+      label: "Rate the seller",
+      number: 2,
+      state: stage === "find" ? "todo" : stage === "rate" ? "current" : "done",
+      onSelect: stage === "write" ? () => go("rate") : undefined,
+    },
+    { label: "Write it up", number: 3, state: stage === "write" ? "current" : stage === "done" ? "done" : "todo" },
+  ];
+
   return (
     <>
       <ComposerHeader
         user={user}
+        title="Rate a seller"
         onBack={back}
         backLabel={
           stage === "write"
@@ -208,8 +233,17 @@ export function RateSellerForm({
         progress={PROGRESS[stage]}
       />
       <ComposerGrid />
-      {/* pb clears the bottom-anchored pill (56px + 32px inset) and the link field. */}
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-4 pb-[120px] pt-4 sm:px-6">
+      <ComposerLayout
+        aside={
+          <ComposerSteps
+            flow="Rate a seller"
+            subjectLabel="Seller"
+            subject={stage === "find" ? null : (seller?.display_name ?? null)}
+            steps={panelSteps}
+            note="Seller reviews go live as soon as you post them. A moderator can still remove one afterwards."
+          />
+        }
+      >
         {stage === "find" ? <FindSeller onPick={pick} /> : null}
         {stage === "rate" && seller ? (
           <RateStep seller={seller} draft={draft} patch={patch} onChangeSeller={() => go("find")} />
@@ -227,34 +261,25 @@ export function RateSellerForm({
           />
         ) : null}
         {stage === "done" && seller ? <DoneStep seller={seller} draft={draft} user={user} /> : null}
-      </main>
 
-      {/* Pinned to the viewport, as every frame draws it: y757 in an 844 device
-          even on the 1192px rate frame. */}
-      {stage === "rate" || stage === "write" ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-          <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-            {error ? (
-              <p
-                role="alert"
-                className="pointer-events-auto mb-2 rounded-[12px] bg-[var(--surface-card)] px-4 py-3 text-[12px] leading-[18px] text-[var(--accent-danger)] shadow-[var(--shadow-card)]"
-              >
-                {error}
-              </p>
-            ) : null}
+        {/* Pinned to the viewport on the phone, as every frame draws it: y757
+            in an 844 device even on the 1192px rate frame. Inline under the
+            step on the website (ComposerActions). */}
+        {stage === "rate" || stage === "write" ? (
+          <ComposerActions hint={blocker} error={error}>
             <Button
               type="button"
               onClick={stage === "rate" ? () => go("write") : submit}
               disabled={Boolean(blocker) || busy}
               fullWidth
-              className="pointer-events-auto gap-1"
+              className={COMPOSER_ACTION_BUTTON}
             >
               {stage === "rate" ? "Continue" : busy ? "Posting…" : "Submit"}
               {busy ? null : <ArrowRight size={20} aria-hidden="true" />}
             </Button>
-          </div>
-        </div>
-      ) : null}
+          </ComposerActions>
+        ) : null}
+      </ComposerLayout>
       <p role="status" className="sr-only">
         {blocker ?? ""}
       </p>
@@ -349,7 +374,7 @@ function FindSeller({ onPick }: { onPick: (seller: PickedSeller) => void }) {
         // The empty state, 174px under the field: a 64px MagnifyingGlass in a
         // 2px line, a line of 16px Regular at 0.8px tracking, and the hint in
         // 12px Light at 70% on 18px lines, 180px wide.
-        <div className="flex flex-col items-center pt-[174px] text-center">
+        <div className="flex flex-col items-center pt-[174px] text-center md:pt-24">
           <MagnifyingGlass size={64} weight="thin" aria-hidden="true" className="text-[var(--base-black)]" />
           <p className="mt-4 text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
             Find the seller you bought from
@@ -366,7 +391,7 @@ function FindSeller({ onPick }: { onPick: (seller: PickedSeller) => void }) {
             {visible.length} {visible.length === 1 ? "result" : "results"} found
           </p>
           {visible.length > 0 ? (
-            <ul className="-mx-4 mt-[17px] border-t border-[var(--line-hairline-10)] sm:-mx-6">
+            <ul className="-mx-4 mt-[17px] border-t border-[var(--line-hairline-10)] sm:-mx-6 md:mx-0">
               {visible.map((s) => (
                 <li key={s.id} className="border-b border-[var(--line-hairline-10)]">
                   <SellerPick seller={s} onPick={onPick} />
@@ -394,7 +419,7 @@ function FindSeller({ onPick }: { onPick: (seller: PickedSeller) => void }) {
             e.preventDefault();
             if (link.trim()) setAdding(true);
           }}
-          className="fixed inset-x-0 bottom-[35px] z-20 px-4 sm:px-6"
+          className="fixed inset-x-0 bottom-[35px] z-20 px-4 sm:px-6 md:static md:mt-12 md:px-0"
         >
           <div className="mx-auto flex h-[52px] w-full max-w-[42rem] items-center gap-2 rounded-[12px] bg-[rgba(255,255,255,0.3)] px-4 shadow-[0_4px_4px_0_var(--shadow-color-10)] backdrop-blur-sm">
             <LinkSimple size={20} weight="light" aria-hidden="true" className="shrink-0 text-[var(--base-gray-400)]" />
@@ -711,11 +736,8 @@ function RateStep({
               size={40}
               weight="fill"
               aria-hidden="true"
-              className={
-                draft.overall !== null && n <= draft.overall
-                  ? "text-[var(--semantic-success-500)]"
-                  : "text-[var(--base-gray-400)]"
-              }
+              className="transition-colors"
+              style={{ color: draft.overall !== null && n <= draft.overall ? starColor(draft.overall) : STAR_EMPTY }}
             />
           </button>
         ))}
@@ -733,7 +755,7 @@ function RateStep({
       {/* Run to the bottom of the page: the main column's bottom padding is
           taken back into the sheet, which keeps enough of its own to clear the
           pinned pill. */}
-      <section className="-mx-4 -mb-[120px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8">
+      <section className="-mx-4 -mb-[120px] mt-14 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8 md:mx-0 md:mb-0 md:rounded-[32px] md:px-10 md:pb-10">
         <GradeQuestion
           title="Customer Service Responsiveness"
           hint="How was their response to your inquiries?"
@@ -961,7 +983,7 @@ function WriteStep({
         <p className="text-[14px] leading-[21px] text-[var(--text-primary)]">{ratingPrompt(draft.overall)}</p>
       </div>
 
-      <section className="-mx-4 -mb-[120px] mt-8 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8">
+      <section className="-mx-4 -mb-[120px] mt-8 rounded-t-[32px] bg-[var(--surface-card)] px-7 pb-[120px] pt-9 sm:-mx-6 sm:px-8 md:mx-0 md:mb-0 md:rounded-[32px] md:px-10 md:pb-10">
         <FieldHeading htmlFor={titleId} hintId={titleHint} title="Make it pop" hint="Summarize your experience in a few words" />
         <input
           id={titleId}
@@ -1157,20 +1179,18 @@ function DoneStep({ seller, draft, user }: { seller: PickedSeller; draft: Seller
           productName={null}
           title={draft.title}
           photoUrl={draft.photoUrls[0] ?? null}
-          className="mt-5"
+          className="mt-5 md:max-w-[26rem]"
         />
 
-        <LatestStats className="mt-[33px] [&>p]:ml-[11px]" />
+        <LatestStats className="mt-[33px] [&>p]:ml-[11px] md:[&>dl]:justify-start" />
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 pb-8">
-        <div className="mx-auto w-full max-w-[42rem] px-4 sm:px-6">
-          <Button href={`/sellers/${seller.id}`} fullWidth className="pointer-events-auto gap-1">
-            View my review
-            <ArrowRight size={20} aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
+      <ComposerActions>
+        <Button href={`/sellers/${seller.id}`} fullWidth className={COMPOSER_ACTION_BUTTON}>
+          View my review
+          <ArrowRight size={20} aria-hidden="true" />
+        </Button>
+      </ComposerActions>
     </div>
   );
 }

@@ -199,7 +199,7 @@ export function ProductPicker({
       ) : null}
 
       {visibleResults.length > 0 ? (
-        <ul className="-mx-4 mt-[17px] border-t border-[var(--line-hairline-10)] sm:-mx-6">
+        <ul className="-mx-4 mt-[17px] border-t border-[var(--line-hairline-10)] sm:-mx-6 md:mx-0">
           {visibleResults.map((p) => (
             <li key={p.id} className="border-b border-[var(--line-hairline-10)]">
               <ProductResult product={p} onPick={onPick} />
@@ -213,7 +213,7 @@ export function ProductPicker({
           you bought" 16px lower in 16px Regular at 0.8px tracking, and the hint
           in 12px Light at 70% on 18px lines, 180px wide. */}
       {!searching && emptyHint ? (
-        <div className="flex flex-col items-center pb-16 pt-[174px] text-center">
+        <div className="flex flex-col items-center pb-16 pt-[174px] text-center md:pb-0 md:pt-24">
           <MagnifyingGlass size={64} weight="thin" aria-hidden="true" className="text-[var(--base-black)]" />
           <p className="mt-4 text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
             Find the product you bought
@@ -228,8 +228,9 @@ export function ProductPicker({
           12, white at 30% with a 0 4px 4px shadow at 10%, 35px above the bottom
           edge — a 20px LinkSimple in #8c8c8c and 14px Regular at 30% ink. It is
           the paste field itself, so the link goes straight in and a short
-          action appears once there is something to send. */}
-      <div className="fixed inset-x-0 bottom-[35px] z-20 px-4 sm:px-6">
+          action appears once there is something to send. On the website it
+          follows the results instead of floating over them. */}
+      <div className="fixed inset-x-0 bottom-[35px] z-20 px-4 sm:px-6 md:static md:mt-12 md:px-0">
         <div className="mx-auto w-full max-w-[42rem]">
           {error ? (
             <p role="alert" className="mb-2 text-[12px] text-[var(--accent-danger)]">

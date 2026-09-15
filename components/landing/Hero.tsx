@@ -80,7 +80,11 @@ export function Hero({ featured }: { featured: FeaturedData }) {
 
         <div className="animate-fade-up delay-2 relative mx-auto h-[450px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-4">
           <FeaturedReviewCard featured={featured} />
-          <span className="absolute left-[226px] top-[238px] z-10 inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent-primary)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-on-brand)] shadow-[var(--shadow-sheet)] md:left-auto md:right-0 md:top-0">
+          {/* Anchored to the card's right edge, not to a fixed left offset: the
+              frame's x226 puts the pill's right edge 4px past the 358px column,
+              and that relationship — not the 226 — is what holds on a 360 or
+              375px phone. */}
+          <span className="absolute right-[-4px] top-[238px] z-10 inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent-primary)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-on-brand)] shadow-[var(--shadow-sheet)] md:left-auto md:right-0 md:top-0">
             <DotOutline size={16} aria-hidden="true" />
             {FEATURED_REVIEW.earned}
           </span>

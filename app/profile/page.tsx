@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Coins, PencilSimple, SealCheck, ShieldCheck, SignOut } from "@phosphor-icons/react/dist/ssr";
 
 import { logout } from "@/app/actions/auth";
-import { ProfileHeader, ProfileTabs } from "@/components/profile/ProfileHeader";
+import { ProfileHeader, ProfileLayout, ProfileTabs } from "@/components/profile/ProfileHeader";
 import { ProfileReviewCard } from "@/components/profile/ProfileReviewCard";
 import { ProfileShareButton } from "@/components/profile/ProfileShareButton";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -39,53 +39,74 @@ const CHIP =
  */
 export default async function ProfilePage() {
   const me = await requireOnboardedUser();
-  const reviews = await searchReviews({ author_id: me.id, sort: "newest", limit: 24 });
+  const reviews = await searchReviews({
+    author_id: me.id,
+    sort: "newest",
+    limit: 24,
+  });
   const name = me.username || me.display_name || "You";
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
-      <main className="mx-auto w-full max-w-[42rem] flex-1 pb-16 md:px-6 md:pt-6">
-        <ProfileHeader
-          name={name}
-          avatarUrl={me.avatar_url}
-          avatarHue={24}
-          trustLevel={me.trust_level_name ?? trustLevelName(me.trust_stage) ?? "Member"}
-          meta={[me.display_name && me.username ? me.display_name : null, joinedLabel(me.created_at)].filter(
-            (m): m is string => Boolean(m),
-          )}
-          stats={[
-            { value: String(reviews?.length ?? "—"), label: "Reviews written", icon: PencilSimple },
-            { value: String(me.verified_review_count), label: "Verified reviews", icon: SealCheck },
-            { value: String(Math.round(Number(me.reputation_score) || 0)), label: "Honesty Score", icon: ShieldCheck },
-          ]}
-          share={<ProfileShareButton name={name} path={`/u/${me.id}`} />}
-        >
-          {me.interests?.length ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-[12px] font-light leading-none text-[var(--text-primary)]">Shops for:</span>
-              {me.interests.map((slug) => (
-                <span key={slug} className="rounded-[4px] bg-[#d9d9d9] px-2 py-1 text-[10px] leading-none text-[var(--text-primary)]">
-                  {interestLabel(slug)}
-                </span>
-              ))}
+      <ProfileLayout
+        header={
+          <ProfileHeader
+            name={name}
+            avatarUrl={me.avatar_url}
+            avatarHue={24}
+            trustLevel={me.trust_level_name ?? trustLevelName(me.trust_stage) ?? "Member"}
+            meta={[me.display_name && me.username ? me.display_name : null, joinedLabel(me.created_at)].filter(
+              (m): m is string => Boolean(m),
+            )}
+            stats={[
+              {
+                value: String(reviews?.length ?? "—"),
+                label: "Reviews written",
+                icon: PencilSimple,
+              },
+              {
+                value: String(me.verified_review_count),
+                label: "Verified reviews",
+                icon: SealCheck,
+              },
+              {
+                value: String(Math.round(Number(me.reputation_score) || 0)),
+                label: "Honesty Score",
+                icon: ShieldCheck,
+              },
+            ]}
+            share={<ProfileShareButton name={name} path={`/u/${me.id}`} />}
+          >
+            {me.interests?.length ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[12px] font-light leading-none text-[var(--text-primary)]">Shops for:</span>
+                {me.interests.map((slug) => (
+                  <span
+                    key={slug}
+                    className="rounded-[4px] bg-[#d9d9d9] px-2 py-1 text-[10px] leading-none text-[var(--text-primary)]"
+                  >
+                    {interestLabel(slug)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link href="/onboarding" className={CHIP}>
+                <PencilSimple size={20} weight="light" aria-hidden="true" /> Edit profile
+              </Link>
+              <Link href="/dashboard" className={CHIP}>
+                <Coins size={20} weight="light" aria-hidden="true" /> Earnings
+              </Link>
+              <form action={logout}>
+                <button type="submit" className={`${CHIP} bg-transparent`}>
+                  <SignOut size={20} weight="light" aria-hidden="true" /> Log out
+                </button>
+              </form>
             </div>
-          ) : null}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Link href="/onboarding" className={CHIP}>
-              <PencilSimple size={20} weight="light" aria-hidden="true" /> Edit profile
-            </Link>
-            <Link href="/dashboard" className={CHIP}>
-              <Coins size={20} weight="light" aria-hidden="true" /> Earnings
-            </Link>
-            <form action={logout}>
-              <button type="submit" className={`${CHIP} bg-transparent`}>
-                <SignOut size={20} weight="light" aria-hidden="true" /> Log out
-              </button>
-            </form>
-          </div>
-        </ProfileHeader>
-
+          </ProfileHeader>
+        }
+      >
         <ProfileTabs statsHref="/dashboard/insights" />
 
         {reviews === null ? (
@@ -93,14 +114,16 @@ export default async function ProfilePage() {
             <Unavailable what="your reviews" />
           </div>
         ) : reviews.length > 0 ? (
-          <ul>
+          <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
             {reviews.map((r, i) => (
               <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
             ))}
           </ul>
         ) : (
           <div className="px-4 pt-10 text-center">
-            <p className="text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">No published reviews yet</p>
+            <p className="text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
+              No published reviews yet
+            </p>
             <p className="mt-[9px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
               Share an honest review and start earning from your opinions.
             </p>
@@ -110,7 +133,7 @@ export default async function ProfilePage() {
             </Button>
           </div>
         )}
-      </main>
+      </ProfileLayout>
       <SiteFooter />
     </div>
   );

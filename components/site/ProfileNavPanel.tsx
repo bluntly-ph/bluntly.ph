@@ -51,6 +51,11 @@ import { badgeLabel } from "@/components/site/notification-model";
  *  - A close button in the header, and "Log in" for a signed-out visitor.
  *  - The frame's "Founding member" line has no data behind it; it reads
  *    "Member".
+ *  - Owner review (2026-09-16) found the drawn scale too big in use: a 100px
+ *    avatar and a 28px name truncated even short handles. The panel keeps the
+ *    frame's structure, order, hairlines and 300px width at a compact scale — a
+ *    64px avatar, the name in 20px SemiBold, 24px glyphs 12px before 15px Light
+ *    rows on a 40px pitch, 20px insets.
  */
 
 /**
@@ -116,8 +121,8 @@ const PUBLIC_GROUP: Item[] = [
 ];
 
 const ROW =
-  "flex h-7 items-center gap-3 px-6 text-[16px] font-light leading-none text-[var(--text-primary)] no-underline hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
-const GROUP = "flex flex-col gap-4 py-6";
+  "flex h-6 items-center gap-3 px-5 text-[15px] font-light leading-none text-[var(--text-primary)] no-underline hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]";
+const GROUP = "flex flex-col gap-4 py-5";
 const DIVIDER = "mx-5 border-t border-[var(--line-hairline-10)]";
 
 export type PanelUser = { username: string | null; avatarUrl: string | null } | null;
@@ -252,22 +257,22 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                 aria-label="Navigation and profile"
                 className="fixed inset-y-0 right-0 z-50 flex w-[min(300px,88vw)] flex-col overflow-y-auto bg-[var(--surface-app)] shadow-[var(--shadow-sheet)]"
               >
-                <div className="relative flex items-start gap-5 p-6">
+                <div className="relative flex items-center gap-4 p-5">
                   {user ? (
-                    <span className="relative grid h-[100px] w-[100px] shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--base-gray-200)]">
+                    <span className="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--base-gray-200)]">
                       {user.avatarUrl ? (
-                        <Image src={user.avatarUrl} alt="" fill sizes="100px" className="object-cover" />
+                        <Image src={user.avatarUrl} alt="" fill sizes="64px" className="object-cover" />
                       ) : (
-                        <span className="text-[36px] font-semibold text-[var(--text-primary)]">{initial}</span>
+                        <span className="text-[24px] font-semibold text-[var(--text-primary)]">{initial}</span>
                       )}
                     </span>
                   ) : null}
                   <span className="min-w-0 flex-1 pr-8">
-                    <span className="block truncate text-[28px] font-bold leading-none text-[var(--text-primary)]">
+                    <span className="line-clamp-2 text-[18px] font-semibold leading-[1.2] text-[var(--text-primary)] [overflow-wrap:anywhere]">
                       {user ? (user.username ?? "Your account") : "Menu"}
                     </span>
                     {user ? (
-                      <span className="mt-[13px] block text-[10px] font-light leading-none text-[var(--text-primary)]">
+                      <span className="mt-1 block text-[12px] font-light leading-none text-[rgba(32,32,32,0.7)]">
                         Member
                       </span>
                     ) : null}
@@ -289,7 +294,7 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                       <div className={GROUP}>
                         {group.map(({ href, icon: Glyph, label }) => (
                           <Link key={href} href={href} className={ROW}>
-                            <Glyph size={28} aria-hidden="true" className="shrink-0" />
+                            <Glyph size={24} aria-hidden="true" className="shrink-0" />
                             {label}
                             {href === "/notifications" && badge ? (
                               <span className="ml-auto rounded-full bg-[var(--accent-primary)] px-2 py-0.5 text-[11px] font-semibold leading-4 text-white">
@@ -306,12 +311,12 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                             aria-pressed={dark}
                             className={`${ROW} w-full cursor-pointer text-left`}
                           >
-                            <Moon size={28} aria-hidden="true" className="shrink-0" />
+                            <Moon size={24} aria-hidden="true" className="shrink-0" />
                             Dark mode
                             {dark ? (
-                              <ToggleRight size={28} weight="fill" aria-hidden="true" className="ml-auto text-[var(--accent-primary)]" />
+                              <ToggleRight size={24} weight="fill" aria-hidden="true" className="ml-auto text-[var(--accent-primary)]" />
                             ) : (
-                              <ToggleLeft size={28} aria-hidden="true" className="ml-auto" />
+                              <ToggleLeft size={24} aria-hidden="true" className="ml-auto" />
                             )}
                           </button>
                         ) : null}
@@ -320,7 +325,7 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                   ))}
 
                   {!user ? (
-                    <div className="px-6 pb-6">
+                    <div className="px-5 pb-5">
                       <Link
                         href="/login"
                         className="flex h-14 items-center justify-center rounded-[var(--radius-pill)] bg-[var(--accent-primary)] text-[16px] font-semibold text-white no-underline"

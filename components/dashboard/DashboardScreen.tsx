@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 
+import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
+
 /**
  * The chrome every dashboard sub-screen shares.
  *
@@ -14,14 +16,22 @@ import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
  *
  * `heroHeight` is the frame's own hero depth. It differs per screen — 510 on
  * Transfer, shallower on History — so it is a prop rather than a constant.
+ *
+ * WEBSITE: the frames are phones, and a 430px orange strip centred on a monitor
+ * with no site navigation is what the owner rejected (review, 2026-09-16). From
+ * `md` the site header returns and the column widens; from `lg` the hero
+ * becomes a sticky card at the left and the sheet's content reads beside it.
  */
 export function DashboardScreen({
+  user,
   backHref = "/dashboard",
   hero,
   heroHeight = 402,
   trustLevel,
   children,
 }: {
+  /** For the site header, which the website shows above the screen. */
+  user: HeaderUser;
   backHref?: string;
   hero: React.ReactNode;
   /**
@@ -34,40 +44,45 @@ export function DashboardScreen({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto w-full max-w-[430px] lg:max-w-[46rem]">
-      <div
-        className="relative"
-        style={{
-          background:
-            "linear-gradient(160deg, var(--accent-primary) 0%, var(--accent-strong, #c2410c) 100%)",
-        }}
-      >
-        <div className="flex h-[72px] items-center justify-between px-6">
-          <Link
-            href={backHref}
-            aria-label="Back"
-            className="-ml-1 rounded-full p-1 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-          >
-            <ArrowLeft size={28} weight="regular" />
-          </Link>
-          <span className="inline-flex h-8 items-center gap-2 rounded-[var(--radius-pill)] bg-white pl-3 pr-4">
-            <Image src="/icon.svg" alt="" width={16} height={16} className="h-4 w-4" />
-            <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-              {trustLevel}
+    <>
+      <div className="hidden md:block">
+        <SiteHeader user={user} />
+      </div>
+      <div className="mx-auto w-full max-w-[430px] md:max-w-[40rem] md:pt-6 lg:grid lg:max-w-[64rem] lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-10 lg:py-10">
+        <div
+          className="relative md:overflow-hidden md:rounded-[28px] lg:sticky lg:top-[96px]"
+          style={{
+            background:
+              "linear-gradient(160deg, var(--accent-primary) 0%, var(--accent-strong, #c2410c) 100%)",
+          }}
+        >
+          <div className="flex h-[72px] items-center justify-between px-6">
+            <Link
+              href={backHref}
+              aria-label="Back"
+              className="-ml-1 rounded-full p-1 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            >
+              <ArrowLeft size={28} weight="regular" />
+            </Link>
+            <span className="inline-flex h-8 items-center gap-2 rounded-[var(--radius-pill)] bg-white pl-3 pr-4">
+              <Image src="/icon.svg" alt="" width={16} height={16} className="h-4 w-4" />
+              <span className="text-[13px] font-semibold text-[var(--text-primary)]">
+                {trustLevel}
+              </span>
             </span>
-          </span>
+          </div>
+
+          <div style={{ minHeight: `${Math.max(heroHeight - 72, 0)}px` }}>{hero}</div>
         </div>
 
-        <div style={{ minHeight: `${Math.max(heroHeight - 72, 0)}px` }}>{hero}</div>
-      </div>
-
-      {/* The frame's white sheet, pulled up over the hero's foot so its rounded
+        {/* The frame's white sheet, pulled up over the hero's foot so its rounded
           top edge reads as the sheet sitting on the gradient rather than as a
           gap between two blocks. */}
-      <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] pt-6">
-        {children}
+        <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] pt-6 lg:mt-0 lg:min-h-0 lg:rounded-none lg:pt-0">
+          {children}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

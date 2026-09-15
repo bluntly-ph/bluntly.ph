@@ -8,6 +8,7 @@ import type { Question } from "@/lib/qa";
 import type { SellerReview, SellerSummary } from "@/lib/sellers";
 
 import { HonestyScore } from "@/components/ui/HonestyScore";
+import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
 
 import { AskSellerQuestionForm } from "./AskSellerQuestionForm";
 import { ReviewerInitial } from "./SellerIdentity";
@@ -112,7 +113,7 @@ export function SellerReviewsSection({
   return (
     <section id="all-reviews" aria-labelledby={`${tabsId}-heading`} className="scroll-mt-24 text-[var(--text-primary)]">
       <p className="flex items-center gap-1">
-        <Star size={20} weight="fill" aria-hidden="true" className="text-[var(--semantic-success-500)]" />
+        <Star size={20} weight="fill" aria-hidden="true" style={{ color: average === null ? STAR_EMPTY : starColor(average) }} />
         <span className="text-[20px] font-semibold leading-none">
           {average === null ? "—" : average.toFixed(1)}
         </span>

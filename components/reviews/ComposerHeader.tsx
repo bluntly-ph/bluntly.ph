@@ -16,6 +16,10 @@ import { ProfileNavPanel, type PanelUser } from "@/components/site/ProfileNavPan
  *              it — 220 of 390px on step 4 of 7 — and the whole line in
  *              --accent-success once the last step is reached
  *
+ * From `md` the bar widens to ComposerLayout's 66rem so the arrow and avatar
+ * line up with the side panel and the step, and the flow's name sits beside
+ * the arrow — a website header names the page it is on.
+ *
  * The arrow's accessible name says where back goes, so a screen reader hears
  * the destination the bare glyph does not show. The avatar keeps
  * ProfileNavPanel behind it: the composer would otherwise be the one screen with
@@ -23,11 +27,14 @@ import { ProfileNavPanel, type PanelUser } from "@/components/site/ProfileNavPan
  */
 export function ComposerHeader({
   user,
+  title,
   onBack,
   backLabel,
   progress = 0,
 }: {
   user: PanelUser;
+  /** The flow's name, shown beside the arrow from `md`. */
+  title?: string;
   /** Omitted on the first screen, where there is nothing to go back to. */
   onBack?: () => void;
   backLabel?: string;
@@ -37,20 +44,27 @@ export function ComposerHeader({
   const share = Math.max(0, Math.min(1, progress));
   return (
     <header className="sticky top-0 z-30 bg-[var(--surface-app)]">
-      <div className="mx-auto flex h-[72px] w-full max-w-[42rem] items-center justify-between px-6">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label={backLabel ?? "Go back"}
-            className="-ml-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
-          >
-            <ArrowLeft size={28} aria-hidden="true" />
-          </button>
-        ) : (
-          // Holds the avatar against the right edge on the first screen.
-          <span aria-hidden="true" className="h-11 w-11" />
-        )}
+      <div className="mx-auto flex h-[72px] w-full max-w-[42rem] items-center justify-between px-6 md:max-w-[66rem] md:px-8">
+        <div className="flex items-center gap-3">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label={backLabel ?? "Go back"}
+              className="-ml-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+            >
+              <ArrowLeft size={28} aria-hidden="true" />
+            </button>
+          ) : (
+            // Holds the avatar against the right edge on the first screen.
+            <span aria-hidden="true" className="h-11 w-11" />
+          )}
+          {title ? (
+            <span className="hidden text-[16px] font-medium leading-none text-[var(--text-primary)] md:inline">
+              {title}
+            </span>
+          ) : null}
+        </div>
 
         <ProfileNavPanel user={user} />
       </div>

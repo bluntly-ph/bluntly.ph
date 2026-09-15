@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PencilSimple, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 
-import { ProfileHeader, ProfileTabs } from "@/components/profile/ProfileHeader";
+import { ProfileHeader, ProfileLayout, ProfileTabs } from "@/components/profile/ProfileHeader";
 import { ProfileReviewCard } from "@/components/profile/ProfileReviewCard";
 import { ProfileShareButton } from "@/components/profile/ProfileShareButton";
 import { SiteFooter } from "@/components/site/SiteFooter";
@@ -56,30 +56,42 @@ export default async function ReviewerProfilePage({ params }: Params) {
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={user} />
-      <main className="mx-auto w-full max-w-[42rem] flex-1 pb-16 md:px-6 md:pt-6">
-        <ProfileHeader
-          name={author.username ?? author.name}
-          avatarUrl={author.avatarUrl}
-          avatarHue={hue(author.name)}
-          trustLevel={author.trust}
-          meta={author.username && author.name !== author.username ? [author.name] : []}
-          stats={[
-            { value: String(cards.length), label: "Reviews written", icon: PencilSimple },
-            ...(author.trustScore
-              ? [{ value: String(Math.round(Number(author.trustScore) || 0)), label: "Honesty Score", icon: ShieldCheck }]
-              : []),
-          ]}
-          share={<ProfileShareButton name={author.name} path={`/u/${author.id}`} />}
-        />
-
+      <ProfileLayout
+        header={
+          <ProfileHeader
+            name={author.username ?? author.name}
+            avatarUrl={author.avatarUrl}
+            avatarHue={hue(author.name)}
+            trustLevel={author.trust}
+            meta={author.username && author.name !== author.username ? [author.name] : []}
+            stats={[
+              {
+                value: String(cards.length),
+                label: "Reviews written",
+                icon: PencilSimple,
+              },
+              ...(author.trustScore
+                ? [
+                    {
+                      value: String(Math.round(Number(author.trustScore) || 0)),
+                      label: "Honesty Score",
+                      icon: ShieldCheck,
+                    },
+                  ]
+                : []),
+            ]}
+            share={<ProfileShareButton name={author.name} path={`/u/${author.id}`} />}
+          />
+        }
+      >
         <ProfileTabs />
 
-        <ul>
+        <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
           {cards.map((r, i) => (
             <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
           ))}
         </ul>
-      </main>
+      </ProfileLayout>
       <SiteFooter />
     </div>
   );
