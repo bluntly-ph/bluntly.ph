@@ -474,20 +474,26 @@ def _make_pending(client, headers, token, *, verdict="it_depends", stars=3):
     """A pending (unpublished) review whose title carries a unique ``token`` so
     the queue's ``q`` filter can scope a test to exactly its own fixtures.
 
-    Each call is a DIFFERENT review. It used to produce the same title and body
-    every time, and callers ask for three or four in a row — so with product
-    deduplication folding the identical product names into one row, the fixture
-    was submitting the same review to the same product repeatedly. That is the
-    literal definition of the double submit BUG-031 added a guard against, and
-    the guard refused them. The shared ``token`` still scopes the ``q`` filter;
-    the per-call suffix is what makes them distinct reviews rather than retries.
+    Each call is a distinct SUBMISSION — the title carries a per-call nonce —
+    but every call shares one BODY, and both halves of that are load-bearing.
+
+    The title differs because callers ask for three or four in a row, product
+    deduplication folds the identical names into one product, and a repeated
+    title AND body from one author to one product is exactly the double submit
+    BUG-031's guard refuses.
+
+    The body stays identical because the duplicate-content signal compares
+    `discussion` only, and `test_review_queue_ties_are_stable_across_repeated_calls`
+    needs every card to carry the same non-empty factor set. The first attempt at
+    this fixture varied the body too, the signal went quiet, and that test failed
+    in CI with "the tie regression must exercise non-empty assessments".
     """
     nonce = uuid.uuid4().hex[:6]
     pid = client.post("/api/v1/products", headers=headers,
                       json={"name": f"PrioWidget {token}",
                             "category": "electronics"}).json()["id"]
     body = {"product_id": pid, "title": f"Queued {token} {nonce}",
-            "discussion": f"Priority-contract fixture {token}; weeks of use ({nonce}).",
+            "discussion": f"Priority-contract fixture {token}; weeks of use.",
             "verdict": verdict, "star_rating": stars,
             "photo_url": owned_photo_url(headers)}
     created = client.post("/api/v1/reviews", headers=headers, json=body)
