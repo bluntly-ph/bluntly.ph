@@ -107,3 +107,23 @@ test("an unknown login email is sent to sign up instead of a dead OTP step", asy
   );
   await expect(page.getByRole("heading", { name: /enter the code/i })).toHaveCount(0);
 });
+
+/**
+ * The profile's three sections are one route with a `?tab=`, so the guard has
+ * to cover the query too (owner P0.3, 2026-09-16). A bookmark to
+ * `/profile?tab=stats` must bounce through login and come back to the tab the
+ * reader asked for — not to the bare profile, which is where a guard that
+ * matches on pathname alone would leave them.
+ */
+test.describe("profile sections behind the guard", () => {
+  for (const tab of ["comments", "stats"] as const) {
+    test(`/profile?tab=${tab} returns to its own tab after login`, async ({ page }) => {
+      const path = `/profile?tab=${tab}`;
+      const response = await page.goto(path);
+
+      expect(response?.status(), `${path} should render the login page`).toBe(200);
+      await expect(page).toHaveURL(/\/login/);
+      expect(new URL(page.url()).searchParams.get("next")).toBe(path);
+    });
+  }
+});

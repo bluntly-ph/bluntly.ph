@@ -36,7 +36,14 @@ export const proxy: NextProxy = (request, event) => {
 
   if (!hasSession && isProtectedPath(pathname)) {
     const url = new URL("/login", request.url);
-    url.searchParams.set("next", pathname);
+    // Path AND query. A route can carry its state in the query — the profile's
+    // three sections are one route with a `?tab=` — and sending back only the
+    // pathname lands the reader somewhere they did not ask for, quietly, after
+    // they have done everything right. `safeNext` in app/actions/auth.ts
+    // already resolves and revalidates whatever arrives here, keeping the
+    // search and refusing anything that escapes the origin, so widening this
+    // does not widen what a redirect can reach.
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 
