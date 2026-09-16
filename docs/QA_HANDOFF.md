@@ -109,6 +109,23 @@ DELETE FROM sellers WHERE id = '5e11e700-0000-4000-8000-000000000999';
 
 If QA files real seller reviews against it during testing, delete those first, or the foreign key will refuse — that is the intended safety, not a failure.
 
+## The moderator console and Figma — what can and cannot be compared
+
+Checked against the live file on 2026-09-16. Of the six frame ids the console was built from, **four no longer exist**:
+
+| Frame | Screen | State |
+| --- | --- | --- |
+| `5017:2225` Admin/Sidebar | the navigation rail | **exists** — re-read, and the rail matches its four groups |
+| `6922:837` Admin Page - Review Queue | the review queue | **exists** — re-read, and the table was rebuilt to its eight columns in its order |
+| `5017:1738` | Overview | deleted, no replacement |
+| `5017:3758` | the old review queue | deleted, superseded by 6922:837 |
+| `6532:278` | Answers tab | deleted, no replacement |
+| `4810:16500` | a console frame | deleted |
+
+So a Figma comparison of `/moderate` is available for **the rail and the review queue only**. The Overview and the Answers tab stand on their last reading of frames the file no longer has. That is not a claim they are wrong — it is a statement that nobody, including QA, can check them against Figma today. **Please do not file them as mismatches against a screenshot; there is nothing left to mismatch.**
+
+Where frame 6922:837 draws a figure this build cannot source — views, shares, the globe, flagged voters, the per-voter risk table — the console says so in place rather than printing a plausible number. Each reason is in `components/admin/review-queue-model.ts` and in `docs/FULL_FEATURE_MATRIX.md` rows 8.10, 9.4 and 9.6. **Views in particular are a deliberate boundary, not an oversight**: a moderation decision may not be influenced by reading telemetry, and a backend test enforces it.
+
 ## Moderator decision controls — now implemented, and QA owns them
 
 This was raised at the previous handoff as "the review queue inspects a card but cannot act on it". The owner ruled on 2026-09-16 that inspection-only is no longer acceptable, so the controls exist:

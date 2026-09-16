@@ -9,11 +9,23 @@ import { AdminNav, titleForPath } from "@/components/admin/AdminNav";
 /**
  * The admin console shell, built to the Admin Page frames.
  *
- * Two of those frames — 4810:16500 and 5017:3758 — are 1280x832, a laptop
- * viewport rather than a document. That is the shape being built here, and the
- * reason the previous version never read as 1:1: it was one long scrolling page
- * carrying the overview, the whole review queue, the traffic panel and the
- * reports one after another, with the sidebar sliding away as you scrolled.
+ * FRAME PROVENANCE, checked against the live file on 2026-09-16. Of the six
+ * node ids this console was built from, four are gone: 4810:16500, 5017:1738
+ * (Overview), 5017:3758 (the old Review Queue) and 6532:278 (Answers) all
+ * return "node not found". Two remain: 5017:2225 (Admin/Sidebar) and 6922:837
+ * (Admin Page - Review Queue), and both were re-read that day.
+ *
+ * So "1:1 with Figma" can only be asserted for the rail and the review queue.
+ * The Overview and the Answers tab stand on their last reading of frames the
+ * file no longer has — they are not unverified guesses, but they cannot be
+ * re-checked either, and saying so is more useful than a confident citation of
+ * a deleted node.
+ *
+ * The deleted laptop frames were 1280x832 — a viewport rather than a document.
+ * That is the shape being built here, and the reason the previous version never
+ * read as 1:1: it was one long scrolling page carrying the overview, the whole
+ * review queue, the traffic panel and the reports one after another, with the
+ * sidebar sliding away as you scrolled.
  *
  * The rules this enforces:
  *

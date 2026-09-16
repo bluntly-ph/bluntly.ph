@@ -14,7 +14,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * The Overview landing screen (frame 5017:1738).
+ * The Overview landing screen.
+ *
+ * Built to frame 5017:1738, which was deleted from the Figma file before
+ * 2026-09-16 and has no replacement — the file's only surviving admin frames
+ * are the sidebar and the review queue (see AdminShell). This screen therefore
+ * stands on its last reading, and a Figma comparison of it is not available.
  *
  * It is summary and intelligence only. The full review queue used to live
  * underneath it, which made the queue reachable solely by scrolling the

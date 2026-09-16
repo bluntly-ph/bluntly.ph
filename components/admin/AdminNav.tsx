@@ -25,9 +25,14 @@ import {
 /**
  * The console's navigation, built to the sidebar component (5017:2225).
  *
+ * Re-read from Figma on 2026-09-16 and still there, which makes it one of only
+ * two surviving admin frames — see AdminShell for what happened to the rest.
+ * Its four groups, in its order: MAIN (Overview, Review Queue, Q&A), MANAGE
+ * (Products, Sellers, Reviewers), FINANCE (Affiliate Links, Honesty Fund),
+ * SYSTEM (Activity Log, Settings), over a white 196x64 user card at radius 12.
+ *
  * That component has two states — a collapsed icon rail and an expanded rail
- * with labels, sectioned MAIN / MANAGE / FINANCE / SYSTEM — so the toggle is
- * part of the design, not an addition.
+ * with labels — so the toggle is part of the design, not an addition.
  *
  * Every item routes somewhere real. One is deliberately inert and says why on
  * its face rather than being silently clickable:
@@ -39,13 +44,15 @@ import {
  * 2026-08-07; schema dropped in 0024). The completion contract reinstated it
  * (0042, 0043), so it now opens the seller-claim queue.
  *
- * `Review Queue`, `Q&A` and reports are one screen with tabs, because frame
- * 5017:3758 draws them that way: Reviews / Answers / Report / Support.
+ * `Review Queue`, `Q&A` and reports are one screen with tabs, because the
+ * review-queue frame draws them that way: Review / Answer / Report / Support.
+ * That was 5017:3758, which has been deleted; 6922:837 draws the same four.
  *
- * DOCUMENTED DEVIATION — Analytics is an eleventh item the sidebar component
- * does not draw. The frame keeps traffic geography on the Overview alone, and
- * the owner asked for the expanded view to be reachable from the rail rather
- * than only from a link inside a panel.
+ * DOCUMENTED DEVIATIONS — three items the sidebar component does not draw, each
+ * because a real screen exists behind it: Prices, Users and Analytics. The
+ * frame keeps traffic geography on the Overview alone, and the owner asked for
+ * the expanded view to be reachable from the rail rather than only from a link
+ * inside a panel. Nothing in the rail routes nowhere.
  */
 
 export type NavItem = {

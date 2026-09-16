@@ -19,9 +19,11 @@ import { relativeAge } from "@/components/admin/review-queue-model";
 import { trustLevel } from "@/lib/trust";
 
 /**
- * The console's Answers tab, built to frame 6532:278.
+ * The console's Answers tab, built to frame 6532:278 — since deleted from the
+ * Figma file (checked 2026-09-16), so this stands on its last reading and
+ * cannot be re-compared. See AdminShell for the full frame provenance.
  *
- * The frame is a question on the left and, on the right, a "Request by:" card,
+ * The frame was a question on the left and, on the right, a "Request by:" card,
  * the question, a row of chips, an "Answered by:" card outlined in the brand
  * orange, the answer, and a three-photo grid.
  *
