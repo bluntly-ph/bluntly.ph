@@ -59,7 +59,7 @@ export default async function SellerPage({ params }: { params: Promise<{ id: str
   ]);
   if (!seller) notFound();
 
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
   const canModerate = me?.role === "moderator" || me?.role === "admin";
   // The public store shape never says who claimed it, so ownership is asked of
   // the API — and only when it could be true, to spare everyone else a request.

@@ -297,7 +297,11 @@ test("invalid server forwarding headers remain behind the empty 204 shield", asy
 });
 
 test("the route entry exposes only POST and binds the non-route handler", () => {
-  const source = readFileSync(new URL("../../app/api/telemetry/route.ts", import.meta.url), "utf8");
+  // Carriage returns stripped first: this repository checks out with CRLF on
+  // Windows, so splitting on "\n" alone leaves a "\r" on the end of every line
+  // and this comparison fails on a developer machine while passing in CI. The
+  // test is about which symbols the route exports, not about line endings.
+  const source = readFileSync(new URL("../../app/api/telemetry/route.ts", import.meta.url), "utf8").replace(/\r/g, "");
   const exportLines = source.split("\n").filter((line) => line.startsWith("export "));
 
   assert.deepEqual(exportLines, ["export async function POST(request: Request): Promise<Response> {"]);

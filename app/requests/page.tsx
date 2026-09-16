@@ -26,7 +26,7 @@ export default async function RequestsPage() {
     // (BUG-026); anonymous readers get the same board with my_upvote false.
     getRequests("demand", token),
   ]);
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
   const canVote = me !== null;
 
   return (

@@ -51,7 +51,7 @@ export default async function ReviewerProfilePage({ params }: Params) {
   if (!data) notFound();
 
   const { author, cards } = data;
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">

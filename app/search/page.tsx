@@ -58,7 +58,7 @@ export default async function SearchPage({
     activeTab === "questions" ? getQuestions(undefined, { q, limit: 24 }) : Promise.resolve(null),
     activeTab === "sellers" ? searchSellers(q, 24) : Promise.resolve(null),
   ]);
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
 
   const heading = q
     ? `Results for “${q}”`

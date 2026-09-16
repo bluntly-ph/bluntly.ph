@@ -39,6 +39,34 @@ STAGE5_HELPFULNESS = 90.6
 MIN_VOTES_PER_VERIFIED_REVIEW = 4
 STAGE_MIN_VERIFIED_REVIEWS = {3: 5, 4: 15, 5: 50}
 
+# --- What the next stage asks for, in reviews (profile Stats card) ---
+# The ladder above is the authority; this is the same ladder read forwards, so a
+# member can be told what to do next. Reviews are the only requirement a member
+# acts on directly — helpfulness, votes and time follow from posting — so this is
+# what the progress bar measures. Stage 1 counts any published review; every
+# stage above it counts verified ones.
+STAGE_REVIEW_TARGET = {1: 1, 2: 1, 3: 5, 4: 15, 5: 50}
+TOP_STAGE = 5
+
+
+def next_stage_progress(
+    stage: int,
+    review_count: int,
+    verified_review_count: int,
+) -> tuple[int, int, int] | None:
+    """`(next_stage, have, needed)` — or None at the top of the ladder.
+
+    `have` is clamped to `needed` so a member who already clears the review
+    requirement but is held back by helpfulness, votes or time sees a full bar
+    rather than one that overflows: the reviews really are done.
+    """
+    if stage >= TOP_STAGE:
+        return None
+    nxt = stage + 1
+    needed = STAGE_REVIEW_TARGET[nxt]
+    have = review_count if nxt == 1 else verified_review_count
+    return nxt, min(have, needed), needed
+
 
 def reputation_score(
     helpfulness_ratio: float,

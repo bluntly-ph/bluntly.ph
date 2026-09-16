@@ -128,6 +128,40 @@ def require_role(*allowed_roles: str):
     return _guard
 
 
+def is_root_owner(user: User | None) -> bool:
+    """Is this the one account allowed to appoint or remove staff?
+
+    Identity is the configured email, compared case-insensitively, AND the
+    super-admin column. Two conditions rather than one because each covers the
+    other's failure: an email is what the owner actually controls and recognises,
+    and the column is what no API path can write. Neither is a role, so no role
+    grant can ever manufacture this authority.
+    """
+    if user is None:
+        return False
+    if not bool(getattr(user, "is_super_admin", False)):
+        return False
+    email = (getattr(user, "email", "") or "").strip().lower()
+    return bool(email) and email == settings.root_owner_email.strip().lower()
+
+
+def require_root_owner(user: User = Depends(get_current_user)) -> User:
+    """Staff appointment, restricted to the root owner (owner rule, 2026-09-16).
+
+    A super admin is no longer sufficient: the owner asked for exactly one
+    account able to grant or revoke moderator and administrator, so that a
+    second elevated account cannot quietly widen the circle. Checked here, on
+    the server, against the row read fresh for this request — the console hides
+    the controls it must not offer, but hiding is not the boundary.
+    """
+    if not is_root_owner(user):
+        raise ForbiddenError(
+            "Only the root owner can change staff roles.",
+            code="root_owner_required",
+        )
+    return user
+
+
 def require_super_admin(user: User = Depends(get_current_user)) -> User:
     """The owner elevation, read fresh from the database on every request.
 

@@ -42,7 +42,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     getUser().catch(() => null),
     requested.length >= MIN && requested.length <= MAX ? getComparison(requested) : Promise.resolve(null),
   ]);
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
 
   const wrongCount = requested.length < MIN || requested.length > MAX;
 

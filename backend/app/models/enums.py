@@ -137,6 +137,22 @@ class ModerationAction(str, enum.Enum):
     role_revoke = "role_revoke"
 
 
+class ReportResolution(str, enum.Enum):
+    """How a filed report was closed (owner requirement, 2026-09-16).
+
+    Four outcomes, because a moderator looking at a report has four honest
+    answers: the content stands, the content came down, content that was down
+    goes back up, or this is above my pay grade. The action taken on the content
+    itself is audited separately by the service that performs it; this records
+    the report's own outcome so the queue can stop showing it.
+    """
+
+    dismissed = "dismissed"
+    content_removed = "content_removed"
+    content_restored = "content_restored"
+    escalated = "escalated"
+
+
 class ModerationReason(str, enum.Enum):
     fake_proof = "fake_proof"
     plagiarized = "plagiarized"

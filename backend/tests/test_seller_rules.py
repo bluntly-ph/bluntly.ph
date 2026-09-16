@@ -68,11 +68,22 @@ class TestSellerReviewValidation:
         review = SellerReviewCreate(**_review())
         assert review.overall_rating == 5
 
-    @pytest.mark.parametrize("field", ["customer_service", "packaging_quality", "overall_rating"])
+    @pytest.mark.parametrize("field", ["customer_service", "packaging_quality"])
     @pytest.mark.parametrize("value", [0, 6])
-    def test_graded_dimensions_are_one_to_five(self, field, value):
+    def test_graded_chips_are_one_to_five(self, field, value):
+        """Customer service and packaging are the frame's numbered chips."""
         with pytest.raises(ValidationError):
             SellerReviewCreate(**_review(**{field: value}))
+
+    @pytest.mark.parametrize("value", [0, 0.5, 4.5, 5])
+    def test_the_overall_rating_takes_half_steps_and_zero(self, value):
+        """Owner requirement, 2026-09-16: 0 to 5 in halves, zero is an answer."""
+        assert SellerReviewCreate(**_review(overall_rating=value)).overall_rating == value
+
+    @pytest.mark.parametrize("value", [-0.5, 2.3, 6])
+    def test_the_overall_rating_refuses_anything_off_the_step(self, value):
+        with pytest.raises(ValidationError):
+            SellerReviewCreate(**_review(overall_rating=value))
 
     @pytest.mark.parametrize("field", [
         "accuracy", "order_completeness", "customer_service",

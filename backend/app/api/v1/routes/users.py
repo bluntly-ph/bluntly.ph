@@ -23,11 +23,13 @@ from app.core.security import get_current_user, get_optional_user, require_role
 from app.db.session import get_db
 from app.models.enums import MemberRole, ModerationAction, ModerationTargetType
 from app.models.moderation import ModerationLog
-from app.models.user import User, UserBadge
+from app.models.review import Review
+from app.models.user import TRUST_LEVEL_NAMES, User, UserBadge
 from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
-from app.schemas.user import BadgeOut, RoleUpdate, UserTrustOut
+from app.schemas.user import BadgeOut, RoleUpdate, TrustProgressOut, UserTrustOut
 from app.services import contribution_streak, dashboard_service
+from app.services.trust import next_stage_progress
 from app.services.storage import delete_avatar_object, upload_avatar
 from app.services.username import MAX_LENGTH, MIN_LENGTH, is_valid_username
 
@@ -168,6 +170,36 @@ def get_trust(user_id: uuid.UUID, db: Session = Depends(get_db)) -> UserTrustOut
         helpfulness_ratio=user.helpfulness_ratio,
         badges=[BadgeOut(badge_id=ub.badge.badge_id, name=ub.badge.name,
                          awarded_at=ub.awarded_at) for ub in user_badges],
+        progress=_trust_progress(db, user),
+    )
+
+
+def _trust_progress(db: Session, user: User) -> TrustProgressOut | None:
+    """What this member needs to reach the next stage (profile Stats card).
+
+    The published-review count is read here rather than stored: only stage 1
+    depends on it, and `users` deliberately carries no denormalised total that
+    a removal would have to walk back.
+    """
+    step = next_stage_progress(
+        user.trust_stage,
+        review_count=db.scalar(
+            select(func.count(Review.id)).where(
+                Review.author_id == user.id,
+                Review.published_at.isnot(None),
+                Review.is_removed.is_(False),
+            )
+        ) or 0,
+        verified_review_count=user.verified_review_count,
+    )
+    if step is None:
+        return None
+    next_stage, have, needed = step
+    return TrustProgressOut(
+        next_stage=next_stage,
+        next_level_name=TRUST_LEVEL_NAMES[next_stage],
+        reviews_have=have,
+        reviews_needed=needed,
     )
 
 

@@ -21,7 +21,7 @@ import {
 const EMPTY = {
   discussion: "",
   verdict: null,
-  rating: 0,
+  rating: null,
   pros: "",
   cons: "",
   anti: "",
@@ -106,9 +106,14 @@ test("the last step needs a title and the disclosure answer", () => {
   assert.equal(blockerFor(6, filled({ title: "Light and quiet", disclosure: "none" })), null);
 });
 
-test("a zero rating is not a rating", () => {
-  assert.ok(blockerFor(2, filled({ rating: 0 })));
-  assert.equal(blockerFor(2, filled({ rating: 1 })), null);
+test("no rating blocks the step, and zero is a rating", () => {
+  // Owner requirement, 2026-09-16: ratings run 0 to 5 in half steps, and zero
+  // is an answer — "this was bad" — not an unanswered question.
+  assert.ok(blockerFor(2, filled({ rating: null })), "unanswered still blocks");
+  assert.equal(blockerFor(2, filled({ rating: 0 })), null, "zero passes the gate");
+  assert.equal(blockerFor(2, filled({ rating: 0.5 })), null, "a half passes the gate");
+  assert.equal(blockerFor(2, filled({ rating: 4.5 })), null);
+  assert.equal(blockerFor(2, filled({ rating: 5 })), null);
 });
 
 test("only the last step submits", () => {

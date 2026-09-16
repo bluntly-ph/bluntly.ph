@@ -16,12 +16,15 @@ import {
   GlobeHemisphereEast,
   ImageBroken,
   MagnifyingGlass,
+  Receipt,
   ShareNetwork,
   Sliders,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { QaAnswersTab } from "@/components/admin/QaAnswersTab";
+import { ReportDecision } from "@/components/admin/ReportDecision";
+import { ReviewDecision } from "@/components/admin/ReviewDecision";
 import type { QaQuestion } from "@/components/admin/qa-answers-model";
 import {
   DEFAULT_LIMIT,
@@ -29,6 +32,7 @@ import {
   QUEUE_LIMITS,
   QUEUE_ROUTE,
   QUEUE_TIME_APPROXIMATE,
+  REPORT_RESOLUTION_LABELS,
   REVERSE_IMAGE_SEARCH_UNAVAILABLE,
   VOTING_GEOGRAPHY_SHORT,
   VOTING_GEOGRAPHY_UNAVAILABLE,
@@ -59,14 +63,20 @@ import { TrustBadge } from "@/components/ui/TrustBadge";
 import type { QueueItem, QueueResult, ReportItem } from "@/lib/moderation";
 
 /**
- * The Review Queue, built to frame 5017:3758.
+ * The Review Queue, built to frame 6922:837 "Admin Page - Review Queue"
+ * (1280x1943), re-read from Figma on 2026-09-16. It supersedes 5017:3758,
+ * which was deleted from the file on 2026-09-09.
  *
  * That frame is its own screen — a table on the left, a stacked detail column
  * on the right, tabs across the top and pagination at the foot.
  *
+ * ITS COLUMNS, in its order, are what the table draws: Product, Author, Level,
+ * Wilson, Receipt, RIS, Priority, Age. The backend's `review_id` has no column
+ * in the frame, so it rides in the row's tooltip instead of adding a ninth.
+ *
  * Everything derived rather than served is derived in
  * `review-queue-model.ts`, which the frontend test suite covers directly:
- * Priority from the advisory fraud signals, Score from the review's real
+ * Priority from the advisory fraud signals, Wilson from the review's real
  * `wilson_score`, the ID from the backend's own `review_id`.
  *
  * WHERE THE FRAME DRAWS A NUMBER THIS BUILD CANNOT SOURCE, the panel says so
@@ -76,12 +86,20 @@ import type { QueueItem, QueueResult, ReportItem } from "@/lib/moderation";
  *
  *   Views / Shares / Comments / top comment   no admin read path exists
  *   Voting Distribution globe + city bars     write-only geo table, no route
- *   Flagged voters, per-voter risk table      no data and no methodology
+ *   Flagged Voters / High trust / Low trust   no data and no methodology
+ *   Voter table (pattern, rate, risk level)   no per-voter risk model exists
+ *   Recent Report panel                       reports are on the Report tab
  *   Reverse image search / plagiarism         no provider in this build
  *   Verified Reviews (author card)            not on QueueAuthor
  *
  * A "0" in any of those cells would read as a measurement. On a fraud-review
  * screen that is the one mistake worth designing against.
+ *
+ * WHAT THE FRAME DOES NOT DRAW AND THE SCREEN HAS ANYWAY is the decision panel
+ * (`ReviewDecision`) and the report decisions (`ReportDecision`). The owner
+ * ruled on 2026-09-16 that a moderation console which can only inspect is not
+ * acceptable, so both are BUSINESS-REQUIRED / DESIGN-SYSTEM ALIGNED: built from
+ * this console's own panel and pill vocabulary, not invented styling.
  */
 
 const TABS: { key: Tab; label: string }[] = [
@@ -400,36 +418,51 @@ export function ReviewQueueScreen({
                     is never squeezed off the end by a long review title.
                     Below 32rem it scrolls horizontally in its own pane, which
                     is the right behaviour on a phone. */}
-                <table className="w-full min-w-[33rem] table-fixed border-collapse text-left">
-                  {/* ID gets the room the backend's real reference needs:
-                      `review_id` is `rev_` + 10 hex, not the frame's short
-                      "B-270", and a moderator pastes it into a search. */}
+                <table className="w-full min-w-[44rem] table-fixed border-collapse text-left">
+                  {/* Frame 6922:837's eight columns, in its order: Product,
+                      Author, Level, Wilson, Receipt, RIS, Priority, Age.
+
+                      The backend's `review_id` (`rev_` + 10 hex) is what a
+                      moderator pastes into a search, and the frame has no
+                      column for it — so it rides in the row's tooltip and in
+                      the detail pane rather than as a ninth column the design
+                      does not have. */}
                   <colgroup>
-                    <col style={{ width: "20%" }} />
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "21%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "19%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "10%" }} />
                     <col style={{ width: "9%" }} />
-                    <col style={{ width: "13%" }} />
-                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "17%" }} />
+                    <col style={{ width: "9%" }} />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-[var(--surface-app)]">
                     {/* Header and cell padding match column for column — they
                         did not before, so every heading sat 4px off its data. */}
                     <tr className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      <th className="px-4 py-3 font-medium">ID</th>
-                      <th className="px-4 py-3 font-medium">Title</th>
+                      <th className="px-4 py-3 font-medium">Product</th>
                       <th className="px-4 py-3 font-medium">Author</th>
+                      <th className="px-4 py-3 font-medium" title="The author's trust stage, 0 to 5.">
+                        Level
+                      </th>
                       <th className="px-4 py-3 font-medium" title="The review's own Wilson score. Context, not an input to priority.">
-                        Score
+                        Wilson
+                      </th>
+                      <th className="px-4 py-3 font-medium" title="Proof of purchase was submitted with this review.">
+                        Receipt
+                      </th>
+                      <th className="px-4 py-3 font-medium" title={REVERSE_IMAGE_SEARCH_UNAVAILABLE}>
+                        RIS
                       </th>
                       <th className="px-4 py-3 font-medium">Priority</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium">Age</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!queue.available ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-[13px]">
+                        <td colSpan={8} className="px-4 py-12 text-center text-[13px]">
                           <span role="alert" className="text-[var(--accent-danger)]">
                             {queue.reason === "unauthenticated"
                               ? "This session is not signed in as a moderator, so the queue was not requested."
@@ -439,7 +472,7 @@ export function ReviewQueueScreen({
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-[13px] text-[var(--text-secondary)]">
+                        <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[var(--text-secondary)]">
                           {hasFilters(filters)
                             ? "No queued review matches this filter."
                             : showingEdited
@@ -461,13 +494,10 @@ export function ReviewQueueScreen({
                             }`}
                           >
                             <td
-                              className="truncate px-4 py-3 font-mono text-[11px] text-[var(--text-secondary)]"
-                              title={reviewIdLabel(item.review)}
+                              className="truncate px-4 py-3 text-[var(--text-primary)]"
+                              title={`${item.product.canonical_name ?? "Unnamed product"} — ${item.review.title} (${reviewIdLabel(item.review)})`}
                             >
-                              {reviewIdLabel(item.review)}
-                            </td>
-                            <td className="truncate px-4 py-3 text-[var(--text-primary)]" title={item.review.title}>
-                              {item.review.title}
+                              {item.product.canonical_name ?? "Unnamed product"}
                             </td>
                             <td className="px-4 py-3 text-[var(--text-primary)]">
                               {/* The frame draws a 24px avatar beside the name.
@@ -484,7 +514,51 @@ export function ReviewQueueScreen({
                               </span>
                             </td>
                             <td className="px-4 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
+                              {item.author ? item.author.trust_stage : "—"}
+                            </td>
+                            <td className="px-4 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
                               {Number(item.review.wilson_score).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.review.has_receipt ? (
+                                <>
+                                  <Receipt size={16} aria-hidden="true" className="text-[var(--accent-success)]" />
+                                  <span className="sr-only">Proof of purchase submitted</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span aria-hidden="true" className="text-[var(--text-muted)]">
+                                    &mdash;
+                                  </span>
+                                  <span className="sr-only">No proof of purchase</span>
+                                </>
+                              )}
+                            </td>
+                            <td
+                              className="px-4 py-3"
+                              title={externalCheckLabel(item.integrity?.reverse_image_status).label}
+                            >
+                              {/* The frame draws a pass/fail mark here. This
+                                  build has no reverse-image provider, so an
+                                  unrun check is a dash — never a tick, which
+                                  would read as a clean result nobody produced. */}
+                              <span
+                                aria-hidden="true"
+                                className={
+                                  externalCheckLabel(item.integrity?.reverse_image_status).ran
+                                    ? "text-[var(--text-primary)]"
+                                    : "text-[var(--text-muted)]"
+                                }
+                              >
+                                {externalCheckLabel(item.integrity?.reverse_image_status).ran
+                                  ? item.integrity?.reverse_image_status === "flagged"
+                                    ? "!"
+                                    : "OK"
+                                  : "—"}
+                              </span>
+                              <span className="sr-only">
+                                {externalCheckLabel(item.integrity?.reverse_image_status).label}
+                              </span>
                             </td>
                             <td className="px-4 py-3">
                               <span
@@ -632,7 +706,7 @@ function ReportsTab({ reports, now }: { reports: ReportItem[]; now: number }) {
     <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
       {reports.length === 0 ? (
         <p className="rounded-[var(--radius-md)] bg-[var(--surface-card)] p-6 text-[13px] text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
-          Nothing has been reported.
+          No open reports. Resolved ones stay in the audit log.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -650,6 +724,15 @@ function ReportsTab({ reports, now }: { reports: ReportItem[]; now: number }) {
               {r.report.notes ? (
                 <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{r.report.notes}</p>
               ) : null}
+              {r.target ? (
+                <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                  {r.target.title ?? "Untitled"} ·{" "}
+                  {r.target.is_published ? "published" : "not published"}
+                  {r.target_report_count > 1
+                    ? ` · ${r.target_report_count} reports on this item`
+                    : ""}
+                </p>
+              ) : null}
               {r.report.target_ref ? (
                 <Link
                   href={`/reviews/${r.report.target_ref}`}
@@ -658,6 +741,13 @@ function ReportsTab({ reports, now }: { reports: ReportItem[]; now: number }) {
                   Open the reported item
                 </Link>
               ) : null}
+              {r.report.resolution ? (
+                <p className="mt-2 text-[12px] text-[var(--text-secondary)]">
+                  {REPORT_RESOLUTION_LABELS[r.report.resolution] ?? r.report.resolution}
+                </p>
+              ) : (
+                <ReportDecision item={r} />
+              )}
             </li>
           ))}
         </ul>
@@ -698,6 +788,11 @@ function ReviewDetail({
 
   return (
     <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-card)]">
+      {/* The verbs, above the evidence and pinned there. A moderator who has
+          read to the bottom of a long panel should not have to scroll back up
+          to act on what they just read. */}
+      <ReviewDecision item={item} />
+
       {/* 0. Why this review is where it is.
           The policy's own answer, in the policy's own words. Nothing in this
           panel is derived here: the band, the score, the lane, the SLA state

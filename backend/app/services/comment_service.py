@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, ForbiddenError, NotFoundError
 from app.models.comment import ReviewComment, ReviewCommentVote
 from app.models.enums import MemberRole, VoteDirection
+from app.models.product import Product
 from app.models.review import Review
 from app.models.user import User
 
@@ -177,3 +178,41 @@ def remove_comment_vote(db: Session, comment: ReviewComment,
     db.commit()
     db.refresh(comment)
     return comment
+
+
+def list_authored(db: Session, author_id: uuid.UUID, *, limit: int = 24,
+                  offset: int = 0) -> list[tuple[ReviewComment, Review, str | None, int]]:
+    """A member's own comments, newest first, each with its parent review.
+
+    The profile's Comments tab reads this. Three filters make it a *public*
+    list rather than a personal one: the comment is not removed, the review is
+    not removed, and the review is published. A member's profile is readable by
+    anyone, so a comment on their own unpublished draft must not leak through it.
+
+    The reply count is counted in the same statement rather than per row — the
+    N+1 the review feed already learned to avoid (BUG-006).
+    """
+    comment_count = (
+        select(func.count(ReviewComment.id))
+        .where(
+            ReviewComment.review_id == Review.id,
+            ReviewComment.is_removed.is_(False),
+        )
+        .correlate(Review)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(ReviewComment, Review, Product.canonical_name, comment_count)
+        .join(Review, Review.id == ReviewComment.review_id)
+        .outerjoin(Product, Product.id == Review.product_id)
+        .where(
+            ReviewComment.author_id == author_id,
+            ReviewComment.is_removed.is_(False),
+            Review.is_removed.is_(False),
+            Review.published_at.is_not(None),
+        )
+        .order_by(ReviewComment.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return [(row[0], row[1], row[2], row[3]) for row in rows]

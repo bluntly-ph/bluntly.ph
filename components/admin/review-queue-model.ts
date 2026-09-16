@@ -598,3 +598,17 @@ export function tabHref(tab: Tab, filters: QueueFilters): string {
  */
 export const VOTING_GEOGRAPHY_SHORT =
   "Collected per review, but not served to this console.";
+
+/**
+ * How a closed report reads on screen.
+ *
+ * Here rather than in `lib/moderation.ts` because the queue screen is a client
+ * component: that module is `server-only`, and importing a VALUE from it (a
+ * type is erased) would pull the server bundle into the browser.
+ */
+export const REPORT_RESOLUTION_LABELS: Record<string, string> = {
+  dismissed: "Dismissed — the content stands",
+  content_removed: "Removed — the review was unpublished",
+  content_restored: "Restored — the review was published again",
+  escalated: "Escalated for a senior decision",
+};

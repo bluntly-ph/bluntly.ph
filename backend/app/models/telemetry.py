@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
+    Numeric,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -146,7 +148,7 @@ class ReviewReadingSession(Base):
     #: edited and a residual computed against the current text would compare a
     #: reader's behaviour to words they never saw.
     word_count_at_view: Mapped[int | None] = mapped_column(SmallInteger)
-    star_rating_at_view: Mapped[int | None] = mapped_column(SmallInteger)
+    star_rating_at_view: Mapped[Decimal | None] = mapped_column(Numeric(2, 1))
     #: 0 unknown / 1 phone / 2 tablet / 3 desktop. Derived server-side from the
     #: request User-Agent, which is NEVER persisted.
     device_class: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")

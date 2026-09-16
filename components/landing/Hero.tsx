@@ -17,11 +17,15 @@ import { FeaturedReviewCard } from "./FeaturedReviewCard";
  * with a 20px arrow; 44px down, the tilted review card group, 450px tall because
  * the question pill sits 218px under the card at the left.
  *
- * OWNER DESIGN DIFFERENCE (2026-09-16): the frame puts the "Earned" pill 30px
- * BELOW the card at the right. The owner asked for it on the card's upper-right
- * instead, as a badge belonging to the card — so it is drawn inside
- * FeaturedReviewCard's own composition, pinned to the tilted card's corner, and
- * never positioned against the viewport.
+ * The hero's annotations follow the file again. The owner corrected the hero
+ * group in Figma on 2026-09-16 and asked for it copied one to one, which
+ * replaced the interim placement we had been given verbally:
+ *
+ *   "How noisy is it?"     over the card's TOP-RIGHT   (frame x244 y4)
+ *   "Earned ₱45.50 today"  on the card's BOTTOM-LEFT   (frame x0 y185)
+ *
+ * Both are drawn inside FeaturedReviewCard's composition, so they travel with
+ * the card and are never positioned against the viewport.
  *
  * From `md` up there is no frame: the two-column split starts at 768px, and the
  * pills sit on the card. The split used to wait for 1024px while the header had
@@ -83,20 +87,22 @@ export function Hero({ featured }: { featured: FeaturedData }) {
           </form>
         </div>
 
-        <div className="animate-fade-up delay-2 relative mx-auto h-[450px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-6">
+        <div className="animate-fade-up delay-2 relative mx-auto h-[225px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-6">
           <FeaturedReviewCard
             featured={featured}
-            badge={
+            badgeTopRight={
+              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--surface-app)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-primary)] shadow-[var(--shadow-sheet)]">
+                <DotOutline size={16} aria-hidden="true" className="text-[var(--accent-primary)]" />
+                &ldquo;{FEATURED_REVIEW.question}&rdquo;
+              </span>
+            }
+            badgeBottomLeft={
               <span className="inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent-primary)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-on-brand)] shadow-[var(--shadow-sheet)]">
                 <DotOutline size={16} aria-hidden="true" />
                 {FEATURED_REVIEW.earned}
               </span>
             }
           />
-          <span className="absolute left-[11px] top-[426px] z-10 inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--surface-app)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-primary)] shadow-[var(--shadow-sheet)] md:bottom-0 md:left-2 md:top-auto">
-            <DotOutline size={16} aria-hidden="true" className="text-[var(--accent-primary)]" />
-            &ldquo;{FEATURED_REVIEW.question}&rdquo;
-          </span>
         </div>
       </div>
     </section>

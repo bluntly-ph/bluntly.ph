@@ -52,14 +52,56 @@ Submissions matter most: engineering answered those POSTs in the browser, so **n
 | What | State | Why |
 | --- | --- | --- |
 | Authenticated routes on production | HUMAN_AUTH_REQUIRED | Everything signed-in, store-owner and moderator is LOCAL FIXTURE VERIFIED. Production sign-in is an emailed one-time code; engineering has no mail hook and must not create or borrow a session. |
-| Seller-dependent routes on production | NOT LIVE-DATA VERIFIED | Production holds no seller record, so `/sellers/[id]` and its dashboard cannot be opened live. Local fixture evidence stands. No fake seller was created to make this green. |
+| Seller-dependent routes on production | LIVE-DATA VERIFIED (signed out) | The owner authorised one labelled QA seller on 2026-09-16 — see *Reversible test data in production* below. `/sellers/[id]` now renders live. The store dashboard is still HUMAN_AUTH_REQUIRED: the row is unclaimed, so nobody owns it. |
 | Anything that writes | NOT EXERCISED | Review, seller-review and question submission, answering, voting and withdrawal. Verified up to the submit control only. |
 | The one-time-code step | NOT EXERCISED | Needs a mail hook. The form, its validation and the return path are verified. |
 | Moderator queues other than the review queue | BLOCKED locally | Prices, seller claims, reviewers, users and the activity log have no local fixture payloads, so their populated tables have no evidence. Their shells and unreachable-API states do. |
 
-## Findings raised, not fixed (frontend is frozen)
+## Reversible test data in production
 
-- **No moderator decision control.** The review queue inspects a card but cannot publish, reject or attach a link to it. The Figma frame draws no such control either, and `components/moderation/ModerationQueue.tsx`, which does call those endpoints, is mounted on no route. The API has them. This is a product decision for the owner, not a frontend regression.
+Exactly one row was added to production, at the owner's instruction (2026-09-16), so that seller journeys can be exercised against the live stack:
+
+| | |
+| --- | --- |
+| Table | `sellers` |
+| Id | `5e11e700-0000-4000-8000-000000000999` |
+| Display name | `Bluntly QA Seller` |
+| Platform | `other` — **not** Shopee or Lazada, so it cannot be mistaken for a real merchant |
+| Claim status | `unclaimed`, `claimed_by_id` null |
+| Reviews / ratings / revenue | none — every aggregate reads null or zero, because nothing was fabricated |
+| Live URL | https://www.bluntly.ph/sellers/5e11e700-0000-4000-8000-000000000999 |
+
+It is a directory entry and nothing else: no fake merchant identity, no store URL, no invented ratings, no invented earnings.
+
+**To remove it** (nothing references it while its review count is zero):
+
+```sql
+DELETE FROM sellers WHERE id = '5e11e700-0000-4000-8000-000000000999';
+```
+
+If QA files real seller reviews against it during testing, delete those first, or the foreign key will refuse — that is the intended safety, not a failure.
+
+## Moderator decision controls — now implemented, and QA owns them
+
+This was raised at the previous handoff as "the review queue inspects a card but cannot act on it". The owner ruled on 2026-09-16 that inspection-only is no longer acceptable, so the controls exist:
+
+| Where | Controls | Endpoint |
+| --- | --- | --- |
+| Review Queue → detail pane | Publish · Monetize & publish (link + platform) · Reject (reason required) | `POST /admin/reviews/{id}/publish`, `/referral-link`, `/reject` |
+| Review Queue → Report tab | Dismiss · Remove content · Restore content · Escalate | `POST /admin/reports/{id}/decision` |
+
+Neither had a Figma frame with controls on it, so both are classified **BUSINESS-REQUIRED / DESIGN-SYSTEM ALIGNED**: built from the console's existing panel, pill and two-step-arming vocabulary rather than invented styling.
+
+**QA must exercise these against real content and watch what they do**, because all six are outward-facing:
+
+- Publishing puts a review on the public site. 2★ or lower routes to the Honesty Fund, higher is approved but unmonetized — the panel states which before the press.
+- Monetize & publish attaches an affiliate link and starts a revenue-share contract.
+- Rejecting notifies the author with the reason, verbatim.
+- Remove content unpublishes the review and puts it *back in the review queue* (by design — an unpublished review that left the queue would be unreachable).
+- Resolving a report takes it out of the open queue; it stays readable under `?status=resolved` and in the activity log.
+- Every one of them writes a `moderation_logs` row with the actor.
+
+`components/moderation/ModerationQueue.tsx` and `ReportQueue.tsx` — the two unmounted components that called these endpoints with `window.prompt` — were deleted rather than left as a second implementation.
 
 ## Known environment-only test failures
 

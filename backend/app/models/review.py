@@ -58,7 +58,8 @@ class Review(Base, UUIDPrimaryKey, Timestamps):
     verdict_explanation: Mapped[str | None] = mapped_column(Text)
     target_audience: Mapped[str | None] = mapped_column(Text)
     anti_target_audience: Mapped[str | None] = mapped_column(Text)
-    star_rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)  # 1..5
+    #: 0 to 5 in half steps (0048). Zero is a real answer, not a missing one.
+    star_rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False)
     pros: Mapped[list | None] = mapped_column(JSONB)   # max 10 (app-validated)
     cons: Mapped[list | None] = mapped_column(JSONB)   # max 10 (app-validated)
 

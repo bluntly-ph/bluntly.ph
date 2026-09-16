@@ -53,7 +53,7 @@ export default async function FeedPage({
     }),
   ]);
 
-  const headerUser: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const headerUser: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
   // The reader's chosen slugs, resolved to their proper labels. An interest the
   // vocabulary no longer knows is dropped rather than rendered as a raw slug.
   const chosen = (me?.interests ?? []) as string[];

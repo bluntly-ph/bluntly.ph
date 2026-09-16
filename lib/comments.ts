@@ -56,3 +56,43 @@ export async function getComments(
     return [];
   }
 }
+
+/** The parent review of a comment, as a profile row draws it. */
+export type CommentReview = {
+  id: string;
+  title: string;
+  product_name: string | null;
+  helpful_votes: number;
+  comment_count: number;
+};
+
+/** One comment a member wrote, for the profile's Comments tab. */
+export type AuthoredComment = {
+  id: string;
+  body: string;
+  helpful_votes: number;
+  created_at: string;
+  review: CommentReview;
+};
+
+/**
+ * Everything a member has said, newest first (profile Comments tab).
+ *
+ * `null` on failure rather than `[]`, matching `searchReviews`: an outage and
+ * an empty history are different answers and the tab says so differently. The
+ * API already filters removed comments and unpublished reviews out — a profile
+ * is a public page, so nothing here depends on who is reading.
+ */
+export async function getAuthoredComments(
+  userId: string,
+  limit = 24,
+): Promise<AuthoredComment[] | null> {
+  try {
+    return await apiFetch<AuthoredComment[]>(
+      `/api/v1/users/${userId}/comments?limit=${limit}`,
+      { revalidate: 60 },
+    );
+  } catch {
+    return null;
+  }
+}

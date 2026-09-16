@@ -51,7 +51,7 @@ export default function WelcomePage() {
       </div>
 
       <div className="mt-[52px] flex flex-col gap-3 lg:mt-7">
-        <GoogleButton />
+        <GoogleButton purpose="signup" />
         <Button
           href="/signup"
           variant="outline"

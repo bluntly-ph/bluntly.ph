@@ -49,10 +49,9 @@ export function UserManagement() {
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch(
-        `/api/bff/api/v1/admin/users?q=${encodeURIComponent(candidate)}`,
-        { cache: "no-store" },
-      );
+      const response = await fetch(`/api/bff/api/v1/admin/users?q=${encodeURIComponent(candidate)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) {
         const problem = (await response.json().catch(() => ({}))) as Problem;
         throw new Error(problem.detail ?? "Search failed.");
@@ -90,9 +89,7 @@ export function UserManagement() {
         current
           ? {
               ...current,
-              rows: current.rows.map((row) =>
-                row.id === user.id ? { ...row, role: next } : row,
-              ),
+              rows: current.rows.map((row) => (row.id === user.id ? { ...row, role: next } : row)),
             }
           : current,
       );
@@ -113,8 +110,8 @@ export function UserManagement() {
       <header className="shrink-0">
         <h2 className="text-[18px] font-bold text-[var(--text-primary)]">User management</h2>
         <p className="mt-1 max-w-[55rem] text-[13px] text-[var(--text-secondary)]">
-          Find an account by staff reference, UUID, exact email, display name, or username.
-          Staff references are internal and do not grant access to anything.
+          Find an account by staff reference, UUID, exact email, display name, or username. Staff references
+          are internal and do not grant access to anything.
         </p>
       </header>
 
@@ -123,7 +120,9 @@ export function UserManagement() {
         onSubmit={(event) => void findUsers(event)}
         className="flex shrink-0 flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-card)] sm:flex-row"
       >
-        <label htmlFor="staff-user-query" className="sr-only">Find a platform user</label>
+        <label htmlFor="staff-user-query" className="sr-only">
+          Find a platform user
+        </label>
         <div className="relative min-w-0 flex-1">
           <MagnifyingGlass
             aria-hidden="true"
@@ -150,8 +149,16 @@ export function UserManagement() {
       </form>
 
       <div aria-live="polite" className="min-h-5 shrink-0 text-[13px]">
-        {error ? <p role="alert" className="text-[var(--accent-danger)]">{error}</p> : null}
-        {notice ? <p role="status" className="text-[var(--accent-trust)]">{notice}</p> : null}
+        {error ? (
+          <p role="alert" className="text-[var(--accent-danger)]">
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p role="status" className="text-[var(--accent-trust)]">
+            {notice}
+          </p>
+        ) : null}
         {!error && !notice && page ? (
           <p className="text-[var(--text-secondary)]">
             {page.total} match{page.total === 1 ? "" : "es"}
@@ -186,8 +193,15 @@ export function UserManagement() {
                       <span className="block font-medium text-[var(--text-primary)]">
                         {user.display_name ?? user.username ?? "Unnamed user"}
                       </span>
+                      {/* The handle first: it is what a moderator recognises and
+                          what the person uses. Email only where the API returns
+                          it (root owner), and the opaque id only when an account
+                          has neither (owner note, 2026-09-16). */}
                       <span className="block text-[12px] text-[var(--text-muted)]">
-                        {user.email ?? (user.username ? `@${user.username}` : user.id)}
+                        {user.username ? `@${user.username}` : null}
+                        {user.username && user.email ? " · " : null}
+                        {user.email}
+                        {!user.username && !user.email ? user.id : null}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-[12px] font-semibold text-[var(--text-primary)]">
@@ -195,7 +209,9 @@ export function UserManagement() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1.5 capitalize text-[var(--text-secondary)]">
-                        {user.is_super_admin ? <ShieldCheck size={16} weight="fill" className="text-[var(--accent-primary)]" /> : null}
+                        {user.is_super_admin ? (
+                          <ShieldCheck size={16} weight="fill" className="text-[var(--accent-primary)]" />
+                        ) : null}
                         {user.is_super_admin ? "super admin" : user.role}
                       </span>
                     </td>

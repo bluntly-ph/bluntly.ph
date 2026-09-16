@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { TextField } from "@/components/ui/TextField";
@@ -45,6 +46,11 @@ const SUBTITLE = "mt-2 text-[12px] leading-[15px] text-[rgba(32,32,32,0.7)]";
  * (docs/DEVIATIONS.md #59). The "New here? Sign up" switch under the field is
  * not drawn; without it a visitor on the wrong one of the two pages has no way
  * across.
+ *
+ * OWNER DESIGN DIFFERENCE (2026-09-16): the frame (5348:2789) draws the email
+ * field and one button. The owner asked both pages to show the choice the
+ * welcome screen offers — Google, or email — so the pair is drawn here too,
+ * with Google disabled until OAuth exists (see GoogleButton).
  */
 export function SignupForm({
   purpose,
@@ -72,7 +78,18 @@ export function SignupForm({
         <h1 className={TITLE}>Let&rsquo;s get started!</h1>
         <p className={SUBTITLE}>We&rsquo;ll email you a code to verify it&rsquo;s really you</p>
 
-        <div className="mt-[29px]">
+        <div className="mt-[29px] flex flex-col gap-3">
+          <GoogleButton purpose={purpose} />
+          <div aria-hidden="true" className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-[rgba(242,242,242,0.35)] lg:bg-[var(--line-hairline-30)]" />
+            <span className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]">
+              or
+            </span>
+            <span className="h-px flex-1 bg-[rgba(242,242,242,0.35)] lg:bg-[var(--line-hairline-30)]" />
+          </div>
+          <p className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]">
+            {purpose === "signup" ? "Sign up with email" : "Continue with email"}
+          </p>
           <TextField
             label="Email address"
             labelHidden
@@ -105,15 +122,7 @@ export function SignupForm({
   );
 }
 
-function CodeStep({
-  email,
-  purpose,
-  next,
-}: {
-  email: string;
-  purpose: "signup" | "login";
-  next?: string;
-}) {
+function CodeStep({ email, purpose, next }: { email: string; purpose: "signup" | "login"; next?: string }) {
   const [verifyState, verifyAction, verifying] = useActionState(verifyOtp, EMPTY);
   const [resendState, resendAction, resending] = useActionState(requestOtp, EMPTY);
   const [code, setCode] = useState("");

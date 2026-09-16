@@ -84,9 +84,14 @@ def summarize_reviews(reviews: Iterable[Any]) -> SellerSummary:
     """
     rows = list(reviews)
     count = len(rows)
+    # Five bars, as the store page draws them. Ratings are half steps since
+    # 0048, so a 4.5 belongs to a bar rather than to a key of its own: each
+    # rating counts in the star at or below it, and a 0 (a real answer) counts
+    # in the first bar because there is no zero bar to put it in.
     distribution = {star: 0 for star in range(1, 6)}
     for row in rows:
-        distribution[row.overall_rating] += 1
+        bar = max(1, min(5, int(row.overall_rating)))
+        distribution[bar] += 1
     if count == 0:
         return SellerSummary(review_count=0, rating_distribution=distribution)
 
@@ -94,7 +99,9 @@ def summarize_reviews(reviews: Iterable[Any]) -> SellerSummary:
         return round(sum(1 for row in rows if getattr(row, attribute)) / count, 4)
 
     def mean(attribute: str) -> float:
-        return round(sum(getattr(row, attribute) for row in rows) / count, 2)
+        # float() first: overall_rating is numeric(2,1) and arrives as Decimal,
+        # which will not divide by an int cleanly alongside the integer columns.
+        return round(sum(float(getattr(row, attribute)) for row in rows) / count, 2)
 
     return SellerSummary(
         review_count=count,

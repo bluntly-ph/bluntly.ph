@@ -120,6 +120,14 @@ export type ReportItem = {
     notes: string | null;
     evidence_url: string | null;
     created_at: string;
+    /** How the report was closed. null while it is still open. */
+    resolution:
+      | "dismissed"
+      | "content_removed"
+      | "content_restored"
+      | "escalated"
+      | null;
+    resolved_at: string | null;
   };
   reporter: {
     id: string;

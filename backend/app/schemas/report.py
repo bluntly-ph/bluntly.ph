@@ -11,7 +11,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import ModerationReason, ModerationTargetType
+from app.models.enums import ModerationReason, ModerationTargetType, ReportResolution
 from app.schemas.urls import web_url_or_none
 
 
@@ -49,3 +49,7 @@ class ReportOut(BaseModel):
     notes: str | None = None
     evidence_url: str | None = None
     created_at: datetime
+    # How the report was closed, and when. Null while it is still open — which
+    # is what the moderator queue filters on (migration 0049).
+    resolution: ReportResolution | None = None
+    resolved_at: datetime | None = None

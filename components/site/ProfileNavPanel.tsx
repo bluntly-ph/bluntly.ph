@@ -16,12 +16,16 @@ import {
   PaperPlaneTilt,
   PencilLine,
   Shapes,
+  ShieldCheck,
+  SignOut,
   ToggleLeft,
   ToggleRight,
   UserCircle,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
+
+import { logout } from "@/app/actions/auth";
 
 import { setTheme } from "@/app/actions/auth";
 import { badgeLabel } from "@/components/site/notification-model";
@@ -43,6 +47,11 @@ import { badgeLabel } from "@/components/site/notification-model";
  * opening a panel that lists only destinations that genuinely exist.
  *
  * INTENTIONAL PRODUCT DIFFERENCES:
+ *  - "Moderate" appears only for a moderator or an admin, and only as a way in:
+ *    /moderate is guarded by requireRole, so hiding the row is presentation,
+ *    not the boundary.
+ *  - "Log out" ends the session through the server action rather than clearing
+ *    anything in the browser, so nothing authenticated survives it.
  *  - "Bookmarks" and "Recent reads" are not listed: neither has a route, and a
  *    menu row to `#` or "coming soon" would lie about what the product does.
  *    Their group carries "Browse reviews" and "Q&A" instead, which do exist.
@@ -103,6 +112,9 @@ const CREATE_GROUP: Item[] = [
   { href: "/categories", icon: Shapes, label: "Categories" },
 ];
 
+/** Shown only to a moderator or an admin; the route enforces the same thing. */
+const MODERATE_ITEM: Item = { href: "/moderate", icon: ShieldCheck, label: "Moderate" };
+
 const READ_GROUP: Item[] = [
   { href: "/feed", icon: Compass, label: "Browse reviews" },
   { href: "/questions", icon: ChatCenteredDots, label: "Q&A" },
@@ -125,9 +137,20 @@ const ROW =
 const GROUP = "flex flex-col gap-4 py-5";
 const DIVIDER = "mx-5 border-t border-[var(--line-hairline-10)]";
 
-export type PanelUser = { username: string | null; avatarUrl: string | null } | null;
+export type PanelUser = {
+  username: string | null;
+  avatarUrl: string | null;
+  /**
+   * The account's role. Only "moderator" and "admin" see the Moderate entry —
+   * and hiding it is presentation, never the boundary: /moderate is guarded
+   * server-side by requireRole (app/moderate/layout.tsx).
+   */
+  role?: string | null;
+} | null;
 
 export function ProfileNavPanel({ user }: { user: PanelUser }) {
+  const moderates = user?.role === "moderator" || user?.role === "admin";
+  const accountGroup = moderates ? [...ACCOUNT_GROUP, MODERATE_ITEM] : ACCOUNT_GROUP;
   // Derived, not an effect: the panel is open only while the route it was
   // opened on is still the current one, so navigating closes it without a
   // pathname effect calling setState.
@@ -200,7 +223,7 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
   }
 
   const initial = (user?.username ?? "?").slice(0, 1).toUpperCase();
-  const groups = user ? [ACCOUNT_GROUP, CREATE_GROUP, READ_GROUP] : [PUBLIC_GROUP];
+  const groups = user ? [accountGroup, CREATE_GROUP, READ_GROUP] : [PUBLIC_GROUP];
 
   return (
     <>
@@ -324,7 +347,21 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                     </div>
                   ))}
 
-                  {!user ? (
+                  {user ? (
+                    /* A real session end: the server action clears the cookie
+                       and sends the reader to the signed-out home. It is a
+                       submit button, so it is reachable by keyboard and by
+                       touch like every other row here. */
+                    <div className={DIVIDER} />
+                  ) : null}
+                  {user ? (
+                    <form action={logout} className="py-5">
+                      <button type="submit" className={`${ROW} w-full cursor-pointer text-left`}>
+                        <SignOut size={24} aria-hidden="true" className="shrink-0" />
+                        Log out
+                      </button>
+                    </form>
+                  ) : (
                     <div className="px-5 pb-5">
                       <Link
                         href="/login"
@@ -333,7 +370,7 @@ export function ProfileNavPanel({ user }: { user: PanelUser }) {
                         Log in
                       </Link>
                     </div>
-                  ) : null}
+                  )}
                 </nav>
               </div>
             </>,

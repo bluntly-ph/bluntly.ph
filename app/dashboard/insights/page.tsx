@@ -62,7 +62,7 @@ export default async function InsightsPage() {
 
   return (
     <>
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
 
       {/* From `md` the column widens and the band becomes a card; from `lg` the
           streak and the chart sit side by side instead of a phone column. */}

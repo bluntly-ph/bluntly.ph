@@ -63,7 +63,7 @@ export default async function DashboardPage({
           of it. It returns from `md`, where the frame stops describing the
           layout, matching how the review page handles the same overlap. */}
       <div className="hidden md:block">
-        <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+        <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
       </div>
 
       <ReviewerDashboard

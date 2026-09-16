@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from app.core.security import create_access_token
+from app.core.config import settings
 from app.models.enums import MemberRole, ModerationAction
 from app.models.moderation import ModerationLog
 from app.models.user import User
@@ -27,16 +28,26 @@ def accounts(db):
     normal = make_user(
         db, display_name=target_name, username=f"target_{uuid.uuid4().hex[:8]}")
     moderator = make_user(db, role=MemberRole.moderator, display_name="Moderator")
+    # The root owner is the configured email AND the super-admin column
+    # (owner rule, 2026-09-16). A second elevated account is created alongside
+    # it, because "another super admin cannot do this" is the new guarantee.
     super_admin = make_user(
         db,
         role=MemberRole.moderator,
         is_super_admin=True,
         display_name="Owner",
+        email=settings.root_owner_email,
+    )
+    other_super = make_user(
+        db,
+        role=MemberRole.moderator,
+        is_super_admin=True,
+        display_name="Second elevated account",
     )
     db.commit()
-    ids = [normal.id, moderator.id, super_admin.id]
+    ids = [normal.id, moderator.id, super_admin.id, other_super.id]
     try:
-        yield normal, moderator, super_admin
+        yield normal, moderator, super_admin, other_super
     finally:
         db.rollback()
         db.query(ModerationLog).filter(
@@ -49,7 +60,7 @@ def accounts(db):
 
 
 def test_normal_user_cannot_search_or_change_roles(client, accounts):
-    normal, moderator, _ = accounts
+    normal, moderator, _, _other_super = accounts
     response = client.get(
         f"/api/v1/admin/users?q={moderator.staff_ref}", headers=_headers(normal))
     assert response.status_code == 403
@@ -66,7 +77,7 @@ def test_normal_user_cannot_search_or_change_roles(client, accounts):
 def test_moderator_can_resolve_staff_ref_without_email_but_cannot_change_role(
     client, accounts
 ):
-    normal, moderator, _ = accounts
+    normal, moderator, _, _other_super = accounts
     response = client.get(
         f"/api/v1/admin/users?q={normal.staff_ref.lower()}",
         headers=_headers(moderator),
@@ -87,7 +98,7 @@ def test_moderator_can_resolve_staff_ref_without_email_but_cannot_change_role(
 
 
 def test_legacy_membership_endpoint_cannot_revoke_moderator(client, accounts):
-    _, moderator, super_admin = accounts
+    _, moderator, super_admin, _other_super = accounts
     response = client.patch(
         f"/api/v1/users/{moderator.id}/role",
         json={"role": "user"},
@@ -100,7 +111,7 @@ def test_legacy_membership_endpoint_cannot_revoke_moderator(client, accounts):
 def test_super_admin_searches_and_grants_then_revokes_with_audit(
     client, db, accounts
 ):
-    normal, _, super_admin = accounts
+    normal, _, super_admin, _other_super = accounts
 
     for query in (normal.staff_ref, str(normal.id), normal.email, normal.display_name):
         response = client.get(
@@ -150,7 +161,7 @@ def test_super_admin_searches_and_grants_then_revokes_with_audit(
 
 
 def test_super_admin_surface_cannot_assign_seller_or_super_admin(client, accounts):
-    normal, _, super_admin = accounts
+    normal, _, super_admin, _other_super = accounts
     response = client.patch(
         f"/api/v1/admin/users/{normal.id}/role",
         json={"role": "seller"},
@@ -174,7 +185,7 @@ def test_super_admin_surface_cannot_assign_seller_or_super_admin(client, account
 
 
 def test_public_and_self_endpoints_do_not_emit_staff_reference(client, accounts):
-    normal, _, _ = accounts
+    normal, _, _, _other_super = accounts
     me = client.get("/api/v1/auth/me", headers=_headers(normal))
     assert me.status_code == 200
     assert "staff_ref" not in me.json()
@@ -184,3 +195,101 @@ def test_public_and_self_endpoints_do_not_emit_staff_reference(client, accounts)
     assert trust.status_code == 200
     assert "staff_ref" not in trust.json()
     assert normal.staff_ref not in trust.text
+
+
+# --- the root-owner rule (owner requirement, 2026-09-16) ---------------------
+
+
+@requires_db
+def test_only_the_root_owner_can_appoint_a_moderator(client, accounts):
+    """A second super admin is elevated, and still cannot widen the circle."""
+    normal, _moderator, root_owner, other_super = accounts
+
+    refused = client.patch(
+        f"/api/v1/admin/users/{normal.id}/role",
+        headers=_headers(other_super),
+        json={"role": "moderator"},
+    )
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["code"] == "root_owner_required"
+
+    allowed = client.patch(
+        f"/api/v1/admin/users/{normal.id}/role",
+        headers=_headers(root_owner),
+        json={"role": "moderator"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    body = allowed.json()
+    assert body["changed"] is True
+    assert body["role"] == "moderator"
+    assert body["previous_role"] == "user"
+
+
+@requires_db
+def test_only_the_root_owner_can_revoke_a_moderator(client, accounts):
+    _normal, moderator, root_owner, other_super = accounts
+
+    refused = client.patch(
+        f"/api/v1/admin/users/{moderator.id}/role",
+        headers=_headers(other_super),
+        json={"role": "user"},
+    )
+    assert refused.status_code == 403, refused.text
+
+    allowed = client.patch(
+        f"/api/v1/admin/users/{moderator.id}/role",
+        headers=_headers(root_owner),
+        json={"role": "user"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["role"] == "user"
+
+
+@requires_db
+def test_a_moderator_cannot_appoint_anyone(client, accounts):
+    normal, moderator, _root_owner, _other = accounts
+    refused = client.patch(
+        f"/api/v1/admin/users/{normal.id}/role",
+        headers=_headers(moderator),
+        json={"role": "moderator"},
+    )
+    assert refused.status_code == 403, refused.text
+
+
+@requires_db
+def test_the_console_only_offers_the_controls_to_the_root_owner(client, accounts):
+    """`can_manage_roles` is what the console reads; it must track the guard."""
+    normal, moderator, root_owner, other_super = accounts
+    for account, expected in ((root_owner, True), (other_super, False), (moderator, False)):
+        page = client.get(
+            "/api/v1/admin/users", headers=_headers(account), params={"q": normal.display_name}
+        )
+        assert page.status_code == 200, page.text
+        assert page.json()["can_manage_roles"] is expected
+
+
+@requires_db
+def test_every_role_change_is_written_to_the_audit_log(client, accounts, db):
+    """Actor, target, old role, new role, timestamp — in one transaction."""
+    normal, _moderator, root_owner, _other = accounts
+    before = db.query(ModerationLog).count()
+
+    done = client.patch(
+        f"/api/v1/admin/users/{normal.id}/role",
+        headers=_headers(root_owner),
+        json={"role": "moderator"},
+    )
+    assert done.status_code == 200, done.text
+
+    entry = (
+        db.query(ModerationLog)
+        .filter(ModerationLog.target_ref == normal.id)
+        .order_by(ModerationLog.created_at.desc())
+        .first()
+    )
+    assert db.query(ModerationLog).count() == before + 1
+    assert entry is not None
+    assert entry.moderator_id == root_owner.id
+    assert entry.context["from"] == "user"
+    assert entry.context["to"] == "moderator"
+    assert entry.created_at is not None

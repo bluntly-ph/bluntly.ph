@@ -21,11 +21,25 @@ import type { FeaturedData } from "@/lib/reviews";
  * The overflow glyph is drawn as decoration: the whole card is one link, and a
  * second control inside it would nest interactive content.
  *
- * `badge` is drawn inside this composition, pinned to the tilted card's
- * upper-right corner, so it travels with the card at every width instead of
- * being placed against the viewport (see Hero: owner direction, 2026-09-16).
+ * The two annotations belong to this composition, not to the page: the owner
+ * corrected the hero in Figma on 2026-09-16 and asked for it copied one to one,
+ * and the frame's own group (5446:5126, 375x209) places them against the card:
+ *
+ *   topRight     x244 y4   — "How noisy is it?", over the card's top-right
+ *   bottomLeft   x0   y185 — "Earned ₱45.50 today", on the card's bottom-left
+ *
+ * Both are given as a share of that group, so they hold their relationship to
+ * the card at any column width instead of drifting with the viewport.
  */
-export function FeaturedReviewCard({ featured, badge }: { featured: FeaturedData; badge?: ReactNode }) {
+export function FeaturedReviewCard({
+  featured,
+  badgeTopRight,
+  badgeBottomLeft,
+}: {
+  featured: FeaturedData;
+  badgeTopRight?: ReactNode;
+  badgeBottomLeft?: ReactNode;
+}) {
   const handle = featured.username ?? featured.author;
   // The layers take the column's width rather than a fixed 358px: at 390 the
   // column IS 358px, so the frame is unchanged, and on a narrower phone (360,
@@ -102,8 +116,15 @@ export function FeaturedReviewCard({ featured, badge }: { featured: FeaturedData
           the column. So the badge hangs off that corner — right-aligned to the
           composition and half a badge above its top edge — and it stays
           attached however wide the column gets. */}
-      {badge ? (
-        <div className="pointer-events-none absolute right-[-4px] top-[-12px] z-10">{badge}</div>
+      {/* x244 of the frame's 375-wide group is 16px in from its right edge. */}
+      {badgeTopRight ? (
+        <div className="pointer-events-none absolute right-[16px] top-[4px] z-10">{badgeTopRight}</div>
+      ) : null}
+
+      {/* y185 of 209, flush to the group's left edge: the pill's foot lands on
+          the card's bottom edge, which is what the frame draws. */}
+      {badgeBottomLeft ? (
+        <div className="pointer-events-none absolute left-0 top-[185px] z-10">{badgeBottomLeft}</div>
       ) : null}
     </div>
   );

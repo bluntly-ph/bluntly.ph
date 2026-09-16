@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
+    Numeric,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -159,7 +161,9 @@ class SellerReview(UUIDPrimaryKey, Timestamps, Base):
             "packaging_quality BETWEEN 1 AND 5", name="ck_seller_review_packaging_range"
         ),
         CheckConstraint(
-            "overall_rating BETWEEN 1 AND 5", name="ck_seller_review_overall_range"
+            "overall_rating >= 0 AND overall_rating <= 5"
+            " AND (overall_rating * 2) = trunc(overall_rating * 2)",
+            name="ck_seller_review_overall_range",
         ),
         Index("ix_seller_reviews_seller", "seller_id", "created_at"),
     )
@@ -184,7 +188,9 @@ class SellerReview(UUIDPrimaryKey, Timestamps, Base):
     order_completeness: Mapped[bool] = mapped_column(Boolean, nullable=False)
     customer_service: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     packaging_quality: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    overall_rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    #: 0 to 5 in half steps (0048); the two graded dimensions above stay
+    #: whole numbers, because the frame draws them as numbered chips.
+    overall_rating: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False)
     would_recommend: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     #: Added by 0043. The composer caps it at 30; the column allows 200.

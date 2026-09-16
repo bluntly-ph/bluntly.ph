@@ -14,7 +14,7 @@ export default async function NewQuestionPage() {
     // step frames draw the composer's own header. No background of its own
     // either, so the composer's graph paper shows (ComposerGrid).
     <div className="flex min-h-dvh flex-col">
-      <AskQuestionForm user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <AskQuestionForm user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
     </div>
   );
 }

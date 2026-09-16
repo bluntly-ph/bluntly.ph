@@ -59,7 +59,7 @@ export default async function ReviewPage({
   const related = (relatedRaw ?? []).filter((r) => r.id !== id).slice(0, 4);
 
   const headerUser: HeaderUser = me
-    ? { username: me.username, avatarUrl: me.avatar_url }
+    ? { username: me.username, avatarUrl: me.avatar_url, role: me.role }
     : null;
 
   let canVote = false;

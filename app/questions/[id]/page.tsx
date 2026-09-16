@@ -52,7 +52,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
   let isAsker = false;
   let canAnswer = false;
   if (me) {
-    user = { username: me.username, avatarUrl: me.avatar_url };
+    user = { username: me.username, avatarUrl: me.avatar_url, role: me.role };
     canAnswer = true;
     isAsker = me.id === question.asker?.id;
   }

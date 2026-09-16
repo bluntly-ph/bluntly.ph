@@ -16,7 +16,7 @@ export default async function NewReviewPage() {
     // back arrow and the avatar — and the form owns it, because only the form
     // knows what "back" means at each step.
     <div className="flex min-h-dvh flex-col">
-      <WriteReviewForm user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <WriteReviewForm user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
     </div>
   );
 }

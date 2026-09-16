@@ -573,6 +573,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{user_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the comments a member has written
+         * @description The Comments tab of a profile (Figma 5446:6398).
+         *
+         *     Public, and deliberately so: a profile is a public page, and this list is
+         *     the same conversation anyone can already read under each review. The service
+         *     applies the visibility filter — removed comments and comments on unpublished
+         *     or removed reviews never appear, whoever is asking.
+         */
+        get: operations["list_authored_comments_api_v1_users__user_id__comments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/review-queue": {
         parameters: {
             query?: never;
@@ -1070,6 +1095,44 @@ export interface paths {
         get: operations["report_queue_api_v1_admin_reports_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reports/{report_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a report: dismiss, remove, restore or escalate
+         * @description Close a report, and carry out the content decision it implies.
+         *
+         *     The two content outcomes are not recorded here and performed elsewhere —
+         *     they are performed, through the same services the review routes use, so an
+         *     unpublish from this screen is indistinguishable from any other unpublish:
+         *     same audit entry, same author notification, same return to the queue.
+         *
+         *       dismissed          the content stands. Nothing is done to it.
+         *       content_removed    the reported review is unpublished (and therefore
+         *                          re-queued for a decision, as `unpublish` defines).
+         *       content_restored   the reported review is published again.
+         *       escalated          nothing is done to the content; the report is marked
+         *                          for a senior decision and leaves the open queue.
+         *
+         *     The content action runs first and commits; the report is closed after it.
+         *     So a resolution that cannot be carried out — a review already down, a target
+         *     with no publish state — leaves the report OPEN rather than closing it over
+         *     something that did not happen. The reverse order would be worse: a closed
+         *     report over live content nobody is looking at any more.
+         */
+        post: operations["decide_report_api_v1_admin_reports__report_id__decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2289,6 +2352,35 @@ export interface components {
             /** Sub Id */
             sub_id?: string | null;
         };
+        /**
+         * AuthoredCommentOut
+         * @description One comment a member wrote, for their profile's Comments tab.
+         *
+         *     `CommentOut` answers "what is under this review"; this answers "what has
+         *     this member said", which is the opposite direction and needs the review to
+         *     travel with the row. Removed comments and comments on unpublished or removed
+         *     reviews are never in this list — a profile is a public surface.
+         */
+        AuthoredCommentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Body */
+            body: string;
+            /**
+             * Helpful Votes
+             * @default 0
+             */
+            helpful_votes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            review: components["schemas"]["CommentReview"];
+        };
         /** AutoRenewUpdate */
         AutoRenewUpdate: {
             /** Auto Renew */
@@ -2459,6 +2551,36 @@ export interface components {
             my_vote?: components["schemas"]["VoteDirection"] | null;
             /** Replies */
             replies?: components["schemas"]["CommentOut"][];
+        };
+        /**
+         * CommentReview
+         * @description The parent review, reduced to what a profile row draws.
+         *
+         *     Enough to render the headline ("<product> - <title>") and its engagement
+         *     counts, and to link to the review. Not a `ReviewOut`: the Comments tab shows
+         *     none of the body, the verdict or the rating, and shipping the whole review
+         *     per comment would multiply the payload for nothing.
+         */
+        CommentReview: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Product Name */
+            product_name?: string | null;
+            /**
+             * Helpful Votes
+             * @default 0
+             */
+            helpful_votes: number;
+            /**
+             * Comment Count
+             * @default 0
+             */
+            comment_count: number;
         };
         /** CommentVoteIn */
         CommentVoteIn: {
@@ -3894,6 +4016,18 @@ export interface components {
              */
             evidence_url?: string | null;
         };
+        /**
+         * ReportDecision
+         * @description A moderator's answer to one report.
+         */
+        ReportDecision: {
+            resolution: components["schemas"]["ReportResolution"];
+            /**
+             * Notes
+             * @description Why. Recorded in the audit log; not shown to the reporter.
+             */
+            notes?: string | null;
+        };
         /** ReportItem */
         ReportItem: {
             report: components["schemas"]["ReportOut"];
@@ -3929,6 +4063,9 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            resolution?: components["schemas"]["ReportResolution"] | null;
+            /** Resolved At */
+            resolved_at?: string | null;
         };
         /** ReportQueueResponse */
         ReportQueueResponse: {
@@ -3951,6 +4088,18 @@ export interface components {
             /** Trust Stage */
             trust_stage: number;
         };
+        /**
+         * ReportResolution
+         * @description How a filed report was closed (owner requirement, 2026-09-16).
+         *
+         *     Four outcomes, because a moderator looking at a report has four honest
+         *     answers: the content stands, the content came down, content that was down
+         *     goes back up, or this is above my pay grade. The action taken on the content
+         *     itself is audited separately by the service that performs it; this records
+         *     the report's own outcome so the queue can stop showing it.
+         * @enum {string}
+         */
+        ReportResolution: "dismissed" | "content_removed" | "content_restored" | "escalated";
         /**
          * ReportTarget
          * @description Enough of the reported item to triage without a second round-trip.
@@ -4096,7 +4245,10 @@ export interface components {
             target_audience?: string | null;
             /** Anti Target Audience */
             anti_target_audience?: string | null;
-            /** Star Rating */
+            /**
+             * Star Rating
+             * @description Rating must be between 0 and 5 in steps of 0.5.
+             */
             star_rating: number;
             /** Pros */
             pros?: string[];
@@ -4230,7 +4382,10 @@ export interface components {
             target_audience?: string | null;
             /** Anti Target Audience */
             anti_target_audience?: string | null;
-            /** Star Rating */
+            /**
+             * Star Rating
+             * @description Rating must be between 0 and 5 in steps of 0.5.
+             */
             star_rating?: number | null;
             /** Pros */
             pros?: string[] | null;
@@ -4480,7 +4635,10 @@ export interface components {
             customer_service: number;
             /** Packaging Quality */
             packaging_quality: number;
-            /** Overall Rating */
+            /**
+             * Overall Rating
+             * @description Rating must be between 0 and 5 in steps of 0.5.
+             */
             overall_rating: number;
             /** Would Recommend */
             would_recommend: boolean;
@@ -4834,6 +4992,28 @@ export interface components {
             /** Review Id */
             review_id?: string | null;
         };
+        /**
+         * TrustProgressOut
+         * @description How far this member is from the next trust stage.
+         *
+         *     The profile's Stats card (Figma 5446:6532) draws a progress bar and a
+         *     "x of y" caption. The ladder lives in `app.services.trust`; serving the
+         *     numbers rather than the thresholds keeps the frontend from carrying a second
+         *     copy of it that can drift.
+         *
+         *     `null` on the whole object means the member is at the top stage — there is
+         *     nothing further to progress towards, which is not the same as zero progress.
+         */
+        TrustProgressOut: {
+            /** Next Stage */
+            next_stage: number;
+            /** Next Level Name */
+            next_level_name: string;
+            /** Reviews Have */
+            reviews_have: number;
+            /** Reviews Needed */
+            reviews_needed: number;
+        };
         /** UnreadCount */
         UnreadCount: {
             /** Count */
@@ -4901,6 +5081,7 @@ export interface components {
             helpfulness_ratio: string;
             /** Badges */
             badges?: components["schemas"]["BadgeOut"][];
+            progress?: components["schemas"]["TrustProgressOut"] | null;
         };
         /** UsernameAvailability */
         UsernameAvailability: {
@@ -6237,6 +6418,40 @@ export interface operations {
             };
         };
     };
+    list_authored_comments_api_v1_users__user_id__comments_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthoredCommentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     review_queue_api_v1_admin_review_queue_get: {
         parameters: {
             query?: {
@@ -6976,6 +7191,8 @@ export interface operations {
             query?: {
                 /** @description Filter to one content type. */
                 target_type?: components["schemas"]["ModerationTargetType"] | null;
+                /** @description Open reports (the default), resolved ones, or both. */
+                status?: "open" | "resolved" | "all";
                 limit?: number;
                 offset?: number;
             };
@@ -6992,6 +7209,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReportQueueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_report_api_v1_admin_reports__report_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportItem"];
                 };
             };
             /** @description Validation Error */

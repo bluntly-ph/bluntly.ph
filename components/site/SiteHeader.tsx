@@ -8,6 +8,8 @@ import { ProfileNavPanel } from "@/components/site/ProfileNavPanel";
 export type HeaderUser = {
   username: string | null;
   avatarUrl: string | null;
+  /** Decides whether the menu offers Moderate; the route still guards itself. */
+  role?: string | null;
 } | null;
 
 /**

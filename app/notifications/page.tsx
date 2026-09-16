@@ -30,7 +30,7 @@ export default async function NotificationsPage() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
       <main className="mx-auto w-full max-w-[40rem] flex-1 px-6 py-8 lg:grid lg:max-w-[64rem] lg:grid-cols-[minmax(0,38rem)_14rem] lg:items-start lg:gap-12 lg:px-10 lg:py-10">
         <div className="min-w-0">
           <h1 className="text-[22px] font-bold text-[var(--text-primary)]">Notifications</h1>

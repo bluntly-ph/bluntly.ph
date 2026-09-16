@@ -1,6 +1,6 @@
-import { SealCheck, Star } from "@phosphor-icons/react/dist/ssr";
+import { SealCheck, Star, StarHalf } from "@phosphor-icons/react/dist/ssr";
 
-import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
+import { STAR_EMPTY, formatRating, starColor, starFill } from "@/components/ui/star-ladder";
 
 import { sellerInitials } from "./seller-model";
 
@@ -78,8 +78,9 @@ export function ClaimStatusLine({ status }: { status: string }) {
  * Display only. A store with no rating draws grey stars and says so.
  *
  * Figma "Icon/Star" (6805:431): Filled takes the rating ladder's colour — coral
- * for 1–2, yellow for 3, the rating green for 4–5 — and Empty is a solid #8c8c8c
- * silhouette (--base-gray-400).
+ * for 1–2, yellow for 3, the rating green for 4–5 — Half is that colour over
+ * the grey, and Empty is a solid #8c8c8c silhouette (--base-gray-400). Ratings
+ * run 0 to 5 in half steps (owner requirement, 2026-09-16).
  */
 export function StarRow({
   value,
@@ -93,23 +94,38 @@ export function StarRow({
   gap?: number;
   className?: string;
 }) {
-  const filled = value === null ? 0 : Math.round(value);
   return (
     <span
       role="img"
-      aria-label={value === null ? "Not rated yet" : `Rated ${value} out of 5`}
+      aria-label={value === null ? "Not rated yet" : `Rated ${formatRating(value)} out of 5`}
       className={`inline-flex ${className}`}
       style={{ gap }}
     >
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Star
-          key={n}
-          size={size}
-          weight="fill"
-          aria-hidden="true"
-          style={{ color: n <= filled ? starColor(value) : STAR_EMPTY }}
-        />
-      ))}
+      {[1, 2, 3, 4, 5].map((n) => {
+        const fill = starFill(n, value);
+        // A half is the grey star with the coloured half drawn over it, so the
+        // split is the glyph's own rather than a clipped rectangle.
+        return (
+          <span key={n} className="relative inline-block" style={{ width: size, height: size }}>
+            <Star
+              size={size}
+              weight="fill"
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{ color: fill === "full" ? starColor(value) : STAR_EMPTY }}
+            />
+            {fill === "half" ? (
+              <StarHalf
+                size={size}
+                weight="fill"
+                aria-hidden="true"
+                className="absolute inset-0"
+                style={{ color: starColor(value) }}
+              />
+            ) : null}
+          </span>
+        );
+      })}
     </span>
   );
 }

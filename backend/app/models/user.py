@@ -11,6 +11,7 @@ removed; the split is a single app constant (app.core.constants).
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -42,6 +43,18 @@ _TRUST_NAME_EXPR = (
     "WHEN 2 THEN 'Verified Buyer' WHEN 3 THEN 'Established Reviewer' "
     "WHEN 4 THEN 'Trusted Reviewer' WHEN 5 THEN 'Community Expert' "
     "ELSE 'Unknown' END"
+)
+
+#: The same six names, in stage order, readable from Python.
+#: Derived from the expression above rather than retyped: the database column is
+#: the source of the name every trust badge shows, and a second hand-written
+#: list is exactly how the two come to disagree. Pinned by
+#: `tests/test_trust_level_names.py`.
+TRUST_LEVEL_NAMES: tuple[str, ...] = tuple(
+    name for _, name in sorted(
+        (int(stage), name)
+        for stage, name in re.findall(r"WHEN (\d+) THEN '([^']+)'", _TRUST_NAME_EXPR)
+    )
 )
 
 

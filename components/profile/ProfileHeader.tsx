@@ -1,5 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+
+import {
+  PROFILE_TABS,
+  PROFILE_TAB_LABEL,
+  profileTabHref,
+  type ProfileTab,
+} from "@/components/profile/profile-tabs-model";
 import { DotOutline } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 
@@ -122,28 +129,51 @@ export function ProfileLayout({ header, children }: { header: React.ReactNode; c
   );
 }
 
+export type { ProfileTab };
+
 /**
  * The profile's section tabs, 16px under the panel: 14px Regular 60px apart,
  * the current one in ink and the rest in #8c8c8c, over a full-bleed hairline
- * 23px lower. Only sections that exist are listed — the frame's "Comments"
- * has no list behind it.
+ * 23px lower. Figma "Profile Page - Reviews / Comments / Stats"
+ * (5446:4328 / 5446:6398 / 5446:6532).
+ *
+ * The three sections are one route, switched by `?tab=`, because they share the
+ * whole identity panel above them — a separate route per tab would rebuild and
+ * re-fetch that panel to change a list. `base` is the route the links point at,
+ * so the same component serves your own profile and someone else's.
+ *
+ * A tab with no `base` is not linked at all: the public profile has no comment
+ * or stats list behind it yet, and a tab that navigates nowhere is worse than
+ * one that is absent.
  */
-export function ProfileTabs({ statsHref }: { statsHref?: string }) {
+export function ProfileTabs({
+  active = "reviews",
+  base,
+}: {
+  active?: ProfileTab;
+  base?: string;
+}) {
+  const tabs: ProfileTab[] = base ? PROFILE_TABS : ["reviews"];
+
   return (
     <nav aria-label="Profile sections" className="border-b border-[var(--line-hairline-10)]">
       <ul className="flex justify-center gap-[60px] pb-[23px] pt-4 text-[14px] leading-none lg:justify-start lg:gap-10 lg:pt-1">
-        <li>
-          <span aria-current="page" className="text-[var(--text-primary)]">
-            Reviews
-          </span>
-        </li>
-        {statsHref ? (
-          <li>
-            <Link href={statsHref} className="text-[var(--base-gray-400)] no-underline hover:text-[var(--text-primary)]">
-              Stats
-            </Link>
+        {tabs.map((tab) => (
+          <li key={tab}>
+            {tab === active ? (
+              <span aria-current="page" className="text-[var(--text-primary)]">
+                {PROFILE_TAB_LABEL[tab]}
+              </span>
+            ) : (
+              <Link
+                href={profileTabHref(base ?? "", tab)}
+                className="text-[var(--base-gray-400)] no-underline hover:text-[var(--text-primary)]"
+              >
+                {PROFILE_TAB_LABEL[tab]}
+              </Link>
+            )}
           </li>
-        ) : null}
+        ))}
       </ul>
     </nav>
   );

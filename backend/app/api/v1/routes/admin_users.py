@@ -9,8 +9,12 @@ TWO SCOPES, deliberately different, because they answer to different needs.
       owner's stated intent: make users easier for moderators and admins to
       find. Email is returned only to super admins.
 
-  ROLE CHANGE — super admin only.
-      Assign or revoke `moderator`, and nothing else.
+  ROLE CHANGE — the root owner only.
+      Assign or revoke `moderator`, and nothing else. Not "a super admin":
+      the owner's rule of 2026-09-16 is that exactly one account appoints
+      staff, so a second elevated account cannot widen the circle. The guard
+      is `require_root_owner` — the configured owner email AND the
+      super-admin column, both re-read from the database per request.
 
 WHY MODERATORS CANNOT PROMOTE. If a moderator could grant `moderator`, the role
 would be self-propagating: one compromised or careless moderator account is
@@ -37,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ForbiddenError, NotFoundError
 from app.core.logging import get_logger
-from app.core.security import get_current_user, require_super_admin
+from app.core.security import get_current_user, is_root_owner, require_root_owner
 from app.db.session import get_db
 from app.models.enums import (
     MemberRole,
@@ -99,7 +103,7 @@ def search(
     return StaffUserPage(
         total=total,
         resolved_staff_ref=normalise_staff_ref(q),
-        can_manage_roles=is_super,
+        can_manage_roles=is_root_owner(staff),
         rows=[
             StaffUserRow(
                 id=u.id,
@@ -124,7 +128,7 @@ def set_role(
     user_id: uuid.UUID,
     payload: RoleChangeIn,
     db: Session = Depends(get_db),
-    actor: User = Depends(require_super_admin),
+    actor: User = Depends(require_root_owner),
 ) -> RoleChangeResult:
     """Move an account between `user` and `moderator`.
 

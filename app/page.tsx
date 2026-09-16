@@ -30,7 +30,7 @@ export default async function Home() {
     getLandingReviews(),
   ]);
   const user: HeaderUser = me
-    ? { username: me.username, avatarUrl: me.avatar_url }
+    ? { username: me.username, avatarUrl: me.avatar_url, role: me.role }
     : null;
   const { featured, cards } = landing;
 

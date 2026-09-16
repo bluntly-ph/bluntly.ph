@@ -30,7 +30,7 @@ export default async function ContractsPage() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
       <main className="mx-auto w-full max-w-[52rem] flex-1 px-6 py-8 lg:px-10 lg:py-10">
         <h1 className="text-[24px] font-bold text-[var(--text-primary)]">Contracts</h1>
         <p className="mt-1 max-w-[40rem] text-[14px] leading-relaxed text-[var(--text-secondary)]">

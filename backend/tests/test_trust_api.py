@@ -100,3 +100,32 @@ def test_trust_endpoint_shape_and_no_manual_stage_set(client):
     assert resp.status_code == 403  # non-moderator
     # Unknown user -> 404.
     assert client.get(f"/api/v1/users/{_uuid.uuid4()}/trust").status_code == 404
+
+
+@requires_db
+def test_trust_profile_says_what_the_next_stage_needs(client):
+    """The profile's Stats card (Figma 5446:6532) reads this, not the ladder."""
+    ensure_stage_badges()
+    user, author_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+
+    # A brand-new account: stage 0, one review away from Contributor.
+    fresh = client.get(f"/api/v1/users/{user['id']}/trust")
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["progress"] == {
+        "next_stage": 1,
+        "next_level_name": "Contributor",
+        "reviews_have": 0,
+        "reviews_needed": 1,
+    }
+
+    # One published, verified review takes the account to stage 2, and the next
+    # rung is five verified reviews for Established Reviewer.
+    make_published_review(client, _auth(author_token), _auth(mod_token),
+                          name="ProgressWidget")
+    after = client.get(f"/api/v1/users/{user['id']}/trust").json()
+    assert after["trust_stage"] == 2
+    assert after["progress"]["next_stage"] == 3
+    assert after["progress"]["next_level_name"] == "Established Reviewer"
+    assert after["progress"]["reviews_have"] == 1
+    assert after["progress"]["reviews_needed"] == 5

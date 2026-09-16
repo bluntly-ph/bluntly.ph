@@ -28,7 +28,7 @@ export default async function RateSellerPage({
     <div className="flex min-h-dvh flex-col">
       <RateSellerForm
         key={seller?.id ?? "find"}
-        user={{ username: me.username, avatarUrl: me.avatar_url }}
+        user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }}
         initialSeller={
           seller
             ? {

@@ -19,13 +19,19 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection, Iterator
+from datetime import UTC, datetime
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import AppError
-from app.models.enums import ModerationAction, ModerationReason, ModerationTargetType
+from app.core.errors import AppError, NotFoundError
+from app.models.enums import (
+    ModerationAction,
+    ModerationReason,
+    ModerationTargetType,
+    ReportResolution,
+)
 from app.models.moderation import ModerationLog
 
 
@@ -41,6 +47,12 @@ def _existing_report(
             ModerationLog.reporter_id == reporter_id,
             ModerationLog.target_type == target_type,
             ModerationLog.target_ref == target_ref,
+            # OPEN, which is what the rule above always said and what the table
+            # could not express until reports could be closed (migration 0049).
+            # A reader whose report was dealt with may report the same target
+            # again if it goes wrong again; a reader whose report is still
+            # waiting may not file it twice.
+            ModerationLog.resolution.is_(None),
         )
     ).first()
 
@@ -93,21 +105,103 @@ def list_reports(
     db: Session,
     *,
     target_type: ModerationTargetType | None = None,
+    status: str = "open",
     limit: int = 50,
     offset: int = 0,
 ) -> list[ModerationLog]:
-    """The moderator queue of filed reports, newest first."""
+    """The moderator queue of filed reports, newest first.
+
+    `status` is "open" (the default), "resolved" or "all". Open is the default
+    because the queue is a to-do list: before reports could be closed it showed
+    every report ever filed, so work already done came back round for ever.
+    """
     stmt = select(ModerationLog).where(ModerationLog.action == ModerationAction.report)
     if target_type is not None:
         stmt = stmt.where(ModerationLog.target_type == target_type)
+    if status == "open":
+        stmt = stmt.where(ModerationLog.resolution.is_(None))
+    elif status == "resolved":
+        stmt = stmt.where(ModerationLog.resolution.is_not(None))
     stmt = stmt.order_by(ModerationLog.created_at.desc()).limit(limit).offset(offset)
     return list(db.scalars(stmt).all())
+
+
+def get_report_or_404(db: Session, report_id: uuid.UUID) -> ModerationLog:
+    """One filed report. A log row that is not a report is not found."""
+    log = db.get(ModerationLog, report_id)
+    if log is None or log.action != ModerationAction.report:
+        raise NotFoundError("Report not found.", code="report_not_found")
+    return log
+
+
+def resolve_report(
+    db: Session,
+    report: ModerationLog,
+    *,
+    moderator_id: uuid.UUID,
+    resolution: ReportResolution,
+    notes: str | None = None,
+) -> ModerationLog:
+    """Close a report, and audit the closing as its own entry.
+
+    Two rows on purpose. The report row records THAT it was resolved, so the
+    queue stops offering it; the new row records WHO closed it and how, in the
+    same table every other moderator action is written to — so "what did this
+    moderator do last week" is still one query. Whatever was done to the
+    content itself (unpublishing, restoring) is audited by the service that did
+    it, and this never pretends to have done it.
+
+    Resolving an already-resolved report is refused rather than silently
+    overwritten: two moderators reaching the same report should collide loudly.
+    """
+    if report.resolution is not None:
+        raise AppError(
+            "That report has already been resolved.",
+            code="report_already_resolved",
+            status_code=409,
+            title="Conflicting state",
+        )
+
+    report.resolution = resolution
+    report.resolved_at = datetime.now(UTC)
+    report.resolved_by = moderator_id
+
+    db.add(ModerationLog(
+        target_type=report.target_type,
+        target_ref=report.target_ref,
+        moderator_id=moderator_id,
+        action=_RESOLUTION_AUDIT_ACTION[resolution],
+        notes=notes,
+        context={"report_id": str(report.id), "resolution": resolution.value},
+    ))
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+#: Which audit action each outcome writes. `approve` for a dismissal reads oddly
+#: at first glance and is exactly right: the moderator looked at the content and
+#: let it stand.
+_RESOLUTION_AUDIT_ACTION = {
+    ReportResolution.dismissed: ModerationAction.approve,
+    ReportResolution.content_removed: ModerationAction.remove,
+    ReportResolution.content_restored: ModerationAction.restore,
+    ReportResolution.escalated: ModerationAction.escalate,
+}
 
 
 def report_counts(
     db: Session, target_type: ModerationTargetType, target_refs: list[uuid.UUID]
 ) -> dict[uuid.UUID, int]:
-    """How many distinct reports each target has, for badging the moderator queue."""
+    """How many distinct reports each target has, for badging the moderator queue.
+
+    Every report ever filed, resolved or not. Deliberate: the badge answers "how
+    contested has this been", which a dismissal does not undo, and the priority
+    policy reads the same counts — narrowing them to open reports would silently
+    re-score the whole queue. Whether a dismissed report should stop contributing
+    to priority is a policy question for the owner, not a change to sneak in with
+    a UI control.
+    """
     if not target_refs:
         return {}
     rows = db.execute(

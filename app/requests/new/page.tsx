@@ -14,7 +14,7 @@ export default async function NewRequestPage() {
   const me = await requireOnboardedUser();
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
       {/* WEBSITE (`lg` and up): the form keeps a form's measure and what the
           board does with a request is said beside it, not buried under it. */}
       <main className="mx-auto w-full max-w-[40rem] flex-1 px-6 py-8 lg:grid lg:max-w-[64rem] lg:grid-cols-[minmax(0,34rem)_16rem] lg:items-start lg:gap-12 lg:px-10 lg:py-10">

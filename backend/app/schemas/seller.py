@@ -2,10 +2,11 @@
 
 The four review dimensions carry FR-4's types at the boundary: accuracy and
 order completeness are binary judgements, customer service and packaging are
-graded 1-5, as is the overall rating, alongside a would-recommend. The database
-holds the same ranges as CHECK constraints (migration 0042); validating here as
-well turns a bad request into a 422 with a field name instead of an
-IntegrityError.
+graded 1-5, and the overall rating is 0 to 5 in half steps (owner requirement,
+migration 0048) with zero meaning a real "this was bad" rather than an
+unanswered question. The database holds the same ranges as CHECK constraints;
+validating here as well turns a bad request into a 422 with a field name
+instead of an IntegrityError.
 
 The public seller shape exposes whether a store is claimed, never *who* claimed
 it: that is an account id, and a reader deciding whether to trust a store does
@@ -22,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import Platform, SellerClaimStatus
 from app.schemas.qa import QAAuthor
+from app.schemas.review import HALF_STEP_HINT, half_step
 from app.schemas.urls import web_url_or_none
 
 #: The composer draws one "Add more" tile beside the photos; four keeps a
@@ -66,8 +68,12 @@ class SellerReviewCreate(BaseModel):
     order_completeness: bool
     customer_service: int = Field(ge=1, le=5)
     packaging_quality: int = Field(ge=1, le=5)
-    overall_rating: int = Field(ge=1, le=5)
+    #: 0 to 5 in half steps; the two dimensions above stay whole-number chips.
+    overall_rating: float = Field(ge=0, le=5, description=HALF_STEP_HINT)
     would_recommend: bool
+
+    _overall_step = field_validator("overall_rating")(classmethod(lambda cls, v: half_step(v)))
+
     #: What was bought, when the reviewer says.
     product_id: uuid.UUID | None = None
     #: The composer caps this at 30; 200 here, the same split product reviews
@@ -96,7 +102,7 @@ class SellerReviewOut(BaseModel):
     order_completeness: bool
     customer_service: int
     packaging_quality: int
-    overall_rating: int
+    overall_rating: float
     would_recommend: bool
     comment: str | None = None
     photo_urls: list[str] = Field(default_factory=list)

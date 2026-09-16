@@ -39,7 +39,7 @@ export default async function SellerDashboardPage({ params }: { params: Promise<
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
-      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url }} />
+      <SiteHeader user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }} />
       <main className="mx-auto w-full max-w-[44rem] flex-1 px-6 py-8 lg:max-w-[72rem] lg:px-10 lg:py-10">
         <Link
           href={`/sellers/${id}`}

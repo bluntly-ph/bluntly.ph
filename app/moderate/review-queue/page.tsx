@@ -28,10 +28,10 @@ export const metadata: Metadata = {
  * hand-edited `?band=critical` narrows to "no band filter" rather than putting
  * a 422 on a moderator's screen.
  *
- * The frames this screen was built to were deleted from the Figma file on
- * 2026-09-09 and replaced by a single 1280x1943 "Admin Page - Review Queue"
- * (6922:837); the layout here is still the old one, and the re-layout is its
- * own piece of work.
+ * The screen is built to 6922:837 "Admin Page - Review Queue", the 1280x1943
+ * frame that replaced the deleted 5017:x set on 2026-09-09 — see
+ * `ReviewQueueScreen` for the column-by-column reading and for the cells the
+ * frame draws that this build has no source for.
  */
 export default async function ReviewQueuePage({
   searchParams,

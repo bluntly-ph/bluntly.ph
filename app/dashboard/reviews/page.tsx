@@ -29,7 +29,7 @@ export default async function DashboardReviewsPage() {
 
   return (
     <DashboardScreen
-      user={{ username: me.username, avatarUrl: me.avatar_url }}
+      user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }}
       title="Your reviews"
       heroHeight={118}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}

@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     )
 
     # --- App ---
+    #: The one account that may appoint or remove staff (owner rule,
+    #: 2026-09-16). Everything else about moderation is delegated; this is not.
+    #: An email rather than an id so it survives a database restore, resolved to
+    #: the account on each request — see app.core.security.require_root_owner.
+    root_owner_email: str = "bluntly.ph@gmail.com"
+
     app_env: str = "local"  # local | staging | production
     app_version: str = "0.1.0"
     product_id: str = "bluntly-ph"

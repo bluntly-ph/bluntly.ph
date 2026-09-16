@@ -10,13 +10,19 @@ at reviews, answers, questions, or users.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
-from app.models.enums import ModerationAction, ModerationReason, ModerationTargetType
+from app.models.enums import (
+    ModerationAction,
+    ModerationReason,
+    ModerationTargetType,
+    ReportResolution,
+)
 
 
 class ModerationLog(Base, UUIDPrimaryKey, Timestamps):
@@ -48,3 +54,17 @@ class ModerationLog(Base, UUIDPrimaryKey, Timestamps):
     notes: Mapped[str | None] = mapped_column(Text)
     # Free-form structured context (e.g. CSV filename, payout reference, counts).
     context: Mapped[dict | None] = mapped_column(JSONB)
+
+    # --- report resolution (migration 0049) ---------------------------------
+    # Only meaningful on rows with `action='report'`: how the moderator closed
+    # the report, when, and who. A report with `resolution IS NULL` is still
+    # open, which is what the queue reads. The action taken on the content is
+    # still audited as its own row by the service that performs it — these three
+    # columns say the REPORT was dealt with, not what was done to the content.
+    resolution: Mapped[ReportResolution | None] = mapped_column(
+        Enum(ReportResolution, name="report_resolution")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )

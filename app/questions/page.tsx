@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 export default async function QuestionsPage() {
   // Parallel: the viewer and the list are independent (see app/page.tsx).
   const [me, questions] = await Promise.all([getUser().catch(() => null), getQuestions()]);
-  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">

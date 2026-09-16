@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from app.models.user import _TRUST_NAME_EXPR
+from app.models.user import TRUST_LEVEL_NAMES, _TRUST_NAME_EXPR
 
 EXPECTED = ["Newcomer", "Contributor", "Verified Buyer", "Established Reviewer",
             "Trusted Reviewer", "Community Expert"]
@@ -31,3 +31,29 @@ def test_verified_buyer_is_the_first_verified_review():
                            best_answer_count=0, strikes=0, months_active=0) == 1
     assert determine_stage(review_count=1, verified_review_count=1, helpfulness_ratio=0,
                            best_answer_count=0, strikes=0, months_active=0) == 2
+
+
+def test_the_python_tuple_is_the_same_ladder():
+    """`TRUST_LEVEL_NAMES` is derived from the expression, not retyped."""
+    assert list(TRUST_LEVEL_NAMES) == EXPECTED
+
+
+def test_the_progress_ladder_names_a_real_level_at_every_step():
+    """Nothing can promise a member a stage that has no name."""
+    from app.services.trust import TOP_STAGE, next_stage_progress
+
+    for stage in range(TOP_STAGE):
+        step = next_stage_progress(stage, review_count=0, verified_review_count=0)
+        assert step is not None
+        next_stage, have, needed = step
+        assert next_stage == stage + 1
+        assert TRUST_LEVEL_NAMES[next_stage] == EXPECTED[next_stage]
+        assert have == 0 and needed >= 1
+    assert next_stage_progress(TOP_STAGE, 100, 100) is None
+
+
+def test_progress_never_overflows_the_bar():
+    """Reviews done but stage not reached yet reads as full, not as 7 of 5."""
+    from app.services.trust import next_stage_progress
+
+    assert next_stage_progress(2, review_count=30, verified_review_count=7) == (3, 5, 5)

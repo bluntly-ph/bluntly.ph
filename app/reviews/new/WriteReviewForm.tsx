@@ -2,15 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ArrowRight,
   Check,
@@ -19,7 +11,6 @@ import {
   Image as ImageIcon,
   Plus,
   QuestionMark,
-  Star,
   User,
   X,
 } from "@phosphor-icons/react/dist/ssr";
@@ -53,7 +44,7 @@ import { ReviewPreviewCard } from "@/components/reviews/ReviewPreviewCard";
 import { DONE_CARDS, TiltedRatingCards } from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
-import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
+import { StarRatingInput } from "@/components/ui/StarRatingInput";
 import { prepareImageForUpload } from "@/lib/image";
 
 type Product = PickedProduct;
@@ -105,7 +96,11 @@ const STAR_ARC = [16, 5, 0, 5, 16] as const;
 const MAX_DISCUSSION = 5000;
 
 const lines = (s: string) =>
-  s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+  s
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 10);
 
 /* ------------------------------------------------------------------ draft */
 
@@ -147,7 +142,8 @@ type Draft = {
   title: string;
   discussion: string;
   verdict: Verdict | null;
-  rating: number;
+  /** 0 to 5 in half steps, null until the reviewer answers. */
+  rating: number | null;
   pros: string;
   cons: string;
   target: string;
@@ -173,7 +169,7 @@ const EMPTY_DRAFT: Draft = {
   title: "",
   discussion: "",
   verdict: null,
-  rating: 0,
+  rating: null,
   pros: "",
   cons: "",
   target: "",
@@ -337,18 +333,15 @@ const STEP_COPY: Record<number, { title: string; blurb: string }> = {
   },
   3: {
     title: "The good, the bad",
-    blurb:
-      "Boost your review's credibility by adding key information people want to know",
+    blurb: "Boost your review's credibility by adding key information people want to know",
   },
   4: {
     title: "No product is for everybody",
-    blurb:
-      "At bluntly, we believe that there's no such thing as a perfect product",
+    blurb: "At bluntly, we believe that there's no such thing as a perfect product",
   },
   5: {
     title: "Show, don't tell",
-    blurb:
-      "A photo of the actual product verifies your review and is required for earning eligibility.",
+    blurb: "A photo of the actual product verifies your review and is required for earning eligibility.",
   },
   6: {
     title: "Final touch",
@@ -402,10 +395,7 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
     writeDraft(draftSlot(product), { ...draft, product, savedAt: Date.now() });
   }, [draft, product, hydrated]);
 
-  const patch = useCallback(
-    (changes: Partial<Draft>) => setDraft((d) => ({ ...d, ...changes })),
-    [],
-  );
+  const patch = useCallback((changes: Partial<Draft>) => setDraft((d) => ({ ...d, ...changes })), []);
 
   function resume(slot: string) {
     const saved = savedDrafts.find((entry) => entry.slot === slot)?.draft;
@@ -448,14 +438,13 @@ export function WriteReviewForm({ user }: { user: PanelUser }) {
       state: phase === "product" ? "current" : "done",
       onSelect: inSteps ? () => setPhase("product") : undefined,
     },
-    ...STEPS.map(
-      (label, i): ComposerStep => ({
-        label,
-        number: i + 1,
-        state: phase === "done" ? "done" : !inSteps ? "todo" : i < step ? "done" : i === step ? "current" : "todo",
-        onSelect: inSteps && i < step ? () => patch({ step: i }) : undefined,
-      }),
-    ),
+    ...STEPS.map((label, i): ComposerStep => ({
+      label,
+      number: i + 1,
+      state:
+        phase === "done" ? "done" : !inSteps ? "todo" : i < step ? "done" : i === step ? "current" : "todo",
+      onSelect: inSteps && i < step ? () => patch({ step: i }) : undefined,
+    })),
   ];
 
   return (
@@ -546,9 +535,7 @@ function ResumeBanner({
             ? `Unfinished review of ${draft.product.canonical_name}`
             : "Unfinished review"}
         </p>
-        {when ? (
-          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Saved {when}.</p>
-        ) : null}
+        {when ? <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Saved {when}.</p> : null}
       </div>
       <div className="flex shrink-0 gap-2">
         <Button type="button" size="sm" onClick={onResume}>
@@ -644,13 +631,7 @@ const CON_SUGGESTIONS = [
  * real label is present and hidden rather than dropped: a placeholder is not
  * an accessible name and it disappears the moment you type.
  */
-function TitleField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-}) {
+function TitleField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   const id = useId();
   return (
     <div>
@@ -754,12 +735,7 @@ function ProductPhotoCard({
           <Image src={url} alt="" fill sizes="358px" className="object-cover" />
         ) : (
           <span className="flex h-full flex-col items-center pt-[90px]">
-            <ImageIcon
-              size={64}
-              weight="fill"
-              aria-hidden="true"
-              className="text-[var(--base-black)]"
-            />
+            <ImageIcon size={64} weight="fill" aria-hidden="true" className="text-[var(--base-black)]" />
             <span className="mt-2 text-[14px] leading-none text-[var(--text-primary)]">
               {busy ? "Uploading…" : "Tap to upload your product photo"}
             </span>
@@ -836,8 +812,13 @@ const CLOUDS: { left: number; top: number; size: number; flip?: boolean }[] = [
 
 function RatingStepDecor() {
   return (
-    // Phone only: every cloud is placed in the 390 frame's content box.
-    <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 hidden select-none max-sm:block">
+    // The frame's clouds, at every width. Their coordinates belong to its 358px
+    // content box, so on a wider column the box is centred on the stars rather
+    // than stretched — the clouds keep their own scale and spacing.
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 -z-10 hidden select-none max-sm:block md:left-1/2 md:right-auto md:block md:w-[358px] md:-translate-x-1/2"
+    >
       {CLOUDS.map((c, i) => (
         <Cloud
           key={i}
@@ -961,13 +942,7 @@ function BluntlyTextarea({
  * stays, drawn like the step's other fields — 12px Light prompt, a 53px white
  * field at radius 16, 14px Regular with the placeholder at 30% ink.
  */
-function TargetAudienceField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-}) {
+function TargetAudienceField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   const id = useId();
   return (
     <div className="mt-6">
@@ -1031,8 +1006,7 @@ function PhrasePicker({
   const [custom, setCustom] = useState("");
   const addId = useId();
   const chosen = lines(value);
-  const has = (phrase: string) =>
-    chosen.some((c) => c.toLowerCase() === phrase.toLowerCase());
+  const has = (phrase: string) => chosen.some((c) => c.toLowerCase() === phrase.toLowerCase());
 
   function toggle(phrase: string) {
     const next = has(phrase)
@@ -1053,11 +1027,8 @@ function PhrasePicker({
 
   // Typed phrases render as chips too, so a reviewer can remove one the same
   // way they added it rather than hunting through a textarea.
-  const extras = chosen.filter(
-    (c) => !suggestions.some((s) => s.toLowerCase() === c.toLowerCase()),
-  );
-  const accent =
-    tone === "pro" ? "text-[var(--accent-trust)]" : "text-[var(--accent-danger)]";
+  const extras = chosen.filter((c) => !suggestions.some((s) => s.toLowerCase() === c.toLowerCase()));
+  const accent = tone === "pro" ? "text-[var(--accent-trust)]" : "text-[var(--accent-danger)]";
 
   return (
     <div className="rounded-[12px] bg-[var(--surface-app)] px-5 pb-7 pt-5 shadow-[var(--shadow-card)]">
@@ -1229,16 +1200,11 @@ function StepsFlow({
       <div className={BODY_TOP[step] ?? "mt-5"}>
         {step === 0 ? (
           <>
-            <CurrentlyReviewingCard
-              name={product.canonical_name}
-              onChange={onChangeProduct}
-            />
+            <CurrentlyReviewingCard name={product.canonical_name} onChange={onChangeProduct} />
             <BluntlyTextarea
               label="Tell us your experience"
               value={draft.discussion}
-              onChange={(discussion) =>
-                patch({ discussion: discussion.slice(0, MAX_DISCUSSION) })
-              }
+              onChange={(discussion) => patch({ discussion: discussion.slice(0, MAX_DISCUSSION) })}
               satisfied="Solid review!"
               autoFocus
               className="mt-4"
@@ -1267,9 +1233,7 @@ function StepsFlow({
                 read as the mascot changing out of nowhere (owner review,
                 2026-09-16), so only the prompt's words react. */}
             <MascotPrompt className="mb-5" variant="simple">
-              {draft.verdict
-                ? "Woah, mind telling us why?"
-                : "Would you recommend this to a friend?"}
+              {draft.verdict ? "Woah, mind telling us why?" : "Would you recommend this to a friend?"}
             </MascotPrompt>
             {/* 53px white answers at radius 16, 12px apart: a 20px glyph 16px in
                 and the label in 14px Regular 12px after it. The chosen one takes
@@ -1284,7 +1248,9 @@ function StepsFlow({
                     onClick={() => patch({ verdict: v.value })}
                     aria-pressed={selected}
                     className="flex h-[53px] cursor-pointer items-center gap-3 rounded-[16px] bg-[var(--surface-card)] px-4 text-left shadow-[var(--shadow-card)] transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
-                    style={selected ? { boxShadow: `var(--shadow-card), inset 0 0 0 2px ${v.ring}` } : undefined}
+                    style={
+                      selected ? { boxShadow: `var(--shadow-card), inset 0 0 0 2px ${v.ring}` } : undefined
+                    }
                   >
                     <v.Icon
                       size={20}
@@ -1308,36 +1274,26 @@ function StepsFlow({
         ) : null}
 
         {step === 2 ? (
-          // On the website the stars sit on a white stage rather than 154px
-          // down an empty column — the clouds that fill that space belong to
-          // the phone frame.
-          <div className="relative isolate md:mt-8 md:rounded-[32px] md:bg-[var(--surface-card)] md:px-8 md:pb-16 md:pt-12 md:shadow-[var(--shadow-card)]">
+          // No card here: frame 4435:1344 draws the stars on the page under its
+          // clouds, and the white stage an earlier desktop pass added read as a
+          // blank block under the rating (owner, 2026-09-16).
+          <div className="relative isolate md:pb-10">
             <RatingStepDecor />
             {/* Figma 4435:1344: five 52px stars on a 60px pitch, the middle one
                 highest and the outer pair 16px lower; empty ones #8c8c8c, chosen
                 ones the rating ladder's colour for the value picked (Icon/Star:
                 1–2 coral, 3 yellow, 4–5 green). The top of the arc is 154px
-                under the blurb. */}
-            <div className="mt-[154px] flex items-start justify-center gap-2 md:mt-0 lg:gap-4">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => patch({ rating: n })}
-                  aria-label={`${n} star${n > 1 ? "s" : ""}`}
-                  aria-pressed={draft.rating === n}
-                  className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-primary)]"
-                  style={{ marginTop: STAR_ARC[n - 1] }}
-                >
-                  <Star
-                    size={52}
-                    weight="fill"
-                    className="transition-colors"
-                    style={{ color: n <= draft.rating ? starColor(draft.rating) : STAR_EMPTY }}
-                  />
-                </button>
-              ))}
-            </div>
+                under the blurb. Half steps and zero are the owner's requirement
+                of 2026-09-16; the control is StarRatingInput. */}
+            <StarRatingInput
+              className="mt-[154px] md:mt-0"
+              label="Star rating"
+              value={draft.rating}
+              onChange={(rating) => patch({ rating })}
+              size={52}
+              gap={8}
+              arc={STAR_ARC}
+            />
           </div>
         ) : null}
 
@@ -1369,11 +1325,8 @@ function StepsFlow({
             <CrowdBand />
             {/* "not" is bold, underlined and the danger red in the frame. */}
             <MascotPrompt variant="simple" className="pt-[62px]">
-              Who should{" "}
-              <strong className="font-bold text-[var(--accent-danger)] underline">
-                not
-              </strong>{" "}
-              buy this?
+              Who should <strong className="font-bold text-[var(--accent-danger)] underline">not</strong> buy
+              this?
             </MascotPrompt>
 
             <BluntlyTextarea
@@ -1384,10 +1337,7 @@ function StepsFlow({
               className="mt-8"
             />
 
-            <TargetAudienceField
-              value={draft.target}
-              onChange={(target) => patch({ target })}
-            />
+            <TargetAudienceField value={draft.target} onChange={(target) => patch({ target })} />
           </div>
         ) : null}
 
@@ -1404,10 +1354,7 @@ function StepsFlow({
         {step === 6 ? (
           <>
             <TitleField value={draft.title} onChange={(title) => patch({ title })} />
-            <DisclosureField
-              value={draft.disclosure}
-              onChange={(disclosure) => patch({ disclosure })}
-            />
+            <DisclosureField value={draft.disclosure} onChange={(disclosure) => patch({ disclosure })} />
             <ReviewPreviewCard
               username={user?.username ?? null}
               avatarUrl={user?.avatarUrl ?? null}
@@ -1495,15 +1442,18 @@ function StepsFlow({
 function DoneStep({ user, submitted }: { user: PanelUser; submitted: Submitted | null }) {
   return (
     <div className="relative">
-      <TiltedRatingCards cards={DONE_CARDS} className="fixed inset-x-0 bottom-0 z-0 hidden h-[340px] max-sm:block" />
+      <TiltedRatingCards
+        cards={DONE_CARDS}
+        className="fixed inset-x-0 bottom-0 z-0 hidden h-[340px] max-sm:block"
+      />
       <div className="relative z-10">
         <p className="text-[12px] leading-none text-[var(--text-primary)]">All done!</p>
         <h1 className="mt-2.5 text-[20px] font-medium leading-none text-[var(--accent-primary)]">
           Your review has been submitted!
         </h1>
         <p className="mt-[7px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
-          A moderator checks every review before it goes public. You&rsquo;ll hear from us once
-          it&rsquo;s been through.
+          A moderator checks every review before it goes public. You&rsquo;ll hear from us once it&rsquo;s
+          been through.
         </p>
 
         {submitted ? (

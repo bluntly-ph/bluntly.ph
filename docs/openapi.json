@@ -1969,6 +1969,77 @@
         }
       }
     },
+    "/api/v1/users/{user_id}/comments": {
+      "get": {
+        "tags": [
+          "comments"
+        ],
+        "summary": "List the comments a member has written",
+        "description": "The Comments tab of a profile (Figma 5446:6398).\n\nPublic, and deliberately so: a profile is a public page, and this list is\nthe same conversation anyone can already read under each review. The service\napplies the visibility filter \u2014 removed comments and comments on unpublished\nor removed reviews never appear, whoever is asking.",
+        "operationId": "list_authored_comments_api_v1_users__user_id__comments_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuthoredCommentOut"
+                  },
+                  "title": "Response List Authored Comments Api V1 Users  User Id  Comments Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/review-queue": {
       "get": {
         "tags": [
@@ -3324,6 +3395,23 @@
             "description": "Filter to one content type."
           },
           {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ],
+              "type": "string",
+              "description": "Open reports (the default), resolved ones, or both.",
+              "default": "open",
+              "title": "Status"
+            },
+            "description": "Open reports (the default), resolved ones, or both."
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -3354,6 +3442,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReportQueueResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/reports/{report_id}/decision": {
+      "post": {
+        "tags": [
+          "admin: reports"
+        ],
+        "summary": "Resolve a report: dismiss, remove, restore or escalate",
+        "description": "Close a report, and carry out the content decision it implies.\n\nThe two content outcomes are not recorded here and performed elsewhere \u2014\nthey are performed, through the same services the review routes use, so an\nunpublish from this screen is indistinguishable from any other unpublish:\nsame audit entry, same author notification, same return to the queue.\n\n  dismissed          the content stands. Nothing is done to it.\n  content_removed    the reported review is unpublished (and therefore\n                     re-queued for a decision, as `unpublish` defines).\n  content_restored   the reported review is published again.\n  escalated          nothing is done to the content; the report is marked\n                     for a senior decision and leaves the open queue.\n\nThe content action runs first and commits; the report is closed after it.\nSo a resolution that cannot be carried out \u2014 a review already down, a target\nwith no publish state \u2014 leaves the report OPEN rather than closing it over\nsomething that did not happen. The reverse order would be worse: a closed\nreport over live content nobody is looking at any more.",
+        "operationId": "decide_report_api_v1_admin_reports__report_id__decision_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportItem"
                 }
               }
             }
@@ -7193,6 +7340,41 @@
         ],
         "title": "AttachLinkRequest"
       },
+      "AuthoredCommentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "helpful_votes": {
+            "type": "integer",
+            "title": "Helpful Votes",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "review": {
+            "$ref": "#/components/schemas/CommentReview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "body",
+          "created_at",
+          "review"
+        ],
+        "title": "AuthoredCommentOut",
+        "description": "One comment a member wrote, for their profile's Comments tab.\n\n`CommentOut` answers \"what is under this review\"; this answers \"what has\nthis member said\", which is the opposite direction and needs the review to\ntravel with the row. Removed comments and comments on unpublished or removed\nreviews are never in this list \u2014 a profile is a public surface."
+      },
       "AutoRenewUpdate": {
         "properties": {
           "auto_renew": {
@@ -7623,6 +7805,47 @@
           "created_at"
         ],
         "title": "CommentOut"
+      },
+      "CommentReview": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "helpful_votes": {
+            "type": "integer",
+            "title": "Helpful Votes",
+            "default": 0
+          },
+          "comment_count": {
+            "type": "integer",
+            "title": "Comment Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "CommentReview",
+        "description": "The parent review, reduced to what a profile row draws.\n\nEnough to render the headline (\"<product> - <title>\") and its engagement\ncounts, and to link to the review. Not a `ReviewOut`: the Comments tab shows\nnone of the body, the verdict or the rating, and shipping the whole review\nper comment would multiply the payload for nothing."
       },
       "CommentVoteIn": {
         "properties": {
@@ -11328,6 +11551,32 @@
         ],
         "title": "ReportCreate"
       },
+      "ReportDecision": {
+        "properties": {
+          "resolution": {
+            "$ref": "#/components/schemas/ReportResolution"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Why. Recorded in the audit log; not shown to the reporter."
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolution"
+        ],
+        "title": "ReportDecision",
+        "description": "A moderator's answer to one report."
+      },
       "ReportItem": {
         "properties": {
           "report": {
@@ -11453,6 +11702,28 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
           }
         },
         "type": "object",
@@ -11523,6 +11794,17 @@
           "trust_stage"
         ],
         "title": "ReportReporter"
+      },
+      "ReportResolution": {
+        "type": "string",
+        "enum": [
+          "dismissed",
+          "content_removed",
+          "content_restored",
+          "escalated"
+        ],
+        "title": "ReportResolution",
+        "description": "How a filed report was closed (owner requirement, 2026-09-16).\n\nFour outcomes, because a moderator looking at a report has four honest\nanswers: the content stands, the content came down, content that was down\ngoes back up, or this is above my pay grade. The action taken on the content\nitself is audited separately by the service that performs it; this records\nthe report's own outcome so the queue can stop showing it."
       },
       "ReportTarget": {
         "properties": {
@@ -11885,10 +12167,11 @@
             "title": "Anti Target Audience"
           },
           "star_rating": {
-            "type": "integer",
+            "type": "number",
             "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Star Rating"
+            "minimum": 0.0,
+            "title": "Star Rating",
+            "description": "Rating must be between 0 and 5 in steps of 0.5."
           },
           "pros": {
             "items": {
@@ -12064,7 +12347,7 @@
             "title": "Anti Target Audience"
           },
           "star_rating": {
-            "type": "integer",
+            "type": "number",
             "title": "Star Rating"
           },
           "pros": {
@@ -12320,15 +12603,16 @@
           "star_rating": {
             "anyOf": [
               {
-                "type": "integer",
+                "type": "number",
                 "maximum": 5.0,
-                "minimum": 1.0
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Star Rating"
+            "title": "Star Rating",
+            "description": "Rating must be between 0 and 5 in steps of 0.5."
           },
           "pros": {
             "anyOf": [
@@ -12997,10 +13281,11 @@
             "title": "Packaging Quality"
           },
           "overall_rating": {
-            "type": "integer",
+            "type": "number",
             "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Overall Rating"
+            "minimum": 0.0,
+            "title": "Overall Rating",
+            "description": "Rating must be between 0 and 5 in steps of 0.5."
           },
           "would_recommend": {
             "type": "boolean",
@@ -13114,7 +13399,7 @@
             "title": "Packaging Quality"
           },
           "overall_rating": {
-            "type": "integer",
+            "type": "number",
             "title": "Overall Rating"
           },
           "would_recommend": {
@@ -13943,6 +14228,35 @@
         "title": "TrafficBeacon",
         "description": "One request's resolved location, as the proxy read it from the edge."
       },
+      "TrustProgressOut": {
+        "properties": {
+          "next_stage": {
+            "type": "integer",
+            "title": "Next Stage"
+          },
+          "next_level_name": {
+            "type": "string",
+            "title": "Next Level Name"
+          },
+          "reviews_have": {
+            "type": "integer",
+            "title": "Reviews Have"
+          },
+          "reviews_needed": {
+            "type": "integer",
+            "title": "Reviews Needed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "next_stage",
+          "next_level_name",
+          "reviews_have",
+          "reviews_needed"
+        ],
+        "title": "TrustProgressOut",
+        "description": "How far this member is from the next trust stage.\n\nThe profile's Stats card (Figma 5446:6532) draws a progress bar and a\n\"x of y\" caption. The ladder lives in `app.services.trust`; serving the\nnumbers rather than the thresholds keeps the frontend from carrying a second\ncopy of it that can drift.\n\n`null` on the whole object means the member is at the top stage \u2014 there is\nnothing further to progress towards, which is not the same as zero progress."
+      },
       "UnreadCount": {
         "properties": {
           "count": {
@@ -14114,6 +14428,16 @@
             },
             "type": "array",
             "title": "Badges"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrustProgressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

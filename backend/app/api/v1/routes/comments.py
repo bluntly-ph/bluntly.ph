@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -22,7 +22,9 @@ from app.models.enums import MemberRole, VoteDirection
 from app.models.review import Review
 from app.models.user import User
 from app.schemas.comment import (
+    AuthoredCommentOut,
     CommentAuthor,
+    CommentReview,
     CommentCreate,
     CommentOut,
     CommentVoteIn,
@@ -137,3 +139,37 @@ def unvote_comment(comment_id: uuid.UUID, db: Session = Depends(get_db),
     _visible_review_or_404(db, comment.review_id, user)
     comment = comment_service.remove_comment_vote(db, comment, user.id)
     return _single_out(db, comment)
+
+
+@router.get("/users/{user_id}/comments", response_model=list[AuthoredCommentOut],
+            summary="List the comments a member has written")
+def list_authored_comments(
+    user_id: uuid.UUID,
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[AuthoredCommentOut]:
+    """The Comments tab of a profile (Figma 5446:6398).
+
+    Public, and deliberately so: a profile is a public page, and this list is
+    the same conversation anyone can already read under each review. The service
+    applies the visibility filter — removed comments and comments on unpublished
+    or removed reviews never appear, whoever is asking.
+    """
+    rows = comment_service.list_authored(db, user_id, limit=limit, offset=offset)
+    return [
+        AuthoredCommentOut(
+            id=comment.id,
+            body=comment.body,
+            helpful_votes=comment.helpful_votes,
+            created_at=comment.created_at,
+            review=CommentReview(
+                id=review.id,
+                title=review.title,
+                product_name=product_name,
+                helpful_votes=review.helpful_votes,
+                comment_count=comment_count,
+            ),
+        )
+        for comment, review, product_name, comment_count in rows
+    ]

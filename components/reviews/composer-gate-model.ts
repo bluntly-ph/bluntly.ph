@@ -25,7 +25,8 @@ export const MAX_TITLE = 30;
 export type GateDraft = {
   discussion: string;
   verdict: string | null;
-  rating: number;
+  /** null until answered. 0 is an answer (owner requirement, 2026-09-16). */
+  rating: number | null;
   pros: string;
   cons: string;
   anti: string;
@@ -76,7 +77,7 @@ export function blockerFor(step: number, draft: GateDraft): string | null {
     case 1:
       return draft.verdict ? null : "Pick a verdict.";
     case 2:
-      return draft.rating > 0 ? null : "Give it a star rating.";
+      return draft.rating !== null ? null : "Give it a star rating.";
     case 3:
       return lines(draft.pros).length === 0 || lines(draft.cons).length === 0
         ? "Give at least one pro and one con — both are required."

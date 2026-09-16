@@ -20,6 +20,22 @@ from app.schemas.urls import web_url_or_none
 from app.services.trust_badge import has_trust_badge
 
 
+
+#: Ratings are 0 to 5 in half steps (owner requirement, 2026-09-16). Zero is a
+#: real answer — "this was bad" — not an unanswered question, so the floor is 0
+#: rather than 1. The step is checked here as well as by the column's CHECK,
+#: because a 400 with a reason is a better answer than a 500 from the database.
+HALF_STEP_HINT = "Rating must be between 0 and 5 in steps of 0.5."
+
+
+def half_step(value: float | None) -> float | None:
+    """0, 0.5, 1 … 5. Returns the value so it can be used as a validator."""
+    if value is None:
+        return value
+    if value < 0 or value > 5 or (value * 2) != int(value * 2):
+        raise ValueError(HALF_STEP_HINT)
+    return value
+
 class VoteIn(BaseModel):
     """Community helpfulness vote (M2 slice 2)."""
 
@@ -41,10 +57,12 @@ class ReviewCreate(BaseModel):
     verdict_explanation: str | None = None
     target_audience: str | None = None
     anti_target_audience: str | None = None
-    star_rating: int = Field(ge=1, le=5)
+    star_rating: float = Field(ge=0, le=5, description=HALF_STEP_HINT)
     pros: list[str] = Field(default_factory=list, max_length=10)
     cons: list[str] = Field(default_factory=list, max_length=10)
     photo_url: str | None = None
+
+    _star_step = field_validator("star_rating")(classmethod(lambda cls, v: half_step(v)))
 
     # http(s) only. The route also proves the object is this author's upload
     # (_own_photo_or_403), which is the stronger check - but a scheme guard at
@@ -75,10 +93,12 @@ class ReviewUpdate(BaseModel):
     verdict_explanation: str | None = None
     target_audience: str | None = None
     anti_target_audience: str | None = None
-    star_rating: int | None = Field(default=None, ge=1, le=5)
+    star_rating: float | None = Field(default=None, ge=0, le=5, description=HALF_STEP_HINT)
     pros: list[str] | None = Field(default=None, max_length=10)
     cons: list[str] | None = Field(default=None, max_length=10)
     photo_url: str | None = None
+
+    _star_step = field_validator("star_rating")(classmethod(lambda cls, v: half_step(v)))
 
     # http(s) only. The route also proves the object is this author's upload
     # (_own_photo_or_403), which is the stronger check - but a scheme guard at
@@ -113,7 +133,7 @@ class ReviewOut(BaseModel):
     verdict_explanation: str | None = None
     target_audience: str | None = None
     anti_target_audience: str | None = None
-    star_rating: int
+    star_rating: float
     pros: list | None = None
     cons: list | None = None
     photo_url: str | None = None

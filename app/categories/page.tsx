@@ -36,7 +36,7 @@ export default async function CategoriesPage() {
   let user: HeaderUser = null;
   try {
     const me = await getUser();
-    user = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
+    user = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
   } catch {
     user = null;
   }

@@ -19,7 +19,6 @@ import {
   NumberTwo,
   Plus,
   SealCheck,
-  Star,
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
@@ -47,7 +46,7 @@ import {
 } from "@/components/reviews/TiltedRatingCards";
 import type { PanelUser } from "@/components/site/ProfileNavPanel";
 import { Button } from "@/components/ui/Button";
-import { STAR_EMPTY, starColor } from "@/components/ui/star-ladder";
+import { StarRatingInput } from "@/components/ui/StarRatingInput";
 import { prepareImageForUpload } from "@/lib/image";
 
 import {
@@ -722,26 +721,17 @@ function RateStep({
       <h1 className="mt-[47px] text-center text-[20px] font-medium leading-none text-[var(--accent-primary)]">
         How was the seller?
       </h1>
-      <div className="mt-[31px] flex justify-center gap-2">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => patch({ overall: n })}
-            aria-label={`${n} star${n > 1 ? "s" : ""}`}
-            aria-pressed={draft.overall === n}
-            className={`grid h-10 w-10 cursor-pointer place-items-center rounded-[6px] ${FOCUS_RING}`}
-          >
-            <Star
-              size={40}
-              weight="fill"
-              aria-hidden="true"
-              className="transition-colors"
-              style={{ color: draft.overall !== null && n <= draft.overall ? starColor(draft.overall) : STAR_EMPTY }}
-            />
-          </button>
-        ))}
-      </div>
+      {/* Half steps and zero, as the product review's rating takes them
+          (owner requirement, 2026-09-16). The two graded dimensions below stay
+          whole-number chips: the frame draws them as numbers, not stars. */}
+      <StarRatingInput
+        className="mt-[31px]"
+        label="Overall rating for this seller"
+        value={draft.overall}
+        onChange={(overall) => patch({ overall })}
+        size={40}
+        gap={8}
+      />
 
       <div className="mt-8 flex flex-col gap-2">
         <ChoiceCard tone="yes" value={draft.recommend} choice full onPick={(recommend) => patch({ recommend })}>

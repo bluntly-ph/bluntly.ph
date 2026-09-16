@@ -66,3 +66,39 @@ CommentOut.model_rebuild()
 
 class CommentVoteIn(BaseModel):
     vote: VoteDirection
+
+
+class CommentReview(BaseModel):
+    """The parent review, reduced to what a profile row draws.
+
+    Enough to render the headline ("<product> - <title>") and its engagement
+    counts, and to link to the review. Not a `ReviewOut`: the Comments tab shows
+    none of the body, the verdict or the rating, and shipping the whole review
+    per comment would multiply the payload for nothing.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    product_name: str | None = None
+    helpful_votes: int = 0
+    comment_count: int = 0
+
+
+class AuthoredCommentOut(BaseModel):
+    """One comment a member wrote, for their profile's Comments tab.
+
+    `CommentOut` answers "what is under this review"; this answers "what has
+    this member said", which is the opposite direction and needs the review to
+    travel with the row. Removed comments and comments on unpublished or removed
+    reviews are never in this list — a profile is a public surface.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    body: str
+    helpful_votes: int = 0
+    created_at: datetime
+    review: CommentReview
