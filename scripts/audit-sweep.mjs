@@ -39,6 +39,8 @@ const FULL = process.env.FULL === "1";
 const OUT = process.env.OUT ?? "audit-out";
 /** The fixture proxy answers the local session with fixture data, and 401s the rest. */
 const SESSION = { "signed-in": "qa-local-fixture", "store-owner": "qa-local-fixture", moderator: "qa-local-moderator" };
+/** The cookie belongs to whatever origin BASE names, not always localhost. */
+const COOKIE_DOMAIN = new URL(BASE).hostname;
 const IGNORE_CONSOLE = /status of 401|Failed to load resource: the server responded with a status of 401/;
 
 const routes = SITE_ROUTES.filter(
@@ -91,7 +93,9 @@ for (const width of WIDTHS) {
       deviceScaleFactor: 1,
     });
     const cookie = SESSION[access];
-    if (cookie) await context.addCookies([{ name: "bluntly_session", value: cookie, domain: "localhost", path: "/" }]);
+    if (cookie) {
+      await context.addCookies([{ name: "bluntly_session", value: cookie, domain: COOKIE_DOMAIN, path: "/" }]);
+    }
     const page = await context.newPage();
     if (Object.keys(resolved).length === 0) await discover(page);
 
@@ -123,6 +127,11 @@ for (const width of WIDTHS) {
           ),
         }));
         const url = new URL(page.url());
+        // A route that quietly lands somewhere else — a lost session bouncing to
+        // /login, say — answers 200 and would otherwise be recorded as a pass.
+        const landed = url.pathname;
+        const wanted = target.split("?")[0];
+        const redirected = landed !== wanted;
         row = {
           route: route.path,
           width,
@@ -135,10 +144,16 @@ for (const width of WIDTHS) {
           errors: [...new Set(errors)].slice(0, 4),
           h1: facts.h1,
           contentWidth: facts.contentWidth,
+          redirected,
           result:
-            (res?.status() ?? 0) >= 400 || facts.overflowX > 0 || facts.broken.length > 0 || errors.length > 0
+            (res?.status() ?? 0) >= 400 ||
+            redirected ||
+            facts.overflowX > 0 ||
+            facts.broken.length > 0 ||
+            errors.length > 0
               ? "FAIL"
               : "PASS",
+          note: redirected ? `landed on ${landed}, not ${wanted}` : undefined,
         };
         if (SHOT) {
           const slug = route.path.replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "") || "home";

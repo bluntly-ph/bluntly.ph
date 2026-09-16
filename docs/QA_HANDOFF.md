@@ -1,0 +1,81 @@
+# Independent QA handoff — frontend freeze
+
+**Status: FRONTEND ENGINEERING VERIFICATION COMPLETE. INDEPENDENT QA: RETEST REQUIRED.**
+
+Engineering verification is not a QA pass. Nothing below should be read as one.
+
+## The candidate
+
+| | |
+| --- | --- |
+| QA baseline SHA | filled in by the release note that accompanies this document — the SHA whose CI is green and whose build is live |
+| Production | https://www.bluntly.ph |
+| Frontend scope | the 49 routes in `lib/site-map.ts` (also `docs/SITEMAP.md`, `/sitemap.xml`) |
+| Evidence | `docs/FRONTEND_AUDIT.md` — page results, journey results, state coverage and evidence limits, generated from the harness output |
+
+Do not deploy over this while QA is testing: any new deployment changes the baseline.
+
+## What engineering verified
+
+- **Pages** — all 49 routes at 320, 360, 375, 390, 393, 412, 430, 768, 1024, 1280 and 1440: correct status, no redirect away from the route, no horizontal overflow, no console errors, no broken images.
+- **Journeys** — 20 flows driven in a browser at 390 and 1440: search → review / question / seller, tabs, filter and order, the "+" action menu's three destinations, all three composers step by step (including a disabled Continue, a satisfied Continue and walking back), the login return path, profile and dashboard navigation, the moderator rail, the moderator queue's detail pane, and the footer's policies.
+- **Figma** — frames read live from the file (`lso4Ri4hDaZxvCebhUqlY5`, account Zienxt, Full seat). Each route is classified in the audit as matched, corrected, an intentional product difference, an owner design difference, or a business route with no frame — with the reason written down.
+
+## Owner design difference — do not "fix" it
+
+The landing hero's **"Earned ₱45.50 today"** pill sits on the **upper-right of the tilted review card**, pinned inside the card's own composition so it travels with the card.
+
+The Figma frame puts that pill *below* the card. The owner asked for the current placement on 2026-09-16. It is **not** a Figma mismatch, and it must survive future Figma synchronisation. Verified at 320 / 360 / 375 / 390 / 393 / 412 / 414 / 430 / 768 / 1024 / 1280 / 1440: attached to the card's corner, never clipped, never viewport-relative, no horizontal overflow.
+
+## What QA should hit first
+
+The critical journeys, on a real phone and a real desktop browser:
+
+1. Search → a review.
+2. Search → a question.
+3. Search → a seller.
+4. Search "+" → Write a review.
+5. Search "+" → Ask a question.
+6. Search "+" → Rate a seller.
+7. Seller page "+" → its actions, and the store dashboard as the store's owner.
+8. Write a review — the whole process, ending in a real submission.
+9. Rate a seller — the whole process, ending in a real submission.
+10. Ask a question — the whole process, ending in a real submission.
+11. Sign-in return path: open a guarded route signed out, sign in, land back where you were going.
+12. Profile and dashboard navigation.
+13. Moderation navigation and the review queue.
+
+Submissions matter most: engineering answered those POSTs in the browser, so **no real submission has been made by the audit**.
+
+## Verification limitations — QA owns these
+
+| What | State | Why |
+| --- | --- | --- |
+| Authenticated routes on production | HUMAN_AUTH_REQUIRED | Everything signed-in, store-owner and moderator is LOCAL FIXTURE VERIFIED. Production sign-in is an emailed one-time code; engineering has no mail hook and must not create or borrow a session. |
+| Seller-dependent routes on production | NOT LIVE-DATA VERIFIED | Production holds no seller record, so `/sellers/[id]` and its dashboard cannot be opened live. Local fixture evidence stands. No fake seller was created to make this green. |
+| Anything that writes | NOT EXERCISED | Review, seller-review and question submission, answering, voting and withdrawal. Verified up to the submit control only. |
+| The one-time-code step | NOT EXERCISED | Needs a mail hook. The form, its validation and the return path are verified. |
+| Moderator queues other than the review queue | BLOCKED locally | Prices, seller claims, reviewers, users and the activity log have no local fixture payloads, so their populated tables have no evidence. Their shells and unreachable-API states do. |
+
+## Findings raised, not fixed (frontend is frozen)
+
+- **No moderator decision control.** The review queue inspects a card but cannot publish, reject or attach a link to it. The Figma frame draws no such control either, and `components/moderation/ModerationQueue.tsx`, which does call those endpoints, is mounted on no route. The API has them. This is a product decision for the owner, not a frontend regression.
+
+## Known environment-only test failures
+
+Neither is a product defect, and neither was worked around by changing the UI:
+
+- `tests/frontend/telemetry-route.test.mjs` — asserts a source line without the CRLF that Windows checkouts write. Historical, unchanged.
+- `e2e/route-guards.spec.ts` "an unknown login email is sent to sign up" — TEST ENVIRONMENT LIMITATION. The local fixture proxy is read-only and answers POST with 405, so the form cannot reach the API. It passes against a stack with a live API.
+
+## Re-running the evidence
+
+```
+node --experimental-strip-types scripts/audit-sweep.mjs     # pages; WIDTHS/ONLY/ACCESS/SHOT/OUT
+node scripts/journey-check.mjs                              # journeys at 390 and 1440
+npx playwright test e2e/journeys.spec.ts                    # the signed-out subset
+node --experimental-strip-types scripts/audit-report.mjs --evidence <dir>
+npm run sitemap -- --paths                                  # the route list itself
+```
+
+A route with no usable id reports SKIPPED, never PASS. A route that answers 200 from somewhere else reports FAIL, never PASS.

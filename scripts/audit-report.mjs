@@ -39,6 +39,164 @@ const CLASS = {
  * `note` says what differs from the frame and why, in the file's own terms.
  * `blocker` is a real obstacle, not a to-do.
  */
+/**
+ * Which journeys exercise which route, so a page's row can say whether its
+ * flows were driven, not just whether it rendered.
+ */
+const JOURNEYS_BY_ROUTE = {
+  "/search": [
+    "J-SEARCH-REVIEW",
+    "J-SEARCH-TABS",
+    "J-SEARCH-FILTER",
+    "J-SEARCH-SORT",
+    "J-SEARCH-FAB-WRITE",
+    "J-SEARCH-FAB-ASK",
+    "J-PROFILE-MENU",
+  ],
+  "/reviews/[id]": ["J-SEARCH-REVIEW", "J-REVIEW-ACTIONS"],
+  "/questions": ["J-QUESTION-OPEN"],
+  "/questions/[id]": ["J-QUESTION-OPEN"],
+  "/sellers/[id]": ["J-SELLER-TABS", "J-SELLER-FAB-RATE", "J-SELLER-DASHBOARD"],
+  "/sellers/[id]/dashboard": ["J-SELLER-DASHBOARD"],
+  "/reviews/new": ["J-COMPOSER-REVIEW", "J-SEARCH-FAB-WRITE", "J-AUTH-RETURN"],
+  "/sellers/rate": ["J-COMPOSER-SELLER", "J-SELLER-FAB-RATE"],
+  "/questions/new": ["J-COMPOSER-QUESTION", "J-SEARCH-FAB-ASK"],
+  "/login": ["J-AUTH-RETURN"],
+  "/profile": ["J-PROFILE-MENU"],
+  "/dashboard": ["J-PROFILE-MENU", "J-DASHBOARD-NAV"],
+  "/dashboard/history": ["J-DASHBOARD-NAV"],
+  "/dashboard/transfer": ["J-DASHBOARD-NAV"],
+  "/dashboard/insights": ["J-DASHBOARD-NAV"],
+  "/moderate": ["J-MODERATE-QUEUE"],
+  "/moderate/review-queue": ["J-MODERATE-QUEUE", "J-MODERATE-DETAIL"],
+  "/moderate/products": ["J-MODERATE-QUEUE"],
+  "/about": ["J-FOOTER-LEGAL"],
+  "/privacy": ["J-FOOTER-LEGAL"],
+  "/terms": ["J-FOOTER-LEGAL"],
+  "/guidelines": ["J-FOOTER-LEGAL"],
+};
+
+/**
+ * States a route can be in, and whether this audit has evidence for each.
+ * Only states actually observed are marked verified — a page passing in its
+ * default state says nothing about the others, which is the distinction
+ * "49/49 PASS" on its own would hide.
+ */
+const STATES = {
+  "/": [
+    ["signed-out landing", "VERIFIED"],
+    ["owner Earned badge, 320-1440", "VERIFIED"],
+  ],
+  "/search": [
+    ["results", "VERIFIED"],
+    ["tab switch, filter, order", "VERIFIED"],
+    ["no results", "NOT EXERCISED"],
+  ],
+  "/feed": [["for-you and recent", "VERIFIED"]],
+  "/compare": [
+    ["empty picker", "VERIFIED"],
+    ["two to four products compared", "NOT EXERCISED"],
+  ],
+  "/reviews/[id]": [
+    ["published review with comments", "VERIFIED"],
+    ["overflow menu open and dismissed", "VERIFIED"],
+  ],
+  "/sellers/[id]": [
+    ["claimed store with reviews", "VERIFIED"],
+    ["Questions tab", "VERIFIED"],
+    ["store with no reviews", "NOT EXERCISED"],
+  ],
+  "/u/[id]": [
+    ["reviewer with reviews", "VERIFIED"],
+    ["loading skeleton", "VERIFIED"],
+  ],
+  "/questions": [
+    ["populated list", "VERIFIED"],
+    ["empty list", "NOT EXERCISED"],
+  ],
+  "/questions/[id]": [
+    ["unanswered and answered", "VERIFIED"],
+    ["answer posted", "NOT EXERCISED — writes"],
+  ],
+  "/requests": [["populated board", "VERIFIED"]],
+  "/reviews/new": [
+    ["product picker, steps 1-4, walk back", "VERIFIED"],
+    ["steps 5-7 and All done", "VERIFIED IN THE 2026-09-16 COMPOSER PASS"],
+    ["submission", "NOT EXERCISED — writes"],
+  ],
+  "/sellers/rate": [
+    ["find, rate, write-up", "VERIFIED"],
+    ["submission", "NOT EXERCISED — writes"],
+  ],
+  "/questions/new": [
+    ["audience, product, question gate", "VERIFIED"],
+    ["submission", "NOT EXERCISED — writes"],
+  ],
+  "/login": [
+    ["form and return path", "VERIFIED"],
+    ["one-time code step", "NOT EXERCISED — needs mail"],
+  ],
+  "/profile": [
+    ["own profile, no reviews yet", "VERIFIED"],
+    ["profile with reviews", "VERIFIED VIA /u/[id]"],
+  ],
+  "/notifications": [
+    ["unreachable-API state", "VERIFIED"],
+    ["populated list", "NOT EXERCISED — no fixture"],
+  ],
+  "/contracts": [
+    ["empty state", "VERIFIED"],
+    ["with contracts", "NOT EXERCISED — no fixture"],
+  ],
+  "/sellers/[id]/dashboard": [
+    ["owner view with months and waiting questions", "VERIFIED"],
+    ["non-owner message", "NOT EXERCISED"],
+  ],
+  "/dashboard": [
+    ["zero-earnings state", "VERIFIED"],
+    ["with earnings", "NOT EXERCISED — no fixture"],
+  ],
+  "/dashboard/history": [["empty history", "VERIFIED"]],
+  "/dashboard/reviews": [["no published reviews", "VERIFIED"]],
+  "/dashboard/transfer": [
+    ["below payout threshold", "VERIFIED"],
+    ["withdrawal request", "NOT EXERCISED — writes"],
+  ],
+  "/dashboard/insights": [["no data yet", "VERIFIED"]],
+  "/moderate": [
+    ["overview shell", "VERIFIED"],
+    ["populated overview", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/review-queue": [
+    ["shell, tabs, filters, empty state", "VERIFIED"],
+    ["populated queue and detail pane", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/products": [["populated catalogue", "VERIFIED"]],
+  "/moderate/prices": [
+    ["shell and unreachable-API state", "VERIFIED"],
+    ["pending observations", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/sellers": [
+    ["shell and unreachable-API state", "VERIFIED"],
+    ["pending claims", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/reviewers": [
+    ["shell and unreachable-API state", "VERIFIED"],
+    ["populated table", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/users": [
+    ["search shell", "VERIFIED"],
+    ["a found account", "BLOCKED — no moderator fixture data"],
+  ],
+  "/moderate/affiliate-links": [["shell and empty ledger", "VERIFIED"]],
+  "/moderate/honesty-fund": [["current cycle, zero pool", "VERIFIED"]],
+  "/moderate/analytics": [["shell and distribution panel", "VERIFIED"]],
+  "/moderate/activity": [
+    ["shell and unreachable-API state", "VERIFIED"],
+    ["populated log", "BLOCKED — no moderator fixture data"],
+  ],
+};
+
 const CLASSIFICATION = {
   "/": {
     klass: CLASS.OWNER,
@@ -98,12 +256,27 @@ const CLASSIFICATION = {
   },
   "/notifications": { klass: CLASS.BUSINESS, note: "FR-1 1.6; no frame. The site's list language." },
   "/contracts": { klass: CLASS.BUSINESS, note: "Reviewer contracts; no frame." },
-  "/sellers/[id]/dashboard": { klass: CLASS.BUSINESS, note: "FR-4 owner monitoring; no frame. Built from the store page's parts." },
-  "/dashboard": { klass: CLASS.DIFFERENCE, note: "Reviewer Dashboard matched (5572:7130); average read time is not measured, so the tile says so rather than showing the frame's 4m 3s." },
+  "/sellers/[id]/dashboard": {
+    klass: CLASS.BUSINESS,
+    note: "FR-4 owner monitoring; no frame. Built from the store page's parts.",
+  },
+  "/dashboard": {
+    klass: CLASS.DIFFERENCE,
+    note: "Reviewer Dashboard matched (5572:7130); average read time is not measured, so the tile says so rather than showing the frame's 4m 3s.",
+  },
   "/dashboard/history": { klass: CLASS.MATCHED, note: "History (5762:472)." },
-  "/dashboard/reviews": { klass: CLASS.DIFFERENCE, note: "Reviews (6159:1510) specifies chrome only; the content is the reviewer's real reviews." },
-  "/dashboard/transfer": { klass: CLASS.MATCHED, note: "Transfer (5762:332); the balance is real, the frame's sample figure is not drawn." },
-  "/dashboard/insights": { klass: CLASS.DIFFERENCE, note: "Insights (5762:752); the unlabelled curve is labelled, because on a product that pays people an unlabelled curve reads as money." },
+  "/dashboard/reviews": {
+    klass: CLASS.DIFFERENCE,
+    note: "Reviews (6159:1510) specifies chrome only; the content is the reviewer's real reviews.",
+  },
+  "/dashboard/transfer": {
+    klass: CLASS.MATCHED,
+    note: "Transfer (5762:332); the balance is real, the frame's sample figure is not drawn.",
+  },
+  "/dashboard/insights": {
+    klass: CLASS.DIFFERENCE,
+    note: "Insights (5762:752); the unlabelled curve is labelled, because on a product that pays people an unlabelled curve reads as money.",
+  },
   "/about": { klass: CLASS.BUSINESS, note: "Company page; no frame." },
   "/how-it-works": { klass: CLASS.BUSINESS, note: "Company page; no frame." },
   "/membership": { klass: CLASS.BUSINESS, note: "Tier explainer; no frame." },
@@ -114,11 +287,15 @@ const CLASSIFICATION = {
   "/legal": { klass: CLASS.BUSINESS, note: "Policy page; no frame." },
   "/terms": { klass: CLASS.BUSINESS, note: "Policy page; no frame." },
   "/privacy": { klass: CLASS.BUSINESS, note: "Policy page; no frame." },
-  "/moderate": { klass: CLASS.BUSINESS, note: "Overview (5017:1738) in the Admin/Sidebar shell; a desktop workspace, not a phone screen." },
+  "/moderate": {
+    klass: CLASS.BUSINESS,
+    note: "Overview (5017:1738) in the Admin/Sidebar shell; a desktop workspace, not a phone screen.",
+  },
   "/moderate/review-queue": {
     klass: CLASS.MATCHED,
     note: "Admin Page - Review Queue (6922:837), the file's one desktop frame: rail, tabs, table and detail pane all present.",
-    blocker: "The queue's rows need moderator data. The local fixture proxy serves none, so row selection and the detail pane's contents are unverified locally; the shell, tabs, filters and empty state are.",
+    blocker:
+      "The queue's rows need moderator data. The local fixture proxy serves none, so row selection and the detail pane's contents are unverified locally; the shell, tabs, filters and empty state are.",
   },
   "/moderate/products": { klass: CLASS.BUSINESS, note: "Catalogue table in the admin shell; no frame." },
   "/moderate/prices": { klass: CLASS.BUSINESS, note: "Price moderation; no frame." },
@@ -173,64 +350,188 @@ function statusFor(route, bucket) {
 
 const lines = [];
 const now = new Date().toISOString().slice(0, 10);
-lines.push("# Frontend audit — every page and every journey");
+
+/** Evidence limits that are not any one route's failure. */
+const LIMITATIONS = [
+  [
+    "Review queue with rows",
+    "CLOSED",
+    "Was blocked. Deterministic local fixture cards now populate GET /admin/review-queue, so the rows, row selection and the detail pane are verified at 390, 768, 1024 and 1440 — no overflow, no console errors.",
+  ],
+  [
+    "The other moderator queues with data",
+    "BLOCKED",
+    "Prices, seller claims, reviewers, users and the activity log still have no local payloads, so their populated tables have no evidence. Their shells and unreachable-API states do. Closing it needs fixtures per endpoint or a signed-in moderator on a real stack.",
+  ],
+  [
+    "Moderator decisions",
+    "NOT AVAILABLE IN THE PRODUCT",
+    "There is no approve/reject/publish control on the review queue, and the Figma frame draws none. The API has the endpoints and an unmounted component calls them. A product decision for the owner, recorded here rather than built during the freeze.",
+  ],
+  [
+    "Authenticated routes on production",
+    "HUMAN_AUTH_REQUIRED",
+    "Every signed-in, store-owner and moderator route here is LOCAL FIXTURE VERIFIED. Production sign-in is an emailed one-time code, so live authenticated verification belongs to the owner or independent QA.",
+  ],
+  [
+    "Seller-dependent routes on production",
+    "NOT LIVE-DATA VERIFIED",
+    "Production holds no seller record, so /sellers/[id] and its dashboard cannot be opened live. Local fixture evidence stands; this is an evidence limitation, not a frontend failure.",
+  ],
+  [
+    "Anything that writes",
+    "NOT EXERCISED",
+    "Review, seller-review and question submission, answering, voting and withdrawal are not driven against a real API: the audit answers those POSTs in the browser. Everything up to the submit control is verified.",
+  ],
+  [
+    "The one-time-code step",
+    "NOT EXERCISED",
+    "Login past the email step needs a mail hook. The form, its validation and the return path are verified.",
+  ],
+];
+
+lines.push("# Frontend audit — pages, journeys, states and evidence limits");
 lines.push("");
 lines.push("<!-- Generated by `node --experimental-strip-types scripts/audit-report.mjs --evidence <dir>`. -->");
 lines.push("");
 lines.push(
-  `Run ${now}. The page list is lib/site-map.ts (the same list /sitemap.xml and docs/SITEMAP.md come from), so a page cannot be missed: the site-map test fails if one exists without an entry.`,
+  `Run ${now}. The page list is lib/site-map.ts — the same list /sitemap.xml and docs/SITEMAP.md come from — so a page cannot be missed: the site-map test fails if one exists without an entry.`,
 );
+lines.push("");
+lines.push(
+  "**Read this as four separate claims.** A page can render correctly in its default state while a state inside it has no evidence at all, so a page result never stands in for state coverage.",
+);
+lines.push("");
+lines.push("| Claim | What it means |");
+lines.push("| --- | --- |");
+lines.push(
+  "| Page result | The route rendered at every width checked: right status, no redirect away from it, no horizontal overflow, no console errors, no broken images. |",
+);
+lines.push("| Journey result | The flows through that route were driven in a browser and landed where they should. |");
+lines.push(
+  "| State coverage | Which of the route's states this audit actually put on screen. A state not listed as verified was not seen. |",
+);
+lines.push("| Evidence limitations | What could not be verified at all, and why. |");
 lines.push("");
 lines.push("**How the evidence was produced**");
 lines.push("");
-lines.push("- `node --experimental-strip-types scripts/audit-sweep.mjs` — every route, at the widths given, with the session its access level needs: HTTP status, landing URL, horizontal overflow, console errors, broken images, screenshot.");
-lines.push("- `node scripts/journey-check.mjs` — the flows between those pages, driven in a browser at 390 and 1440.");
-lines.push("- `npx playwright test e2e/journeys.spec.ts` — the signed-out subset of those journeys, for CI.");
-lines.push("- Figma frames read from the file `lso4Ri4hDaZxvCebhUqlY5` through the Figma MCP (account Zienxt, Full seat) and the mirrored export pack in `.bluntly-autopilot/figma-reference/`.");
+lines.push(
+  "- `node --experimental-strip-types scripts/audit-sweep.mjs` — every route, at the widths given, with the session its access level needs: HTTP status, the URL it actually landed on, horizontal overflow, console errors, broken images, screenshot.",
+);
+lines.push("- `node scripts/journey-check.mjs` — the flows between those pages, driven at 390 and 1440.");
+lines.push("- `npx playwright test e2e/journeys.spec.ts` — the signed-out subset, for CI.");
+lines.push(
+  "- Figma frames read from file `lso4Ri4hDaZxvCebhUqlY5` through the Figma MCP (account Zienxt, Full seat) and the mirrored export pack in `.bluntly-autopilot/figma-reference/`.",
+);
 lines.push("");
-lines.push("**Access** — Public; Signed-out only; Signed in; Moderator; Store owner. Signed-in, moderator and store-owner pages are verified against the local fixture session, never against production credentials.");
+lines.push("Engineering verification is not an independent QA pass. **Independent QA: RETEST REQUIRED.**");
 lines.push("");
 
-const counts = { total: SITE_ROUTES.length, figma: 0, business: 0, pass: 0, fail: 0, blocked: 0 };
+const pageResult = (route) => {
+  const buckets = ["mobile", "tablet", "desktop"].map((b) => statusFor(route, b));
+  if (buckets.some((b) => b.status === "FAIL")) return "FAIL";
+  if (buckets.every((b) => b.status === "SKIPPED" || b.status === "—")) return "NOT VERIFIED";
+  if (buckets.some((b) => b.status === "SKIPPED")) return "PARTIAL";
+  return "PASS";
+};
+
+const journeyResult = (route) => {
+  const ids = JOURNEYS_BY_ROUTE[route] ?? [];
+  const runs = journeys.filter((j) => ids.includes(j.id) && j.result !== "N/A");
+  if (runs.length === 0) return "no journey";
+  if (runs.some((j) => j.result === "FAIL")) return "FAIL";
+  return `PASS (${ids.length})`;
+};
+
+const counts = { figma: 0, business: 0, pass: 0, fail: 0, partial: 0, notVerified: 0, stateGaps: 0 };
 for (const route of SITE_ROUTES) {
   const c = CLASSIFICATION[route.path];
-  if (!c) continue;
-  if (c.klass.startsWith("FIGMA")) counts.figma += 1;
+  if (c?.klass?.startsWith("FIGMA")) counts.figma += 1;
   else counts.business += 1;
-  if (c.blocker) counts.blocked += 1;
+  const r = pageResult(route.path);
+  if (r === "PASS") counts.pass += 1;
+  else if (r === "FAIL") counts.fail += 1;
+  else if (r === "PARTIAL") counts.partial += 1;
+  else counts.notVerified += 1;
+  const states = STATES[route.path] ?? [];
+  if (states.some(([, status]) => status.startsWith("BLOCKED") || status.startsWith("NOT EXERCISED"))) {
+    counts.stateGaps += 1;
+  }
 }
+const journeyIds = [...new Set(journeys.map((j) => j.id))];
+const journeyFails = journeys.filter((j) => j.result === "FAIL").length;
 
-const mobileFails = SITE_ROUTES.filter((r) => ["mobile", "tablet", "desktop"].some((b) => statusFor(r.path, b).status === "FAIL"));
-counts.fail = mobileFails.length;
-counts.pass = counts.total - counts.fail;
-
-lines.push(`**Result** — ${counts.total} pages: ${counts.pass} pass, ${counts.fail} fail. ${counts.figma} are built to Figma frames, ${counts.business} have no frame and follow the design system. ${counts.blocked} carry a blocker (named in the notes).`);
+lines.push("## Summary");
 lines.push("");
-lines.push("| Route | Access | Classification | Mobile | Tablet | Desktop | Console | Overflow | Result |");
-lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+lines.push(
+  `- **Pages** — ${SITE_ROUTES.length} routes: ${counts.pass} PASS, ${counts.partial} PARTIAL, ${counts.notVerified} NOT VERIFIED, ${counts.fail} FAIL. ${counts.figma} are built to Figma frames; ${counts.business} have no frame and follow the design system.`,
+);
+lines.push(
+  `- **Journeys** — ${journeyIds.length} journeys, ${journeys.length} runs across 390 and 1440, ${journeyFails} failing.`,
+);
+lines.push(
+  `- **State coverage** — ${counts.stateGaps} routes carry at least one state with no evidence. Those are listed in section 3; a PASS above does not cover them.`,
+);
+lines.push(`- **Evidence limitations** — ${LIMITATIONS.length}, in section 4.`);
+lines.push("");
+
+lines.push("## 1. Page results");
+lines.push("");
+lines.push(
+  "| Route | Access | Classification | Mobile | Tablet | Desktop | Console | Overflow | Page result | Journeys |",
+);
+lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 for (const route of SITE_ROUTES) {
   const c = CLASSIFICATION[route.path] ?? { klass: "UNCLASSIFIED" };
-  const m = statusFor(route.path, "mobile");
-  const t = statusFor(route.path, "tablet");
-  const d = statusFor(route.path, "desktop");
+  const [m, t, d] = ["mobile", "tablet", "desktop"].map((b) => statusFor(route.path, b));
   const runs = sweeps.filter((r) => r.route === route.path);
   const consoleErrors = runs.reduce((n, r) => n + (r.errors?.length ?? 0), 0);
   const overflow = runs.reduce((n, r) => Math.max(n, r.overflowX ?? 0), 0);
-  const failed = [m, t, d].some((s) => s.status === "FAIL");
   const short = c.klass.replace("FIGMA SOURCE-VERIFIED — ", "Figma: ").replace("NO FIGMA FRAME — ", "No frame: ");
-  const result = failed
-    ? "FAIL — NEEDS CORRECTION"
-    : c.klass.startsWith("NO FIGMA")
-      ? "PASS — BUSINESS ROUTE"
-      : c.klass.includes("DIFFERENCE")
-        ? "PASS — INTENTIONAL DIFFERENCE"
-        : "PASS — FIGMA MATCHED";
+  const widths = (x) => (x.widths.length ? `${x.status} (${x.widths.join("/")})` : x.status);
   lines.push(
-    `| \`${route.path}\` | ${route.access} | ${cell(short)} | ${m.status}${m.widths.length ? ` (${m.widths.join("/")})` : ""} | ${t.status}${t.widths.length ? ` (${t.widths.join("/")})` : ""} | ${d.status}${d.widths.length ? ` (${d.widths.join("/")})` : ""} | ${consoleErrors === 0 ? "clean" : `${consoleErrors} errors`} | ${overflow === 0 ? "none" : `${overflow}px`} | ${result} |`,
+    `| \`${route.path}\` | ${route.access} | ${cell(short)} | ${widths(m)} | ${widths(t)} | ${widths(d)} | ${
+      consoleErrors === 0 ? "clean" : `${consoleErrors} errors`
+    } | ${overflow === 0 ? "none" : `${overflow}px`} | ${pageResult(route.path)} | ${journeyResult(route.path)} |`,
   );
 }
 lines.push("");
-lines.push("## What differs from the frames, and why");
+
+lines.push("## 2. Journey results");
+lines.push("");
+lines.push("| Journey | Phone (390) | Desktop (1440) | Assertions |");
+lines.push("| --- | --- | --- | --- |");
+for (const id of journeyIds) {
+  const phone = journeys.find((j) => j.id === id && j.width < 1024);
+  const desktop = journeys.find((j) => j.id === id && j.width >= 1024);
+  const checks = Math.max(phone?.checks ?? 0, desktop?.checks ?? 0);
+  lines.push(`| ${id} | ${phone?.result ?? "—"} | ${desktop?.result ?? "—"} | ${checks} |`);
+}
+lines.push("");
+lines.push(
+  'N/A marks a control that only exists at that width: the "+" action menu is a phone control, so its journeys do not run on the website.',
+);
+lines.push("");
+
+lines.push("## 3. State coverage");
+lines.push("");
+lines.push("What this audit put on screen, route by route. A state that is not listed was not exercised.");
+lines.push("");
+for (const route of SITE_ROUTES) {
+  const states = STATES[route.path];
+  if (!states) continue;
+  lines.push(`- **\`${route.path}\`** — ${states.map(([what, status]) => `${what}: ${status}`).join("; ")}`);
+}
+lines.push("");
+
+lines.push("## 4. Evidence limitations");
+lines.push("");
+lines.push("| Limitation | Status | Why |");
+lines.push("| --- | --- | --- |");
+for (const [what, status, why] of LIMITATIONS) lines.push(`| ${cell(what)} | ${status} | ${cell(why)} |`);
+lines.push("");
+
+lines.push("## 5. What differs from the frames, and why");
 lines.push("");
 for (const route of SITE_ROUTES) {
   const c = CLASSIFICATION[route.path];
@@ -238,21 +539,7 @@ for (const route of SITE_ROUTES) {
   lines.push(`- **\`${route.path}\`** — ${c.note}${c.blocker ? ` **Blocker:** ${c.blocker}` : ""}`);
 }
 lines.push("");
-lines.push("## Journeys");
-lines.push("");
-lines.push("A page passes on its own rendering; a journey passes when the reader can actually get through it. Driven by `scripts/journey-check.mjs`.");
-lines.push("");
-lines.push("| Journey | Phone (390) | Desktop (1440) | Checks |");
-lines.push("| --- | --- | --- | --- |");
-const ids = [...new Set(journeys.map((j) => j.id))];
-for (const id of ids) {
-  const phone = journeys.find((j) => j.id === id && j.width < 1024);
-  const desktop = journeys.find((j) => j.id === id && j.width >= 1024);
-  const checks = Math.max(phone?.checks ?? 0, desktop?.checks ?? 0);
-  lines.push(`| ${id} | ${phone?.result ?? "—"} | ${desktop?.result ?? "—"} | ${checks} |`);
-}
-lines.push("");
-lines.push("`N/A` is a control that only exists at that width: the \"+\" action menu is a phone control, so its journeys do not run on the website.");
-lines.push("");
 writeFileSync(join(ROOT, "docs", "FRONTEND_AUDIT.md"), lines.join("\n") + "\n");
-console.log(`wrote docs/FRONTEND_AUDIT.md — ${SITE_ROUTES.length} pages, ${ids.length} journeys, ${sweeps.length} sweep rows`);
+console.log(
+  `wrote docs/FRONTEND_AUDIT.md — ${SITE_ROUTES.length} pages (${counts.pass} pass, ${counts.partial} partial, ${counts.notVerified} not verified, ${counts.fail} fail), ${journeyIds.length} journeys, ${sweeps.length} sweep rows`,
+);

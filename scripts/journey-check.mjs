@@ -26,7 +26,8 @@ const WIDTHS = (process.env.WIDTHS ?? "390,1440").split(",").map(Number);
 const ONLY = (process.env.ONLY ?? "").split(",").filter(Boolean);
 const OUT = process.env.OUT ?? "journey-out";
 const SESSION = { user: "qa-local-fixture", moderator: "qa-local-moderator" };
-const FIXTURE_SELLER = "5e11e700-0000-4000-8000-000000000001";
+/** The local fixture store. Override when a different data set is in front. */
+const FIXTURE_SELLER = process.env.SELLER_ID ?? "5e11e700-0000-4000-8000-000000000001";
 const REVIEW_LINK = "a[href^='/reviews/']:not([href='/reviews/new'])";
 const QUESTION_LINK = "a[href^='/questions/']:not([href='/questions/new'])";
 
@@ -354,6 +355,28 @@ const JOURNEYS = [
       await railLink(/Products/i).click();
       await page.waitForURL("**/moderate/products**");
       expect(true, "the rail moves between workspaces");
+    },
+  },
+  {
+    id: "J-MODERATE-DETAIL",
+    entry: "/moderate/review-queue",
+    auth: "moderator",
+    async run(page, expect) {
+      const rows = page.locator("tbody tr");
+      const count = await rows.count();
+      // No rows is a data state, not a pass: say so rather than sliding past.
+      expect(count > 0, `the queue has rows to inspect (found ${count})`);
+      await rows.first().click();
+      await page.waitForTimeout(800);
+      const body = await page.evaluate(() => document.body.innerText);
+      expect(/Trust (Score|stage)/i.test(body), "the detail pane names the author's standing");
+      expect(/Receipt/i.test(body), "the detail pane says whether proof of purchase is attached");
+      const openFull = page.getByRole("link", { name: /Open the full review/i }).first();
+      expect(await openFull.isVisible(), "the pane offers the full review");
+      const overflow = await page.evaluate(
+        () => document.scrollingElement.scrollWidth - window.innerWidth,
+      );
+      expect(overflow === 0, "the workspace does not scroll sideways with a card open");
     },
   },
   {
