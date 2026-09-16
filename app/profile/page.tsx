@@ -107,7 +107,10 @@ export default async function ProfilePage({
               </div>
             ) : null}
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Link href="/onboarding" className={CHIP}>
+              {/* BUG-035: this was `/onboarding`, which walked a member who
+                  has been here for months back through the four-step
+                  introduction to change their display name. */}
+              <Link href="/profile/edit" className={CHIP}>
                 <PencilSimple size={20} weight="light" aria-hidden="true" /> Edit profile
               </Link>
               <Link href="/dashboard" className={CHIP}>

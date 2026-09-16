@@ -2,7 +2,7 @@
 
 <!-- Generated from lib/site-map.ts by `npm run sitemap:docs`. Edit that file, not this one. -->
 
-49 pages: 21 built to Figma frames, 28 with no frame in the file
+50 pages: 22 built to Figma frames, 28 with no frame in the file
 (product and business pages kept from the PRD, styled in the Figma system's language).
 16 public pages are listed in https://www.bluntly.ph/sitemap.xml.
 
@@ -53,6 +53,7 @@ role; **Store owner** signed in, and only the store's approved owner sees its fi
 
 | Page | Path | Access | What it is for | Figma | sitemap.xml |
 | --- | --- | --- | --- | --- | --- |
+| Edit your profile | `/profile/edit` | Signed in | Change your handle, display name, photo and interests in one form. | No frame — BUSINESS-REQUIRED (BUG-035). The file draws onboarding, which is a different job. | No |
 | Your profile | `/profile` | Signed in | Your own profile: stats, verified reviews, comments, and sharing it. | Profile Page - Reviews / Comments / Stats (5446:4328, 5446:6398, 5446:6532) | No |
 | Notifications | `/notifications` | Signed in | Your account's notifications. | No frame | No |
 | Contracts | `/contracts` | Signed in | Your review contracts and where each stands: active, expired or bought out. | No frame | No |

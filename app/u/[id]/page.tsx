@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PencilSimple, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { PencilSimple, SealCheck, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 
 import { ProfileHeader, ProfileLayout, ProfileTabs } from "@/components/profile/ProfileHeader";
 import { ProfileReviewCard } from "@/components/profile/ProfileReviewCard";
@@ -8,6 +8,7 @@ import { ProfileShareButton } from "@/components/profile/ProfileShareButton";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getUser } from "@/lib/dal";
+import { joinedLabel } from "@/lib/relative-time";
 import { getAuthorProfile } from "@/lib/reviews";
 
 type Params = { params: Promise<{ id: string }> };
@@ -33,11 +34,22 @@ function hue(seed: string): number {
  * A reviewer's public profile, built to Figma "Profile Page - Reviews"
  * (5446:4328) — see ProfileHeader and ProfileReviewCard.
  *
- * INTENTIONAL PRODUCT DIFFERENCES: the public feed carries a reviewer's
- * identity, trust and published reviews, so the figures are "Reviews written"
- * and the Honesty Score; followers, a join date, a bio, "People helped",
- * "Buyers guided" and the Comments and Stats tabs have nothing public behind
- * them and are not drawn.
+ * THE SEGMENT IS A HANDLE OR AN ID (BUG-030). The folder is still `[id]`
+ * because that is what the site links, but `/u/ciel` is what a person types,
+ * and it used to 404 for every reviewer alive: the page resolved its subject
+ * through the review feed's `author_id`, which takes a UUID. It now resolves
+ * through `GET /users/public/{handle}`, which takes either.
+ *
+ * A REVIEWER WITH NOTHING PUBLISHED IS NOT A 404. That was the same bug's
+ * second half — no feed row meant "not found" for an account that plainly
+ * exists. They get their profile and an honest empty state. `notFound()` is
+ * now reserved for a handle that belongs to nobody.
+ *
+ * INTENTIONAL PRODUCT DIFFERENCES: followers and a bio are not stored, so the
+ * meta line carries the display name and the join date; "People helped" and
+ * "Buyers guided" are not served per member, so the figures are the ones this
+ * reviewer actually has. The Comments and Stats tabs are the member's own
+ * (`/profile`) — a stranger gets Reviews, which is the public surface.
  */
 export default async function ReviewerProfilePage({ params }: Params) {
   const { id } = await params;
@@ -51,6 +63,9 @@ export default async function ReviewerProfilePage({ params }: Params) {
   if (!data) notFound();
 
   const { author, cards } = data;
+  // The handle, when there is one: a profile URL someone pastes should read
+  // `/u/ciel`, not a UUID. Falls back to the id for an account without one.
+  const publicPath = `/u/${author.username ?? author.id}`;
   const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url, role: me.role } : null;
 
   return (
@@ -63,12 +78,20 @@ export default async function ReviewerProfilePage({ params }: Params) {
             avatarUrl={author.avatarUrl}
             avatarHue={hue(author.name)}
             trustLevel={author.trust}
-            meta={author.username && author.name !== author.username ? [author.name] : []}
+            meta={[
+              author.username && author.name !== author.username ? author.name : null,
+              joinedLabel(author.joinedAt),
+            ].filter((m): m is string => Boolean(m))}
             stats={[
               {
                 value: String(cards.length),
                 label: "Reviews written",
                 icon: PencilSimple,
+              },
+              {
+                value: String(author.verifiedReviewCount),
+                label: "Verified reviews",
+                icon: SealCheck,
               },
               ...(author.trustScore
                 ? [
@@ -80,17 +103,30 @@ export default async function ReviewerProfilePage({ params }: Params) {
                   ]
                 : []),
             ]}
-            share={<ProfileShareButton name={author.name} path={`/u/${author.id}`} />}
+            share={<ProfileShareButton name={author.name} path={publicPath} />}
           />
         }
       >
         <ProfileTabs />
 
-        <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
-          {cards.map((r, i) => (
-            <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
-          ))}
-        </ul>
+        {cards.length > 0 ? (
+          <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
+            {cards.map((r, i) => (
+              <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
+            ))}
+          </ul>
+        ) : (
+          /* A real reviewer who has not published yet. Saying so is the point
+             of BUG-030's fix — this page used to 404 instead. */
+          <div className="px-4 pt-10 text-center">
+            <p className="text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
+              No published reviews yet
+            </p>
+            <p className="mt-[9px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+              When {author.name} publishes a review, it will appear here.
+            </p>
+          </div>
+        )}
       </ProfileLayout>
       <SiteFooter />
     </div>

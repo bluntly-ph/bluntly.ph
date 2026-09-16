@@ -17,6 +17,38 @@ class BadgeOut(BaseModel):
     awarded_at: datetime
 
 
+class PublicProfileOut(BaseModel):
+    """A reviewer's public identity, resolvable by handle (BUG-030).
+
+    The public profile lives at `/u/{handle}`, and QA reported it 404ing for
+    every real reviewer. Two reasons, both here:
+
+      * the page resolved a reviewer through the review feed's `author_id`,
+        which takes a UUID — so a handle like `/u/ciel` could never match;
+      * a reviewer with no PUBLISHED review has no feed row at all, so an
+        account that plainly exists answered "not found".
+
+    This resolves either spelling and does not depend on the reviewer having
+    published anything. What it deliberately does NOT carry is as much the
+    point as what it does: no email, no role, no staff flags, no earnings, no
+    interests. `/u/{handle}` is a page a stranger can open.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str | None = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    trust_stage: int
+    trust_level_name: str
+    reputation_score: Decimal
+    verified_review_count: int
+    #: Published, not removed. Zero is a real answer — see the docstring.
+    review_count: int = 0
+    created_at: datetime
+
+
 class TrustProgressOut(BaseModel):
     """How far this member is from the next trust stage.
 

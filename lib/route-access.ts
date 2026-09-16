@@ -14,6 +14,7 @@ export const PROTECTED = [
   "/dashboard",
   "/contracts",
   "/profile",
+  "/profile/edit",
   "/settings",
   "/admin",
   "/moderate",

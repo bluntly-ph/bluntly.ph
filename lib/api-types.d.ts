@@ -1271,6 +1271,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/public/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A reviewer's public profile, by username or id
+         * @description Resolve `/u/{handle}` (BUG-030). Public: no session, no private fields.
+         *
+         *     The handle is a username or a UUID, because both are in circulation — the
+         *     site links reviewers by id, and a person typing a profile URL types the
+         *     @handle. Usernames are stored already lowercased and URL-safe
+         *     (`services.username`), so the comparison is folded rather than exact: a
+         *     capitalised link from someone's notes should not 404.
+         *
+         *     Registered before `/{user_id}/...`: `public` is a literal segment, so the
+         *     two shapes cannot collide, but the order makes that obvious to a reader.
+         */
+        get: operations["public_profile_api_v1_users_public__handle__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{user_id}/trust": {
         parameters: {
             query?: never;
@@ -3581,6 +3610,54 @@ export interface components {
         ProviderStatusOut: {
             plagiarism: components["schemas"]["ProviderState"];
             reverse_image: components["schemas"]["ProviderState"];
+        };
+        /**
+         * PublicProfileOut
+         * @description A reviewer's public identity, resolvable by handle (BUG-030).
+         *
+         *     The public profile lives at `/u/{handle}`, and QA reported it 404ing for
+         *     every real reviewer. Two reasons, both here:
+         *
+         *       * the page resolved a reviewer through the review feed's `author_id`,
+         *         which takes a UUID — so a handle like `/u/ciel` could never match;
+         *       * a reviewer with no PUBLISHED review has no feed row at all, so an
+         *         account that plainly exists answered "not found".
+         *
+         *     This resolves either spelling and does not depend on the reviewer having
+         *     published anything. What it deliberately does NOT carry is as much the
+         *     point as what it does: no email, no role, no staff flags, no earnings, no
+         *     interests. `/u/{handle}` is a page a stranger can open.
+         */
+        PublicProfileOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Trust Stage */
+            trust_stage: number;
+            /** Trust Level Name */
+            trust_level_name: string;
+            /** Reputation Score */
+            reputation_score: string;
+            /** Verified Review Count */
+            verified_review_count: number;
+            /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * QAAuthor
@@ -7604,6 +7681,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    public_profile_api_v1_users_public__handle__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProfileOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

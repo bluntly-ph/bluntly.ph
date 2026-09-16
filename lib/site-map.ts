@@ -255,6 +255,16 @@ export const SITE_ROUTES: SiteRoute[] = [
 
   // ------------------------------------------------------------------- Account
   {
+    path: "/profile/edit",
+    file: "app/profile/edit/page.tsx",
+    title: "Edit your profile",
+    group: "Account",
+    access: "signed-in",
+    purpose: "Change your handle, display name, photo and interests in one form.",
+    figma: "No frame — BUSINESS-REQUIRED (BUG-035). The file draws onboarding, which is a different job.",
+    inSitemap: false,
+  },
+  {
     path: "/profile",
     file: "app/profile/page.tsx",
     title: "Your profile",

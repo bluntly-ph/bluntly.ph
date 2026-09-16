@@ -164,7 +164,16 @@ export const TRUST_POINTS: TrustPoint[] = [
     text: "We require proof of purchase for all affiliate reviews.",
   },
   { icon: Sparkle, text: "Brands can't pay to influence what people say." },
-  { icon: Eye, text: "Every reviewer's earnings and history are public." },
+  // BUG-032. This read "Every reviewer's earnings and history are public",
+  // which is not true and is not what the product does: earnings are private to
+  // the reviewer and to moderators, and no public surface shows them. A trust
+  // section that makes a false transparency claim is worse than one bullet
+  // short. The owner approved this replacement on 2026-08-20; the Figma frame's
+  // fourth bullet duplicates its third, so there is no design to follow here.
+  {
+    icon: Eye,
+    text: "Seller ratings and reviewer track records are open for anyone to check.",
+  },
 ];
 
 export const FOOTER_LINKS = {

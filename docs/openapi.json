@@ -3974,6 +3974,59 @@
         ]
       }
     },
+    "/api/v1/users/public/{handle}": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "A reviewer's public profile, by username or id",
+        "description": "Resolve `/u/{handle}` (BUG-030). Public: no session, no private fields.\n\nThe handle is a username or a UUID, because both are in circulation \u2014 the\nsite links reviewers by id, and a person typing a profile URL types the\n@handle. Usernames are stored already lowercased and URL-safe\n(`services.username`), so the comparison is folded rather than exact: a\ncapitalised link from someone's notes should not 404.\n\nRegistered before `/{user_id}/...`: `public` is a literal segment, so the\ntwo shapes cannot collide, but the order makes that obvious to a reader.",
+        "operationId": "public_profile_api_v1_users_public__handle__get",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Handle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProfileOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users/{user_id}/trust": {
       "get": {
         "tags": [
@@ -10445,6 +10498,86 @@
           "reverse_image"
         ],
         "title": "ProviderStatusOut"
+      },
+      "PublicProfileOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "trust_stage": {
+            "type": "integer",
+            "title": "Trust Stage"
+          },
+          "trust_level_name": {
+            "type": "string",
+            "title": "Trust Level Name"
+          },
+          "reputation_score": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reputation Score"
+          },
+          "verified_review_count": {
+            "type": "integer",
+            "title": "Verified Review Count"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "trust_stage",
+          "trust_level_name",
+          "reputation_score",
+          "verified_review_count",
+          "created_at"
+        ],
+        "title": "PublicProfileOut",
+        "description": "A reviewer's public identity, resolvable by handle (BUG-030).\n\nThe public profile lives at `/u/{handle}`, and QA reported it 404ing for\nevery real reviewer. Two reasons, both here:\n\n  * the page resolved a reviewer through the review feed's `author_id`,\n    which takes a UUID \u2014 so a handle like `/u/ciel` could never match;\n  * a reviewer with no PUBLISHED review has no feed row at all, so an\n    account that plainly exists answered \"not found\".\n\nThis resolves either spelling and does not depend on the reviewer having\npublished anything. What it deliberately does NOT carry is as much the\npoint as what it does: no email, no role, no staff flags, no earnings, no\ninterests. `/u/{handle}` is a page a stranger can open."
       },
       "QAAuthor": {
         "properties": {

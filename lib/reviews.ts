@@ -295,40 +295,86 @@ export type AuthorProfile = {
   trustStage: number;
   /** 0..100 (ADR-003), shown beside the level name. See lib/trust.ts. */
   trustScore: string | null;
+  /** When the account was created, for the "Joined …" line. */
+  joinedAt: string;
+  /** Published reviews that carry proof. */
+  verifiedReviewCount: number;
+};
+
+/** What `GET /users/public/{handle}` returns. Public fields only. */
+type PublicProfile = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  trust_stage: number;
+  trust_level_name: string;
+  reputation_score: string;
+  verified_review_count: number;
+  review_count: number;
+  created_at: string;
 };
 
 /**
- * A public reviewer profile: the author's public identity plus their published
- * reviews. Built from the same public feed (filtered by `author_id`), so no
- * privileged endpoint is needed — the author block on their own reviews carries
- * everything the header shows. Returns null when the reviewer has nothing public.
+ * A public reviewer profile: the reviewer's public identity plus their
+ * published reviews.
+ *
+ * `handle` is a username or an id, because both are in circulation — the site
+ * links reviewers by id and a person typing a profile URL types the @handle.
+ *
+ * BUG-030. This used to be built from the review feed alone, filtered by
+ * `author_id`, and that was wrong twice over: `author_id` takes a UUID, so
+ * `/u/ciel` could never resolve, and a reviewer with no published review has no
+ * feed row at all — so an account that plainly exists answered "not found".
+ * Identity now comes from `GET /users/public/{handle}`, which needs neither,
+ * and the feed is fetched second with the id it resolves.
+ *
+ * Still returns null for a reviewer who does not exist, which is what the
+ * route turns into a real 404. A reviewer who exists and has published nothing
+ * is NOT null: they get their profile and an empty list, which is the truth.
  */
-export async function getAuthorProfile(authorId: string): Promise<{
+export async function getAuthorProfile(handle: string): Promise<{
   author: AuthorProfile;
   cards: ReviewCardData[];
 } | null> {
+  let profile: PublicProfile;
   try {
-    const items = await apiFetch<FeedItem[]>(
-      `/api/v1/reviews/feed?author_id=${encodeURIComponent(authorId)}&sort=newest&limit=48`,
+    profile = await apiFetch<PublicProfile>(
+      `/api/v1/users/public/${encodeURIComponent(handle)}`,
       { revalidate: 60 },
     );
-    const a = items?.[0]?.author;
-    if (!a) return null;
-    return {
-      author: {
-        id: a.id,
-        name: a.display_name || a.username || "reviewer",
-        username: a.username,
-        avatarUrl: a.avatar_url,
-        trust: a.trust_level_name ?? `Stage ${a.trust_stage}`,
-        trustStage: a.trust_stage,
-        trustScore: a.reputation_score ?? null,
-      },
-      cards: items.map(toCard),
-    };
   } catch {
+    // 404 for an unknown handle, and anything else the API could not answer.
+    // Either way there is no profile to show; the route calls notFound().
     return null;
   }
+
+  let cards: ReviewCardData[] = [];
+  try {
+    const items = await apiFetch<FeedItem[]>(
+      `/api/v1/reviews/feed?author_id=${encodeURIComponent(profile.id)}&sort=newest&limit=48`,
+      { revalidate: 60 },
+    );
+    cards = items.map(toCard);
+  } catch {
+    // The identity resolved; a feed outage costs the reviews, not the page.
+    cards = [];
+  }
+
+  return {
+    author: {
+      id: profile.id,
+      name: profile.display_name || profile.username || "reviewer",
+      username: profile.username,
+      avatarUrl: profile.avatar_url,
+      trust: profile.trust_level_name || `Stage ${profile.trust_stage}`,
+      trustStage: profile.trust_stage,
+      trustScore: profile.reputation_score ?? null,
+      joinedAt: profile.created_at,
+      verifiedReviewCount: profile.verified_review_count,
+    },
+    cards,
+  };
 }
 
 export async function getLandingReviews(): Promise<{

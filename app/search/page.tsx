@@ -166,8 +166,25 @@ export default async function SearchPage({
 
           {/* The frames' SearchBar: 56px at radius 32 with a #323232 hairline, a
             28px magnifier 16px in, the query in 16px Poppins at 0.8px tracking
-            56px in, and a 28px clear glyph 16px from the right edge. */}
-          <div className="max-w-[40rem]">
+            56px in, and a 28px clear glyph 16px from the right edge. Those are
+            the PHONE's numbers and they stay the phone's numbers.
+
+            BUG-034, from `md` up. QA: "the search bar is taller than needed and
+            its width doesn't match the content below it." Both were true, and
+            both came from carrying the mobile frame's proportions onto a
+            desktop page. A 56px field is right at 390 where it is the screen's
+            primary control; at 1440 it sat above a grid of cards it did not
+            line up with, capped at 40rem inside a much wider column, reading as
+            a blown-up phone control rather than a page element.
+
+            So: the frame's 56px on phones, the design system's 48px input
+            height (`--control-input-h`) from `md`, and the cap dropped so the
+            field spans the same content column as the pills and the cards
+            underneath it. The horizontal insets are left alone: the magnifier
+            and the clear control are absolutely positioned and vertically
+            centred, so they follow the height on their own, and narrowing the
+            gutters would only push the text under the clear button. */}
+          <div className="max-w-[40rem] md:max-w-none">
             <RememberSearch q={q} />
             <SearchAutocomplete
               defaultValue={q}
@@ -175,7 +192,7 @@ export default async function SearchPage({
               showClear
               tone="strong"
               recents
-              inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
+              inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)] md:h-[var(--control-input-h)] md:text-[15px]"
             />
           </div>
 

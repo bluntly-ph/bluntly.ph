@@ -16,6 +16,8 @@ import {
   X,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { BackControl } from "@/components/site/BackControl";
+
 import { ReadingTelemetry } from "@/components/review/ReadingTelemetry";
 import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import { disclosureLabel } from "@/components/reviews/disclosure-model";
@@ -148,9 +150,12 @@ export function ReviewDetail({
         aria-label="Review"
         className="sticky top-0 z-30 flex h-[72px] items-center justify-between bg-[var(--accent-primary)] px-4 text-[var(--text-on-brand)] md:hidden"
       >
-        <Link href="/" aria-label="Back" className={`-ml-1.5 ${BAR_BUTTON}`}>
+        {/* BUG-033: this was a Link to "/", so a reader who came from Search
+            lost their results and their place. It goes back now, and only
+            falls back to Home for a review opened directly in a fresh tab. */}
+        <BackControl fallbackHref="/" className={`-ml-1.5 ${BAR_BUTTON}`}>
           <ArrowLeft size={28} />
-        </Link>
+        </BackControl>
 
         <div className="flex items-center gap-2">
           <Link href="/search" aria-label="Search reviews" className={BAR_BUTTON}>

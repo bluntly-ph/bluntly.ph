@@ -27,7 +27,13 @@ from app.models.review import Review
 from app.models.user import TRUST_LEVEL_NAMES, User, UserBadge
 from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
-from app.schemas.user import BadgeOut, RoleUpdate, TrustProgressOut, UserTrustOut
+from app.schemas.user import (
+    BadgeOut,
+    PublicProfileOut,
+    RoleUpdate,
+    TrustProgressOut,
+    UserTrustOut,
+)
 from app.services import contribution_streak, dashboard_service
 from app.services.storage import delete_avatar_object, upload_avatar
 from app.services.trust import next_stage_progress
@@ -150,6 +156,66 @@ def clear_avatar(db: Session = Depends(get_db),
     db.commit()
     if previous:
         delete_avatar_object(previous)
+
+
+@router.get("/public/{handle}", response_model=PublicProfileOut,
+            responses={404: {"model": Problem}},
+            summary="A reviewer's public profile, by username or id")
+def public_profile(handle: str, db: Session = Depends(get_db)) -> PublicProfileOut:
+    """Resolve `/u/{handle}` (BUG-030). Public: no session, no private fields.
+
+    The handle is a username or a UUID, because both are in circulation — the
+    site links reviewers by id, and a person typing a profile URL types the
+    @handle. Usernames are stored already lowercased and URL-safe
+    (`services.username`), so the comparison is folded rather than exact: a
+    capitalised link from someone's notes should not 404.
+
+    Registered before `/{user_id}/...`: `public` is a literal segment, so the
+    two shapes cannot collide, but the order makes that obvious to a reader.
+    """
+    user = _public_user_or_404(db, handle)
+    published = db.scalar(
+        select(func.count(Review.id)).where(
+            Review.author_id == user.id,
+            Review.published_at.isnot(None),
+            Review.is_removed.is_(False),
+        )
+    ) or 0
+    return PublicProfileOut(
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        trust_stage=user.trust_stage,
+        trust_level_name=user.trust_level_name,
+        reputation_score=user.reputation_score,
+        verified_review_count=user.verified_review_count,
+        review_count=published,
+        created_at=user.created_at,
+    )
+
+
+def _public_user_or_404(db: Session, handle: str) -> User:
+    """The account behind a handle or an id, or 404 — never an exception."""
+    handle = (handle or "").strip()
+    if not handle:
+        raise NotFoundError("Reviewer not found.", code="user_not_found")
+
+    try:
+        as_id = uuid.UUID(handle)
+    except ValueError:
+        as_id = None
+    if as_id is not None:
+        user = db.get(User, as_id)
+        if user is not None:
+            return user
+
+    user = db.scalar(
+        select(User).where(func.lower(User.username) == handle.lower())
+    )
+    if user is None:
+        raise NotFoundError("Reviewer not found.", code="user_not_found")
+    return user
 
 
 @router.get("/{user_id}/trust", response_model=UserTrustOut,
