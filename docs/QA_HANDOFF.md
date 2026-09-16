@@ -8,7 +8,7 @@ Engineering verification is not a QA pass. Nothing below should be read as one.
 
 | | |
 | --- | --- |
-| QA baseline SHA | filled in by the release note that accompanies this document — the SHA whose CI is green and whose build is live |
+| QA baseline SHA | the head of `main` at handoff — the frontend froze at `4013c0f`, and every commit after it is documentation and audit tooling only, so the deployed bundle is `4013c0f`'s. The release note names the exact deployed SHA. |
 | Production | https://www.bluntly.ph |
 | Frontend scope | the 49 routes in `lib/site-map.ts` (also `docs/SITEMAP.md`, `/sitemap.xml`) |
 | Evidence | `docs/FRONTEND_AUDIT.md` — page results, journey results, state coverage and evidence limits, generated from the harness output |
