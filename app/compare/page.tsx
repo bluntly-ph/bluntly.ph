@@ -6,6 +6,7 @@ import { ImageSquare, ShieldCheck, Star } from "@phosphor-icons/react/dist/ssr";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { Unavailable } from "@/components/site/Unavailable";
+import { starColor } from "@/components/ui/star-ladder";
 import { getUser } from "@/lib/dal";
 import { getComparison, peso, type ComparisonEntry } from "@/lib/products";
 
@@ -30,23 +31,18 @@ const MAX = 4;
  * in that row — and inventing one on a platform about honest reviews is not a
  * shortcut worth taking.
  */
-export default async function ComparePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ ids?: string }>;
-}) {
+export default async function ComparePage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
   const { ids = "" } = await searchParams;
-  const requested = ids.split(",").map((s) => s.trim()).filter(Boolean);
+  const requested = ids
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const [me, comparison] = await Promise.all([
     getUser().catch(() => null),
-    requested.length >= MIN && requested.length <= MAX
-      ? getComparison(requested)
-      : Promise.resolve(null),
+    requested.length >= MIN && requested.length <= MAX ? getComparison(requested) : Promise.resolve(null),
   ]);
-  const user: HeaderUser = me
-    ? { username: me.username, avatarUrl: me.avatar_url }
-    : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
 
   const wrongCount = requested.length < MIN || requested.length > MAX;
 
@@ -54,12 +50,9 @@ export default async function ComparePage({
     <div className="flex min-h-dvh flex-col bg-[var(--surface-app)]">
       <SiteHeader user={user} />
       <main className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col px-6 py-8 lg:py-10">
-        <h1 className="text-[24px] font-bold text-[var(--text-primary)]">
-          Compare products
-        </h1>
+        <h1 className="text-[24px] font-bold text-[var(--text-primary)]">Compare products</h1>
         <p className="mt-1 max-w-[46rem] text-[14px] text-[var(--text-secondary)]">
-          Verified review scores and what buyers here actually paid, side by
-          side.
+          Verified review scores and what buyers here actually paid, side by side.
         </p>
 
         {wrongCount ? (
@@ -78,18 +71,14 @@ export default async function ComparePage({
                 className="mt-4 rounded-[var(--radius-sm)] bg-[color-mix(in_srgb,var(--accent-primary)_10%,transparent)] px-4 py-3 text-[13px] text-[var(--text-secondary)]"
               >
                 {comparison.not_found.length} of the products in this link
-                {comparison.not_found.length === 1 ? " is" : " are"} no longer
-                available. Showing the rest.
+                {comparison.not_found.length === 1 ? " is" : " are"} no longer available. Showing the rest.
               </p>
             ) : null}
 
             {/* Horizontal scroll is confined to this container so the page
                 body never scrolls sideways on a phone. */}
             <div className="-mx-6 mt-6 overflow-x-auto px-6 lg:mx-0 lg:px-0">
-              <ul
-                className="flex w-max gap-4 lg:w-full"
-                style={{ minWidth: "min(100%, 100%)" }}
-              >
+              <ul className="flex w-max gap-4 lg:w-full" style={{ minWidth: "min(100%, 100%)" }}>
                 {comparison.entries.map((entry) => (
                   <li
                     key={entry.product.id}
@@ -132,16 +121,21 @@ function Column({ entry }: { entry: ComparisonEntry }) {
         {product.canonical_name ?? "Unnamed product"}
       </h2>
       {product.category ? (
-        <p className="mt-0.5 text-[12px] capitalize text-[var(--text-muted)]">
-          {product.category}
-        </p>
+        <p className="mt-0.5 text-[12px] capitalize text-[var(--text-muted)]">{product.category}</p>
       ) : null}
 
       <dl className="mt-3 flex flex-col gap-2 text-[13px]">
         <Row label="Rating">
           {entry.avg_rating ? (
             <span className="inline-flex items-center gap-1">
-              <Star size={13} weight="fill" className="text-[var(--accent-primary)]" aria-hidden="true" />
+              {/* The rating ladder, as everywhere else a filled star carries a
+                  value (components/ui/star-ladder.ts). */}
+              <Star
+                size={13}
+                weight="fill"
+                style={{ color: starColor(Number(entry.avg_rating)) }}
+                aria-hidden="true"
+              />
               {Number(entry.avg_rating).toFixed(1)}
             </span>
           ) : (
@@ -151,16 +145,19 @@ function Column({ entry }: { entry: ComparisonEntry }) {
         <Row label="Verified reviews">
           {entry.verified_review_count > 0 ? (
             <span className="inline-flex items-center gap-1">
-              <ShieldCheck size={13} weight="fill" className="text-[var(--accent-trust)]" aria-hidden="true" />
+              <ShieldCheck
+                size={13}
+                weight="fill"
+                className="text-[var(--accent-trust)]"
+                aria-hidden="true"
+              />
               {entry.verified_review_count}
             </span>
           ) : (
             <Missing />
           )}
         </Row>
-        <Row label="Reviews">
-          {entry.review_count > 0 ? entry.review_count : <Missing />}
-        </Row>
+        <Row label="Reviews">{entry.review_count > 0 ? entry.review_count : <Missing />}</Row>
         <Row label="What buyers paid">
           {price.sufficient ? (
             <span>
@@ -174,9 +171,7 @@ function Column({ entry }: { entry: ComparisonEntry }) {
             </span>
           )}
         </Row>
-        <Row label="Typical price">
-          {price.sufficient ? peso(price.median) : <Missing />}
-        </Row>
+        <Row label="Typical price">{price.sufficient ? peso(price.median) : <Missing />}</Row>
       </dl>
 
       <Link
@@ -214,8 +209,8 @@ function EmptyState({ note }: { note?: string } = {}) {
         {note ?? `Pick ${MIN} to ${MAX} products to compare`}
       </p>
       <p className="mt-1 max-w-[26rem] text-[14px] text-[var(--text-secondary)]">
-        Search for a product and use &ldquo;Compare&rdquo; on its review, or
-        share a link like <code>/compare?ids=…</code>.
+        Search for a product and use &ldquo;Compare&rdquo; on its review, or share a link like{" "}
+        <code>/compare?ids=…</code>.
       </p>
       <Link
         href="/search"

@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowsLeftRight,
-  Compass,
-  Megaphone,
-  Question,
-  UserCircle,
-} from "@phosphor-icons/react/dist/ssr";
-
 import { FeedCard } from "@/components/feed/FeedCard";
+import { BrowseLayout, RAIL_LABEL, TakePartGroup } from "@/components/site/BrowseRails";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { INTERESTS } from "@/lib/interests";
@@ -60,17 +53,12 @@ export default async function FeedPage({
     }),
   ]);
 
-  const headerUser: HeaderUser = me
-    ? { username: me.username, avatarUrl: me.avatar_url }
-    : null;
+  const headerUser: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
   // The reader's chosen slugs, resolved to their proper labels. An interest the
   // vocabulary no longer knows is dropped rather than rendered as a raw slug.
   const chosen = (me?.interests ?? []) as string[];
-  const railCategories = (
-    chosen.length > 0
-      ? INTERESTS.filter((i) => chosen.includes(i.slug))
-      : INTERESTS.slice(0, 8)
-  );
+  const railCategories =
+    chosen.length > 0 ? INTERESTS.filter((i) => chosen.includes(i.slug)) : INTERESTS.slice(0, 8);
   const hasMore = (cards?.length ?? 0) === PAGE_SIZE;
 
   return (
@@ -78,96 +66,10 @@ export default async function FeedPage({
       <SiteHeader user={headerUser} />
 
       <main className="flex-1">
-        <div className="mx-auto w-full max-w-[76rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
-          <div className="lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start lg:gap-10 xl:grid-cols-[11rem_minmax(0,1fr)_17rem]">
-            {/* Left rail: where else you can go. Hidden below `lg`, where the
-                site header and bottom bar already carry navigation — a rail
-                squeezed onto a phone is just a menu nobody asked to open. */}
-            <nav aria-label="Browse" className="hidden lg:block lg:sticky lg:top-28">
-              <ul className="flex flex-col gap-0.5">
-                <RailLink href="/feed" icon={Compass} label="Feed" current />
-                <RailLink href="/search" icon={ArrowsLeftRight} label="Reviews" />
-                <RailLink href="/questions" icon={Question} label="Q&amp;A" />
-                <RailLink href="/requests" icon={Megaphone} label="Requests" />
-                <RailLink href="/profile" icon={UserCircle} label="Profile" />
-              </ul>
-            </nav>
-
-            <div className="min-w-0">
-              <h1 className="text-[24px] font-bold text-[var(--text-primary)] lg:text-[30px]">
-                {recent ? "Recent reviews" : "For you"}
-              </h1>
-              <p className="mt-1 max-w-[46ch] text-[14px] text-[var(--text-secondary)]">
-                {recent
-                  ? "Everything the community has published lately, newest first."
-                  : me
-                    ? "Ranked by how helpful people found it, weighted towards what you said you care about."
-                    : "Ranked by how helpful people found it. Sign in and we'll weight it towards your interests."}
-              </p>
-
-              <div
-                role="tablist"
-                aria-label="Feed"
-                className="mt-5 flex gap-1 border-b border-[var(--border-subtle)]"
-              >
-                <Tab href="/feed" label="For you" active={!recent} />
-                <Tab href="/feed?tab=recent" label="Recent" active={recent} />
-              </div>
-
-              {cards === null ? (
-                <Empty
-                  title="We couldn't load the feed"
-                  body="That's on us, not you. Try again in a moment."
-                />
-              ) : cards.length === 0 ? (
-                <Empty
-                  title={pageNum > 1 ? "That's the end of the feed" : "Nothing here yet"}
-                  body={
-                    pageNum > 1
-                      ? "You've reached the last page."
-                      : "No published reviews match this view yet."
-                  }
-                />
-              ) : (
-                <>
-                  <div className="mt-1">
-                    {cards.map((card, i) => (
-                      <FeedCard key={card.id} review={card} priority={i === 0} />
-                    ))}
-                  </div>
-
-                  {/* Page links rather than infinite scroll: a feed you cannot
-                      get back to the bottom of is a feed you cannot share. */}
-                  {pageNum > 1 || hasMore ? (
-                    <nav
-                      aria-label="Feed pages"
-                      className="mt-6 flex items-center justify-between"
-                    >
-                      {pageNum > 1 ? (
-                        <PageLink
-                          href={pageHref(recent, pageNum - 1)}
-                          label="← Newer"
-                        />
-                      ) : (
-                        <span />
-                      )}
-                      {hasMore ? (
-                        <PageLink
-                          href={pageHref(recent, pageNum + 1)}
-                          label="Older →"
-                        />
-                      ) : (
-                        <span />
-                      )}
-                    </nav>
-                  ) : null}
-                </>
-              )}
-            </div>
-
-            {/* Right rail: context, not more feed. Appears at `xl` only —
-                below that the middle column is better served by the space. */}
-            <aside className="hidden xl:block xl:sticky xl:top-28">
+        <BrowseLayout
+          current="feed"
+          aside={
+            <>
               <h2 className={RAIL_LABEL}>
                 {chosen.length > 0 ? "Your interests" : "Browse by category"}
               </h2>
@@ -195,33 +97,71 @@ export default async function FeedPage({
                   and this feed starts with them.
                 </p>
               ) : null}
+              <TakePartGroup className="mt-8" />
+            </>
+          }
+        >
+          <h1 className="text-[24px] font-bold text-[var(--text-primary)] lg:text-[30px]">
+            {recent ? "Recent reviews" : "For you"}
+          </h1>
+          <p className="mt-1 max-w-[46ch] text-[14px] text-[var(--text-secondary)]">
+            {recent
+              ? "Everything the community has published lately, newest first."
+              : me
+                ? "Ranked by how helpful people found it, weighted towards what you said you care about."
+                : "Ranked by how helpful people found it. Sign in and we'll weight it towards your interests."}
+          </p>
 
-              <h2 className={`${RAIL_LABEL} mt-8`}>Take part</h2>
-              <ul className="mt-3 flex flex-col gap-2 text-[13px]">
-                <li>
-                  <Link href="/reviews/new" className={RAIL_ACTION}>
-                    Write a review
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/questions/new" className={RAIL_ACTION}>
-                    Ask a question
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/requests" className={RAIL_ACTION}>
-                    Request a review
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/compare" className={RAIL_ACTION}>
-                    Compare products
-                  </Link>
-                </li>
-              </ul>
-            </aside>
+          <div
+            role="tablist"
+            aria-label="Feed"
+            className="mt-5 flex gap-1 border-b border-[var(--border-subtle)]"
+          >
+            <Tab href="/feed" label="For you" active={!recent} />
+            <Tab href="/feed?tab=recent" label="Recent" active={recent} />
           </div>
-        </div>
+
+          {cards === null ? (
+            <Empty
+              title="We couldn't load the feed"
+              body="That's on us, not you. Try again in a moment."
+            />
+          ) : cards.length === 0 ? (
+            <Empty
+              title={pageNum > 1 ? "That's the end of the feed" : "Nothing here yet"}
+              body={
+                pageNum > 1
+                  ? "You've reached the last page."
+                  : "No published reviews match this view yet."
+              }
+            />
+          ) : (
+            <>
+              <div className="mt-1">
+                {cards.map((card, i) => (
+                  <FeedCard key={card.id} review={card} priority={i === 0} />
+                ))}
+              </div>
+
+              {/* Page links rather than infinite scroll: a feed you cannot
+                      get back to the bottom of is a feed you cannot share. */}
+              {pageNum > 1 || hasMore ? (
+                <nav aria-label="Feed pages" className="mt-6 flex items-center justify-between">
+                  {pageNum > 1 ? (
+                    <PageLink href={pageHref(recent, pageNum - 1)} label="← Newer" />
+                  ) : (
+                    <span />
+                  )}
+                  {hasMore ? (
+                    <PageLink href={pageHref(recent, pageNum + 1)} label="Older →" />
+                  ) : (
+                    <span />
+                  )}
+                </nav>
+              ) : null}
+            </>
+          )}
+        </BrowseLayout>
       </main>
 
       <SiteFooter />
@@ -237,15 +177,7 @@ function pageHref(recent: boolean, page: number): string {
   return qs ? `/feed?${qs}` : "/feed";
 }
 
-function Tab({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
+function Tab({ href, label, active }: { href: string; label: string; active: boolean }) {
   return (
     <Link
       href={href}
@@ -260,36 +192,6 @@ function Tab({
     >
       {label}
     </Link>
-  );
-}
-
-function RailLink({
-  href,
-  icon: Icon,
-  label,
-  current = false,
-}: {
-  href: string;
-  icon: typeof Compass;
-  label: string;
-  current?: boolean;
-}) {
-  return (
-    <li>
-      <Link
-        href={href}
-        aria-current={current ? "page" : undefined}
-        className={[
-          "flex items-center gap-2.5 rounded-[var(--radius-md)] px-3 py-2 text-[14px]",
-          current
-            ? "font-semibold text-[var(--accent-primary)]"
-            : "text-[var(--text-secondary)] hover:bg-[var(--line-hairline-10)] hover:text-[var(--text-primary)]",
-        ].join(" ")}
-      >
-        <Icon size={18} weight={current ? "fill" : "regular"} />
-        {label}
-      </Link>
-    </li>
   );
 }
 
@@ -312,8 +214,3 @@ function PageLink({ href, label }: { href: string; label: string }) {
     </Link>
   );
 }
-
-const RAIL_LABEL =
-  "text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]";
-const RAIL_ACTION =
-  "text-[var(--text-secondary)] hover:text-[var(--accent-primary)]";

@@ -15,8 +15,13 @@ import { FeaturedReviewCard } from "./FeaturedReviewCard";
  * down, a 56px field with a 10% hairline, a 20px magnifier at 30% ink 14px in,
  * the 12px Light placeholder 44px in, and a 32px orange disc 8px from the right
  * with a 20px arrow; 44px down, the tilted review card group, 450px tall because
- * its two annotation pills sit below the card — "Earned" 30px under it at the
- * right, the question 218px under it at the left.
+ * the question pill sits 218px under the card at the left.
+ *
+ * OWNER DESIGN DIFFERENCE (2026-09-16): the frame puts the "Earned" pill 30px
+ * BELOW the card at the right. The owner asked for it on the card's upper-right
+ * instead, as a badge belonging to the card — so it is drawn inside
+ * FeaturedReviewCard's own composition, pinned to the tilted card's corner, and
+ * never positioned against the viewport.
  *
  * From `md` up there is no frame: the two-column split starts at 768px, and the
  * pills sit on the card. The split used to wait for 1024px while the header had
@@ -78,16 +83,16 @@ export function Hero({ featured }: { featured: FeaturedData }) {
           </form>
         </div>
 
-        <div className="animate-fade-up delay-2 relative mx-auto h-[450px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-4">
-          <FeaturedReviewCard featured={featured} />
-          {/* Anchored to the card's right edge, not to a fixed left offset: the
-              frame's x226 puts the pill's right edge 4px past the 358px column,
-              and that relationship — not the 226 — is what holds on a 360 or
-              375px phone. */}
-          <span className="absolute right-[-4px] top-[238px] z-10 inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent-primary)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-on-brand)] shadow-[var(--shadow-sheet)] md:left-auto md:right-0 md:top-0">
-            <DotOutline size={16} aria-hidden="true" />
-            {FEATURED_REVIEW.earned}
-          </span>
+        <div className="animate-fade-up delay-2 relative mx-auto h-[450px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-6">
+          <FeaturedReviewCard
+            featured={featured}
+            badge={
+              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent-primary)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-on-brand)] shadow-[var(--shadow-sheet)]">
+                <DotOutline size={16} aria-hidden="true" />
+                {FEATURED_REVIEW.earned}
+              </span>
+            }
+          />
           <span className="absolute left-[11px] top-[426px] z-10 inline-flex h-6 items-center whitespace-nowrap rounded-[12px] bg-[var(--surface-app)] pl-1 pr-3 text-[10px] leading-none text-[var(--text-primary)] shadow-[var(--shadow-sheet)] md:bottom-0 md:left-2 md:top-auto">
             <DotOutline size={16} aria-hidden="true" className="text-[var(--accent-primary)]" />
             &ldquo;{FEATURED_REVIEW.question}&rdquo;

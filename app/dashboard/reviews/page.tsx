@@ -30,6 +30,7 @@ export default async function DashboardReviewsPage() {
   return (
     <DashboardScreen
       user={{ username: me.username, avatarUrl: me.avatar_url }}
+      title="Your reviews"
       heroHeight={118}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       /* The frame's hero IS the nav row: its sheet begins 86px below it, with

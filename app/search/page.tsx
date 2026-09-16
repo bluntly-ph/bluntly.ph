@@ -8,10 +8,17 @@ import { RememberSearch } from "@/components/search/RememberSearch";
 import { SearchAutocomplete } from "@/components/search/SearchAutocomplete";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { SearchTabs, type SearchTab } from "@/components/search/SearchTabs";
-import { parseReviewSort } from "@/components/search/search-tabs-model";
+import { parseReviewSort, searchTabHref } from "@/components/search/search-tabs-model";
 import { ReviewListRow } from "@/components/review/ReviewListRow";
 import { Unavailable } from "@/components/site/Unavailable";
 import { ActionMenu } from "@/components/site/ActionMenu";
+import {
+  BrowseLayout,
+  RAIL_ACTION,
+  RAIL_LABEL,
+  RailGroup,
+  TakePartGroup,
+} from "@/components/site/BrowseRails";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { CATEGORIES } from "@/lib/landing-data";
@@ -24,14 +31,16 @@ export const metadata: Metadata = {
   title: "Search — bluntly",
 };
 
+/** The rail's category links: the taxonomy reviews are actually filed under. */
+const RAIL_CATEGORIES = CATEGORIES.filter((c) => c.slug !== "trending");
+
 export default async function SearchPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; category?: string; from?: string; tab?: string; sort?: string }>;
 }) {
   const { q = "", category, from, tab, sort: rawSort } = await searchParams;
-  const activeTab: SearchTab =
-    tab === "questions" ? "questions" : tab === "sellers" ? "sellers" : "reviews";
+  const activeTab: SearchTab = tab === "questions" ? "questions" : tab === "sellers" ? "sellers" : "reviews";
   const sort = parseReviewSort(rawSort);
   const activeCategory = CATEGORIES.find((c) => c.slug === category);
   const searching = Boolean(q.trim() || category);
@@ -45,17 +54,11 @@ export default async function SearchPage({
   // and will fetch its own when it is visited.
   const [me, results, questions, sellers] = await Promise.all([
     getUser().catch(() => null),
-    activeTab === "reviews"
-      ? searchReviews({ q, category, sort, limit: 24 })
-      : Promise.resolve(null),
-    activeTab === "questions"
-      ? getQuestions(undefined, { q, limit: 24 })
-      : Promise.resolve(null),
+    activeTab === "reviews" ? searchReviews({ q, category, sort, limit: 24 }) : Promise.resolve(null),
+    activeTab === "questions" ? getQuestions(undefined, { q, limit: 24 }) : Promise.resolve(null),
     activeTab === "sellers" ? searchSellers(q, 24) : Promise.resolve(null),
   ]);
-  const user: HeaderUser = me
-    ? { username: me.username, avatarUrl: me.avatar_url }
-    : null;
+  const user: HeaderUser = me ? { username: me.username, avatarUrl: me.avatar_url } : null;
 
   const heading = q
     ? `Results for “${q}”`
@@ -81,108 +84,182 @@ export default async function SearchPage({
           the two together. Narrowing the column is what stops this reading as a
           phone layout stretched to fill a monitor.
           Phone: the frames' 16px gutter, and rows that run edge to edge. */}
-      <main className="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-4 pb-8 pt-3 md:px-6 md:py-8 lg:py-10">
-        {fromCategories ? (
-          <Link
-            href="/categories"
-            className="mb-5 inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-          >
-            <CaretLeft size={16} /> All categories
-          </Link>
-        ) : null}
+      {/* WEBSITE (`lg` and up): the browsing rails, so the filters and the rest
+          of the site sit beside the results instead of behind a sheet — the
+          same frame /feed, /questions and /requests use. The phone keeps the
+          frame's own gutter and rhythm. */}
+      <main className="flex flex-1 flex-col">
+        <BrowseLayout
+          current="reviews"
+          outerClassName="mx-auto flex w-full max-w-[52rem] flex-1 flex-col px-4 pb-8 pt-3 md:px-6 md:py-8 lg:max-w-[76rem] lg:px-10 lg:py-10"
+          contentClassName="flex flex-1 flex-col"
+          aside={
+            <>
+              <RailGroup title="Refine">
+                <ul className="mt-3 flex flex-col gap-2 text-[13px]">
+                  <li>
+                    <Link
+                      href={searchTabHref("reviews", { q, sort: "wilson", from })}
+                      aria-current={sort === "wilson" && !category ? "true" : undefined}
+                      className={
+                        sort === "wilson" ? "font-semibold text-[var(--accent-primary)]" : RAIL_ACTION
+                      }
+                    >
+                      Most helpful
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href={searchTabHref("reviews", { q, category, sort: "newest", from })}
+                      className={
+                        sort === "newest" ? "font-semibold text-[var(--accent-primary)]" : RAIL_ACTION
+                      }
+                    >
+                      Latest
+                    </Link>
+                  </li>
+                </ul>
+              </RailGroup>
 
-        {/* The frames' SearchBar: 56px at radius 32 with a #323232 hairline, a
+              <h2 className={`${RAIL_LABEL} mt-8`}>Category</h2>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                <li>
+                  <Link
+                    href={searchTabHref("reviews", { q, sort, from })}
+                    className={`inline-block rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] shadow-[var(--shadow-hairline-inset)] ${
+                      category
+                        ? "text-[var(--text-secondary)] hover:text-[var(--accent-primary)]"
+                        : "font-semibold text-[var(--accent-primary)]"
+                    }`}
+                  >
+                    All
+                  </Link>
+                </li>
+                {RAIL_CATEGORIES.map((c) => (
+                  <li key={c.slug}>
+                    <Link
+                      href={searchTabHref("reviews", { q, category: c.slug, sort, from })}
+                      className={`inline-block rounded-[var(--radius-pill)] px-3 py-1.5 text-[13px] shadow-[var(--shadow-hairline-inset)] ${
+                        category === c.slug
+                          ? "font-semibold text-[var(--accent-primary)]"
+                          : "text-[var(--text-secondary)] hover:text-[var(--accent-primary)]"
+                      }`}
+                    >
+                      {c.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              <TakePartGroup className="mt-8" />
+            </>
+          }
+        >
+          {fromCategories ? (
+            <Link
+              href="/categories"
+              className="mb-5 inline-flex items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              <CaretLeft size={16} /> All categories
+            </Link>
+          ) : null}
+
+          {/* The frames' SearchBar: 56px at radius 32 with a #323232 hairline, a
             28px magnifier 16px in, the query in 16px Poppins at 0.8px tracking
             56px in, and a 28px clear glyph 16px from the right edge. */}
-        <div className="max-w-[40rem]">
-          <RememberSearch q={q} />
-          <SearchAutocomplete
-            defaultValue={q}
-            placeholder="Search products, reviews, or ask a question"
-            showClear
-            tone="strong"
-            recents
-            inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
-          />
-        </div>
+          <div className="max-w-[40rem]">
+            <RememberSearch q={q} />
+            <SearchAutocomplete
+              defaultValue={q}
+              placeholder="Search products, reviews, or ask a question"
+              showClear
+              tone="strong"
+              recents
+              inputClassName="h-14 w-full rounded-[32px] border border-[var(--base-gray-600)] bg-[var(--surface-app)] pl-[56px] pr-[52px] text-[16px] tracking-[0.8px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus-visible:border-[var(--accent-primary)]"
+            />
+          </div>
 
-        <SearchTabs active={activeTab} q={q} category={category} sort={sort} from={from} />
+          <SearchTabs active={activeTab} q={q} category={category} sort={sort} from={from} />
 
-        {/* All filters / Sort. The category, a real filter, lives in the All
+          {/* All filters / Sort. The category, a real filter, lives in the All
             filters sheet and shows as an applied chip beside the pills. Questions
             and sellers serve neither a filter nor an order, so the pills are not
             drawn there rather than drawn inert. */}
-        {activeTab === "reviews" ? (
-          <SearchFilterBar q={q} category={category} sort={sort} from={from} />
-        ) : null}
+          {/* The pills are the phone's control. From `lg` the rail carries the
+              same category and order, so drawing both would be two controls
+              for one choice. */}
+          {activeTab === "reviews" ? (
+            <div className="lg:hidden">
+              <SearchFilterBar q={q} category={category} sort={sort} from={from} />
+            </div>
+          ) : null}
 
-        {/* The phone frames go straight from the tabs to the results, so the
+          {/* The phone frames go straight from the tabs to the results, so the
             heading is kept for screen readers and hidden below `md`. */}
-        <h1 className="mt-8 text-[20px] font-bold text-[var(--text-primary)] max-md:sr-only">
-          {heading}
-        </h1>
+          <h1 className="mt-8 text-[20px] font-bold text-[var(--text-primary)] max-md:sr-only">{heading}</h1>
 
-        {activeTab === "sellers" ? (
-          sellers === null ? (
-            <Unavailable what="sellers" />
-          ) : sellers.length > 0 ? (
+          {activeTab === "sellers" ? (
+            sellers === null ? (
+              <Unavailable what="sellers" />
+            ) : sellers.length > 0 ? (
+              <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
+                {sellers.map((seller) => (
+                  <SellerResultRow key={seller.id} seller={seller} />
+                ))}
+              </ul>
+            ) : (
+              <EmptyResults
+                icon={<Storefront size={40} className="text-[var(--text-muted)]" />}
+                title={searching ? "No sellers found" : "No sellers yet"}
+                body={
+                  searching
+                    ? "Try the store name as the marketplace shows it."
+                    : "Stores appear here once a buyer rates one."
+                }
+              />
+            )
+          ) : activeTab === "questions" ? (
+            questions === null ? (
+              <Unavailable what="questions" />
+            ) : questions.length > 0 ? (
+              <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
+                {questions.map((question) => (
+                  <QuestionResultRow key={question.id} question={question} />
+                ))}
+              </ul>
+            ) : (
+              <EmptyResults
+                icon={<ChatCircle size={40} className="text-[var(--text-muted)]" />}
+                title={searching ? "No questions found" : "Ask about a product"}
+                body={
+                  searching
+                    ? "Try a different product name or wording."
+                    : "Search for a product to see what buyers are asking about it."
+                }
+              />
+            )
+          ) : results === null ? (
+            <Unavailable what="reviews" />
+          ) : results.length > 0 ? (
+            // A list, not a grid — see ReviewListRow. Each row's title is an h2,
+            // following the page h1 directly with no section heading between.
             <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
-              {sellers.map((seller) => (
-                <SellerResultRow key={seller.id} seller={seller} />
+              {results.map((r, i) => (
+                <ReviewListRow key={r.id} review={r} priority={i === 0} />
               ))}
             </ul>
           ) : (
             <EmptyResults
-              icon={<Storefront size={40} className="text-[var(--text-muted)]" />}
-              title={searching ? "No sellers found" : "No sellers yet"}
+              icon={<MagnifyingGlass size={40} className="text-[var(--text-muted)]" />}
+              title={searching ? "No reviews found" : "Find the product you bought"}
               body={
                 searching
-                  ? "Try the store name as the marketplace shows it."
-                  : "Stores appear here once a buyer rates one."
+                  ? "Try a different product name, brand, or category."
+                  : "No need for the exact model. Just type what you know."
               }
             />
-          )
-        ) : activeTab === "questions" ? (
-          questions === null ? (
-            <Unavailable what="questions" />
-          ) : questions.length > 0 ? (
-            <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
-              {questions.map((question) => (
-                <QuestionResultRow key={question.id} question={question} />
-              ))}
-            </ul>
-          ) : (
-            <EmptyResults
-              icon={<ChatCircle size={40} className="text-[var(--text-muted)]" />}
-              title={searching ? "No questions found" : "Ask about a product"}
-              body={
-                searching
-                  ? "Try a different product name or wording."
-                  : "Search for a product to see what buyers are asking about it."
-              }
-            />
-          )
-        ) : results === null ? (
-          <Unavailable what="reviews" />
-        ) : results.length > 0 ? (
-          // A list, not a grid — see ReviewListRow. Each row's title is an h2,
-          // following the page h1 directly with no section heading between.
-          <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
-            {results.map((r, i) => (
-              <ReviewListRow key={r.id} review={r} priority={i === 0} />
-            ))}
-          </ul>
-        ) : (
-          <EmptyResults
-            icon={<MagnifyingGlass size={40} className="text-[var(--text-muted)]" />}
-            title={searching ? "No reviews found" : "Find the product you bought"}
-            body={
-              searching
-                ? "Try a different product name, brand, or category."
-                : "No need for the exact model. Just type what you know."
-            }
-          />
-        )}
+          )}
+        </BrowseLayout>
       </main>
       <ActionMenu />
       <SiteFooter />
@@ -194,15 +271,7 @@ export default async function SearchPage({
  * The shared empty state for both tabs — one component so "no reviews" and "no
  * questions" cannot drift apart in spacing or voice.
  */
-function EmptyResults({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
+function EmptyResults({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
       {icon}

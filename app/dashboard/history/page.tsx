@@ -44,6 +44,7 @@ export default async function HistoryPage({
   return (
     <DashboardScreen
       user={{ username: me.username, avatarUrl: me.avatar_url }}
+      title="Earnings history"
       heroHeight={208}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       hero={

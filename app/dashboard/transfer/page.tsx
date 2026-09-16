@@ -33,6 +33,7 @@ export default async function TransferPage() {
   return (
     <DashboardScreen
       user={{ username: me.username, avatarUrl: me.avatar_url }}
+      title="Transfer"
       heroHeight={401}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       hero={

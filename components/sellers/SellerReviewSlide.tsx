@@ -26,7 +26,11 @@ export function SellerReviewSlide({ review }: { review: SellerReview }) {
   const prose = review.comment ?? review.title ?? "";
 
   return (
-    <li className="flex min-h-[242px] w-[264px] snap-start flex-col rounded-[16px] border border-[#dedada] bg-[#f6f6f6] p-5 text-[var(--text-primary)]">
+    // `relative`: the sr-only text inside is absolutely positioned, and without
+    // a containing block here it resolved against an ancestor outside the
+    // carousel — which pushed the PAGE 50px wide at 320 and 10px at 360, a
+    // sideways scroll on the narrowest phones (audit, 2026-09-16).
+    <li className="relative flex min-h-[242px] w-[264px] snap-start flex-col rounded-[16px] border border-[#dedada] bg-[#f6f6f6] p-5 text-[var(--text-primary)]">
       <div className="flex items-center gap-2">
         <ReviewerInitial name={name} />
         <div className="min-w-0">

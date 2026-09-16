@@ -24,6 +24,7 @@ import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
  */
 export function DashboardScreen({
   user,
+  title,
   backHref = "/dashboard",
   hero,
   heroHeight = 402,
@@ -32,6 +33,12 @@ export function DashboardScreen({
 }: {
   /** For the site header, which the website shows above the screen. */
   user: HeaderUser;
+  /**
+   * What the screen is. The frames draw no title — the hero and the sheet are
+   * the whole composition — so it is read out on the phone and drawn on the
+   * website, where a page with no heading is just a slab of figures.
+   */
+  title: string;
   backHref?: string;
   hero: React.ReactNode;
   /**
@@ -79,6 +86,9 @@ export function DashboardScreen({
           top edge reads as the sheet sitting on the gradient rather than as a
           gap between two blocks. */}
         <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] pt-6 lg:mt-0 lg:min-h-0 lg:rounded-none lg:pt-0">
+          <h1 className="sr-only px-4 lg:not-sr-only lg:mb-5 lg:px-0 lg:text-[24px] lg:font-bold lg:text-[var(--text-primary)]">
+            {title}
+          </h1>
           {children}
         </div>
       </div>

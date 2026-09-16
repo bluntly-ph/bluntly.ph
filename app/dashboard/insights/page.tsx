@@ -33,10 +33,7 @@ export const metadata: Metadata = { title: "Insights — bluntly" };
 export default async function InsightsPage() {
   const me = await requireOnboardedUser();
   // Independent of each other, so they are not serialised.
-  const [summary, streak] = await Promise.all([
-    getDashboardSummary("30d"),
-    getStreak(),
-  ]);
+  const [summary, streak] = await Promise.all([getDashboardSummary("30d"), getStreak()]);
 
   // Total daily views across the reviewer's own reviews. Every row carries a
   // dense per-day series over the same window, so summing them is exact.
@@ -80,6 +77,12 @@ export default async function InsightsPage() {
         />
 
         <div className="relative -mt-8 min-h-[40vh] rounded-t-[28px] bg-[var(--surface-app)] px-5 pb-12 pt-8 lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-8">
+          {/* The frame draws no title — the band and the sheet are the whole
+              composition — so it is read out on the phone and drawn on the
+              website, where a page with no heading is a slab of figures. */}
+          <h1 className="sr-only lg:not-sr-only lg:col-span-2 lg:mb-2 lg:text-[24px] lg:font-bold lg:text-[var(--text-primary)]">
+            Insights
+          </h1>
           <StreakCard streak={streak} />
 
           <section aria-labelledby="views-heading" className="mt-10 lg:mt-0">
@@ -119,8 +122,8 @@ export default async function InsightsPage() {
                 {/* The frame's series is unlabelled. On a product that pays
                     people, an unlabelled curve reads as money. */}
                 <p className="mt-3 text-[11px] text-[var(--text-muted)]">
-                  Daily views &mdash; times your reviews were opened, not unique
-                  readers. {compactCount(totalViews)} in the last 30 days.
+                  Daily views &mdash; times your reviews were opened, not unique readers.{" "}
+                  {compactCount(totalViews)} in the last 30 days.
                 </p>
               </>
             ) : (

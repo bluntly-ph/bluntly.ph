@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { DotOutline, DotsThree } from "@phosphor-icons/react/dist/ssr";
 
 import { HonestyScore } from "@/components/ui/HonestyScore";
@@ -19,8 +20,12 @@ import type { FeaturedData } from "@/lib/reviews";
  *
  * The overflow glyph is drawn as decoration: the whole card is one link, and a
  * second control inside it would nest interactive content.
+ *
+ * `badge` is drawn inside this composition, pinned to the tilted card's
+ * upper-right corner, so it travels with the card at every width instead of
+ * being placed against the viewport (see Hero: owner direction, 2026-09-16).
  */
-export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
+export function FeaturedReviewCard({ featured, badge }: { featured: FeaturedData; badge?: ReactNode }) {
   const handle = featured.username ?? featured.author;
   // The layers take the column's width rather than a fixed 358px: at 390 the
   // column IS 358px, so the frame is unchanged, and on a narrower phone (360,
@@ -90,6 +95,16 @@ export function FeaturedReviewCard({ featured }: { featured: FeaturedData }) {
 
         <DotsThree size={24} aria-hidden="true" className="absolute right-3 top-3" />
       </Link>
+
+      {/* The card is rotated -5deg about its own centre, which lifts its
+          top-right corner to roughly the composition's (right - 10, top): the
+          same relationship at 320 as at 430, because the card's width follows
+          the column. So the badge hangs off that corner — right-aligned to the
+          composition and half a badge above its top edge — and it stays
+          attached however wide the column gets. */}
+      {badge ? (
+        <div className="pointer-events-none absolute right-[-4px] top-[-12px] z-10">{badge}</div>
+      ) : null}
     </div>
   );
 }

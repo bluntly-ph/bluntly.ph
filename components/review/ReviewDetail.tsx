@@ -26,13 +26,7 @@ import { ShareButton } from "@/components/review/ShareButton";
 import type { HeaderUser } from "@/components/site/SiteHeader";
 import { StarRow } from "@/components/sellers/SellerIdentity";
 import { HonestyScore } from "@/components/ui/HonestyScore";
-import {
-  ageLabel,
-  splitHeadline,
-  usablePhoto,
-  type ReviewFull,
-  type Verdict,
-} from "@/lib/reviews";
+import { ageLabel, splitHeadline, usablePhoto, type ReviewFull, type Verdict } from "@/lib/reviews";
 import { trustScore } from "@/lib/trust";
 
 /**
@@ -175,12 +169,7 @@ export function ReviewDetail({
               <ShoppingBagOpen size={28} />
             </a>
           ) : null}
-          <ReviewOverflowMenu
-            title={review.title}
-            reviewId={review.id}
-            canReport={!isOwnReview}
-            onBar
-          />
+          <ReviewOverflowMenu title={review.title} reviewId={review.id} canReport={!isOwnReview} onBar />
           {/* The 40px avatar ends on the 16px gutter, 14px past the overflow. */}
           <Link
             href="/profile"
@@ -188,7 +177,13 @@ export function ReviewDetail({
             className="ml-1.5 grid h-10 w-10 place-items-center overflow-hidden rounded-full hover:opacity-90"
           >
             {viewerAvatar ? (
-              <Image src={viewerAvatar} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
+              <Image
+                src={viewerAvatar}
+                alt=""
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-full object-cover"
+              />
             ) : (
               <UserCircle size={40} weight="light" />
             )}
@@ -212,7 +207,13 @@ export function ReviewDetail({
 
         <div className="flex items-start gap-2 md:mt-4">
           {authorAvatar ? (
-            <Image src={authorAvatar} alt="" width={24} height={24} className="h-6 w-6 shrink-0 rounded-full object-cover" />
+            <Image
+              src={authorAvatar}
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0 rounded-full object-cover"
+            />
           ) : (
             <span
               aria-hidden="true"
@@ -251,10 +252,18 @@ export function ReviewDetail({
           </p>
         </div>
 
+        {/* The phone keeps these in its orange bar. That bar is `md:hidden`, so
+            from `md` the same controls — copy the link, report the review —
+            live beside the headline instead of disappearing on the website
+            (journey audit, 2026-09-16). */}
+        <div className="mt-4 hidden items-center gap-2 md:flex">
+          <ReviewOverflowMenu title={review.title} reviewId={review.id} canReport={!isOwnReview} />
+        </div>
+
         {/* The product in SemiBold with its hyphen, the rest in regular italic —
             the frame's split. splitHeadline honours the reviewer's own dash and
             falls back to the canonical product name. */}
-        <h1 className="mt-3 text-[20px] font-semibold leading-[30px] text-[var(--text-primary)] md:mt-5 lg:text-[26px] lg:leading-[normal]">
+        <h1 className="mt-3 text-[20px] font-semibold leading-[30px] text-[var(--text-primary)] md:mt-2 lg:text-[26px] lg:leading-[normal]">
           {headline.product ? (
             <>
               {headline.product} - <span className="font-normal italic">{headline.rest}</span>
@@ -304,7 +313,9 @@ export function ReviewDetail({
               "is the discussion in view" and the scroll read-through fraction —
               design §4.3/§4.4. */}
           <Section title="The review">
-            <p id="review-body" className="whitespace-pre-line">{review.discussion}</p>
+            <p id="review-body" className="whitespace-pre-line">
+              {review.discussion}
+            </p>
           </Section>
 
           {hasPros || hasCons ? (
@@ -330,7 +341,9 @@ export function ReviewDetail({
 
           <Section title="Verdict">
             <p className="whitespace-pre-line">
-              <span className="font-semibold">{VERDICT_LABEL[review.verdict] ?? VERDICT_LABEL.it_depends}</span>
+              <span className="font-semibold">
+                {VERDICT_LABEL[review.verdict] ?? VERDICT_LABEL.it_depends}
+              </span>
               {review.verdict_explanation ? <> {review.verdict_explanation}</> : null}
             </p>
           </Section>
@@ -392,9 +405,7 @@ export function ReviewDetail({
             <ShareButton title={review.title} reviewId={review.id} variant="icon" />
           </div>
 
-          {!isOwnReview ? (
-            <ReportDialog reviewId={review.id} canReport={canVote} hideTrigger />
-          ) : null}
+          {!isOwnReview ? <ReportDialog reviewId={review.id} canReport={canVote} hideTrigger /> : null}
         </div>
       </article>
     </>
