@@ -1,6 +1,6 @@
-# Independent QA handoff — frontend freeze
+# Independent QA handoff
 
-**Status: FRONTEND ENGINEERING VERIFICATION COMPLETE. INDEPENDENT QA: RETEST REQUIRED.**
+**Status: ENGINEERING VERIFICATION COMPLETE. INDEPENDENT QA: RETEST REQUIRED.**
 
 Engineering verification is not a QA pass. Nothing below should be read as one.
 
@@ -8,10 +8,11 @@ Engineering verification is not a QA pass. Nothing below should be read as one.
 
 | | |
 | --- | --- |
-| QA baseline SHA | the head of `main` at handoff — the frontend froze at `4013c0f`, and every commit after it is documentation and audit tooling only, so the deployed bundle is `4013c0f`'s. The release note names the exact deployed SHA. |
+| QA baseline SHA | named in the release note, and it is the SHA CI went green on. **It is no longer `4013c0f`** — this candidate carries the owner's final verdict of 2026-09-16, which is product change, not documentation. |
 | Production | https://www.bluntly.ph |
 | Frontend scope | the 49 routes in `lib/site-map.ts` (also `docs/SITEMAP.md`, `/sitemap.xml`) |
-| Evidence | `docs/FRONTEND_AUDIT.md` — page results, journey results, state coverage and evidence limits, generated from the harness output |
+| Evidence | `docs/FRONTEND_AUDIT.md` — page, journey and state results from the harness; `docs/CONTRACT_AUDIT.md` — API↔frontend wiring; `docs/FULL_FEATURE_MATRIX.md` — every feature with its status and blocker |
+| Migrations | **0048** (half-star and zero ratings) and **0049** (report resolution). Both must be applied before the bundle is served, and the release note records when they were. |
 
 Do not deploy over this while QA is testing: any new deployment changes the baseline.
 
@@ -19,13 +20,24 @@ Do not deploy over this while QA is testing: any new deployment changes the base
 
 - **Pages** — all 49 routes at 320, 360, 375, 390, 393, 412, 430, 768, 1024, 1280 and 1440: correct status, no redirect away from the route, no horizontal overflow, no console errors, no broken images.
 - **Journeys** — 20 flows driven in a browser at 390 and 1440: search → review / question / seller, tabs, filter and order, the "+" action menu's three destinations, all three composers step by step (including a disabled Continue, a satisfied Continue and walking back), the login return path, profile and dashboard navigation, the moderator rail, the moderator queue's detail pane, and the footer's policies.
-- **Figma** — frames read live from the file (`lso4Ri4hDaZxvCebhUqlY5`, account Zienxt, Full seat). Each route is classified in the audit as matched, corrected, an intentional product difference, an owner design difference, or a business route with no frame — with the reason written down.
+- **Figma** — frames read live from the file (`lso4Ri4hDaZxvCebhUqlY5`, account Zienxt, Full seat). Each route is classified in the audit as matched, corrected, an intentional product difference, an owner design difference, or a business route with no frame — with the reason written down. The moderator queue was re-read against **6922:837** on 2026-09-16 and rebuilt to its eight columns.
+- **The contract** — `npm run audit:contract`: 125 operations, 123 called by the frontend, 0 uncalled, 2 declared not-for-the-browser, 1 flag-gated call with no endpoint (documented). Reproducible on a clean checkout.
+- **Tests** — backend 1324 passed / 411 skipped locally, with the skips being the DB-gated half that runs in CI's isolated-database job; frontend 299 passed, including the telemetry source test that used to fail on every Windows checkout.
 
-## Owner design difference — do not "fix" it
+**The browser journeys above predate this candidate's new surfaces.** Items 14–23 under *What QA should hit first* have no harness evidence at all.
 
-The landing hero's **"Earned ₱45.50 today"** pill sits on the **upper-right of the tilted review card**, pinned inside the card's own composition so it travels with the card.
+## The landing hero's two annotations — the frame is the authority again
 
-The Figma frame puts that pill *below* the card. The owner asked for the current placement on 2026-09-16. It is **not** a Figma mismatch, and it must survive future Figma synchronisation. Verified at 320 / 360 / 375 / 390 / 393 / 412 / 414 / 430 / 768 / 1024 / 1280 / 1440: attached to the card's corner, never clipped, never viewport-relative, no horizontal overflow.
+This section reversed on 2026-09-16 and the earlier wording is void. It used to record an owner override placing "Earned ₱45.50 today" on the card's upper right against the frame. **The owner then corrected the frame** — *"the figma for the landing/hero card that we are having a trouble is now good and can be copied one to one"* — so the build follows the file:
+
+| Annotation | Position, from group 5446:5126 (375×209) |
+| --- | --- |
+| "How noisy is it?" | top right of the card, 16px in from the group's right edge, 4px down |
+| "Earned ₱45.50 today" | bottom left, flush to the group's left edge, at y185 of 209 |
+
+Both are **inside the card's own composition**, so they travel with it and cannot drift against the viewport. Verified at 320 / 360 / 375 / 390 / 393 / 412 / 414 / 430 / 768 / 1024 / 1280 / 1440: never clipped, never viewport-relative, no horizontal overflow.
+
+QA should compare against the **current** frame, not against any screenshot taken before 2026-09-16.
 
 ## What QA should hit first
 
@@ -47,6 +59,19 @@ The critical journeys, on a real phone and a real desktop browser:
 
 Submissions matter most: engineering answered those POSTs in the browser, so **no real submission has been made by the audit**.
 
+### New on this candidate — none of it has been exercised against real content
+
+14. **Profile → Comments** (`/profile?tab=comments`). Write a comment under someone's review, then check it appears with the right review headline. Delete it and check it leaves the tab (the thread keeps a "[removed]" slot; the profile shows nothing).
+15. **Profile → Stats** (`/profile?tab=stats`). Check the level, the "Level n" chip and the "x of y … to become …" line match the account's real standing, and that the bar never overflows.
+16. **Half and zero stars**, in both composers. 0, 0.5 … 5. A zero must submit as a rating and read back as 0, not as blank. Try the keyboard: the control is a radio group, so arrow keys must move through the 11 steps.
+17. **Continue with Google** on login and signup: greyed, announced as disabled, and going nowhere when clicked or activated by keyboard.
+18. **Log out** from the account menu and from the profile page, then use the back button — nothing authenticated may still be reachable.
+19. **Moderate** appears in the account menu for a moderator and an admin, and for nobody else. Then open `/moderate` directly as a plain member: it must refuse, because hiding the link is not the boundary.
+20. **Staff roles**: as a moderator or a second administrator, confirm the role controls are not offered and that the endpoint refuses (`root_owner_required`). Only bluntly.ph@gmail.com may grant or revoke.
+21. **Review queue decisions** — publish, monetize & publish, reject. Watch what each does to the public site and to the author's notifications. See the section below.
+22. **Report decisions** — dismiss, remove, restore, escalate. A removed review must come back into the review queue, not vanish.
+23. **The QA seller** at `/sellers/5e11e700-0000-4000-8000-000000000999`, and Rate a Seller against it.
+
 ## Verification limitations — QA owns these
 
 | What | State | Why |
@@ -56,6 +81,9 @@ Submissions matter most: engineering answered those POSTs in the browser, so **n
 | Anything that writes | NOT EXERCISED | Review, seller-review and question submission, answering, voting and withdrawal. Verified up to the submit control only. |
 | The one-time-code step | NOT EXERCISED | Needs a mail hook. The form, its validation and the return path are verified. |
 | Moderator queues other than the review queue | BLOCKED locally | Prices, seller claims, reviewers, users and the activity log have no local fixture payloads, so their populated tables have no evidence. Their shells and unreachable-API states do. |
+| Every decision control on this candidate | NOT EXERCISED | Publish, monetize, reject, dismiss, remove, restore, escalate. Their backends are covered by DB tests in CI; **no decision has been taken against real content by engineering**, and none should be until QA is ready to watch what it does. |
+| The profile's Comments and Stats tabs | NOT EXERCISED against real data | The endpoints are covered by DB tests in CI. On production the author needs a session, so a signed-in human has to look. |
+| Half and zero star ratings | NOT EXERCISED end to end | The step validation, the schema, the CHECK constraint and the round trip are covered by `test_half_star_ratings`; no rating has been submitted through a browser. |
 
 ## Reversible test data in production
 
@@ -105,10 +133,8 @@ Neither had a Figma frame with controls on it, so both are classified **BUSINESS
 
 ## Known environment-only test failures
 
-Neither is a product defect, and neither was worked around by changing the UI:
-
-- `tests/frontend/telemetry-route.test.mjs` — asserts a source line without the CRLF that Windows checkouts write. Historical, unchanged.
-- `e2e/route-guards.spec.ts` "an unknown login email is sent to sign up" — TEST ENVIRONMENT LIMITATION. The local fixture proxy is read-only and answers POST with 405, so the form cannot reach the API. It passes against a stack with a live API.
+- `tests/frontend/telemetry-route.test.mjs` — **fixed on this candidate.** It asserted a source line and split on `\n`, so every Windows checkout failed it on a carriage return while CI passed. The test now strips `\r` first. It was never a product defect and the UI was never changed for it; it simply should not have been a standing red.
+- `e2e/route-guards.spec.ts` "an unknown login email is sent to sign up" — TEST ENVIRONMENT LIMITATION, unchanged. The local fixture proxy is read-only and answers POST with 405, so the form cannot reach the API. It passes against a stack with a live API.
 
 ## Re-running the evidence
 
