@@ -186,6 +186,32 @@ accept production if that is what this resolves to", not "switch me to
 production". Anyone who has a test environment configured has to take a
 visible step to leave it.
 
+### From a git worktree, there is no production `.env` to resolve
+
+Settings read `("../.env", ".env", ".env.test")` relative to `backend/`, so the
+production connection string comes from the **repository root's** `.env` — and a
+worktree under `.worktrees/` has its own root, which does not have one. Running
+the command above from a worktree resolves to nothing and refuses, which is the
+right failure but an opaque one.
+
+Release migrations are usually prepared on a branch in a worktree, so the full
+sequence is:
+
+```bash
+cd .worktrees/<branch>
+cp ../../.env .env                       # gitignored; the real root's copy
+mv backend/.env.test backend/.env.test.hold
+cd backend && .venv/Scripts/python -m alembic -x allow_production=1 current
+# confirm the printed target is production and the revision is the expected one
+.venv/Scripts/python -m alembic -x allow_production=1 upgrade head
+cd .. && mv backend/.env.test.hold backend/.env.test && rm .env
+```
+
+Run `current` before `upgrade`, and read the `[alembic] target -> …` line it
+prints. It is the only confirmation of which database is about to be changed,
+and it costs one command. Put both files back afterwards: a production `.env`
+left in a worktree is a production `.env` that the next `pytest` run resolves to.
+
 Nothing in the deploy pipeline runs alembic (Vercel builds the app; migrations
 are applied by hand), so requiring an explicit choice breaks no automation.
 
