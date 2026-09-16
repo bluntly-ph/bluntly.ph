@@ -148,6 +148,44 @@ Neither had a Figma frame with controls on it, so both are classified **BUSINESS
 
 `components/moderation/ModerationQueue.tsx` and `ReportQueue.tsx` — the two unmounted components that called these endpoints with `window.prompt` — were deleted rather than left as a second implementation.
 
+## Performance — measured, and NOT closed
+
+The owner's report is *"bigat pa rin ng responsive ng website"*. The checks we
+had could not see it: Coverage row 66 records a Lighthouse score of 100/100, and
+the audit harness confirms no horizontal overflow at any width. Both were true
+the whole time. So here is a number instead, from `npm run page-weight` against
+production on 2026-09-16:
+
+| page | HTML | JS | CSS | total parsed |
+| --- | --- | --- | --- | --- |
+| `/` | 164 KB | 647 KB | 99 KB | **910 KB** |
+| `/search` | 307 KB | 767 KB | 99 KB | **1,174 KB** |
+| `/feed` | 264 KB | 647 KB | 99 KB | 1,010 KB |
+| `/categories` | 129 KB | 662 KB | 99 KB | 891 KB |
+| `/questions` | 96 KB | 662 KB | 99 KB | 858 KB |
+| `/requests` | 72 KB | 666 KB | 99 KB | 836 KB |
+
+**Decompressed bytes — what the browser parses.** The network is not the
+problem: production serves brotli, and `/`'s 164 KB of HTML crosses the wire as
+20 KB. The problem, if the feeling of heaviness has a cause we can name, is
+that **every page parses two-thirds of a megabyte of JavaScript** before it is
+interactive, plus a 99 KB stylesheet that is identical on all of them. On a
+mid-range phone that is CPU time, and CPU time is what compression does not
+help.
+
+One measured contributor: **34 client components import Phosphor icons**, and
+an icon imported into a client component ships to the browser.
+
+**This is an open item, not a fixed one.** Nothing in this candidate reduces
+those numbers, and reworking the bundle during a release candidate is the wrong
+time to start. What the candidate does add is the ability to see it: the
+numbers above are reproducible in one command, so the next change can be
+measured rather than argued about.
+
+QA should still report anything that *feels* slow, with the page and the
+device — the table above cannot tell you which interaction is janky, only how
+much code had to be parsed first.
+
 ## Known environment-only test failures
 
 - `tests/frontend/telemetry-route.test.mjs` — **fixed on this candidate.** It asserted a source line and split on `\n`, so every Windows checkout failed it on a carriage return while CI passed. The test now strips `\r` first. It was never a product defect and the UI was never changed for it; it simply should not have been a standing red.
