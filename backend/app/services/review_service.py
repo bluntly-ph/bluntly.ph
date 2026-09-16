@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.categories import spellings_for
 from app.core.config import settings
-from app.core.errors import NotFoundError
+from app.core.errors import AppError, NotFoundError
 from app.models.enums import EarnEligibleStatus, PriceObservationSource, VerificationStatus
 from app.models.product import Product
 from app.models.review import Review, ReviewVersion
@@ -94,6 +94,43 @@ def _snapshot(review: Review) -> dict:
     return snap
 
 
+def _refuse_a_second_pending_review(db: Session, author_id: uuid.UUID,
+                                    product_id: uuid.UUID) -> None:
+    """One review of a product per author may await a decision (BUG-031).
+
+    QA could not test double-submit and filed that as the bug. It was the right
+    suspicion: the composer disables its own button while a request is in
+    flight, and a disabled button is not a guarantee. A double tap that beats a
+    re-render, a retry on a slow connection, a second tab, or anything posting
+    to the API directly all produced two identical reviews sitting in the
+    moderation queue — and the person who made them had no way to remove
+    either.
+
+    The rule is deliberately narrow: not "one review per product, ever", which
+    would be a product decision nobody has taken and would block someone who
+    buys the thing again a year later. Only one may be WAITING. Once a
+    moderator has published or rejected it, the author may submit again — which
+    is exactly what `reject` already promises them ("stays hidden; author may
+    resubmit").
+    """
+    waiting = db.scalar(
+        select(Review.id).where(
+            Review.author_id == author_id,
+            Review.product_id == product_id,
+            Review.published_at.is_(None),
+            Review.is_removed.is_(False),
+            Review.earn_eligible_status == EarnEligibleStatus.pending,
+        ).limit(1)
+    )
+    if waiting is not None:
+        raise AppError(
+            "You already have a review of this product waiting for moderation.",
+            code="review_already_pending",
+            status_code=409,
+            title="Conflicting state",
+        )
+
+
 def recompute_product_aggregates(db: Session, product_id: uuid.UUID) -> None:
     """Service-layer aggregate update (ADR: no DB triggers).
 
@@ -123,6 +160,8 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
     product = db.get(Product, payload.product_id)
     if product is None:
         raise NotFoundError("Product not found.", code="product_not_found")
+
+    _refuse_a_second_pending_review(db, author_id, payload.product_id)
 
     review = Review(
         product_id=payload.product_id,

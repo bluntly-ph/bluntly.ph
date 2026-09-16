@@ -1115,6 +1115,8 @@ function StepsFlow({
   onDone: (submitted: Submitted) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  /** Synchronous double-submit guard — see `submit` (BUG-031). */
+  const inFlight = useRef(false);
   // "Let's talk money" — the reference asks for the price on the way to
   // submitting rather than as a field on the title step.
   const [askingPrice, setAskingPrice] = useState(false);
@@ -1133,7 +1135,16 @@ function StepsFlow({
   const isLast = step === STEPS.length - 1;
 
   async function submit() {
-    if (blocker || busy) return;
+    // A ref, not the `busy` state, and checked before anything awaits (BUG-031).
+    // Two taps in quick succession are two events, and React may not have
+    // re-rendered between them — so `busy` can still read false in the second
+    // one and the disabled attribute can still be a render behind. A ref is
+    // written synchronously, which is what makes this a guard rather than a
+    // race the user usually loses. The server refuses a second pending review
+    // for the same product regardless; this stops the request being made at
+    // all, so the reviewer never sees a conflict they did not cause.
+    if (blocker || busy || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -1174,6 +1185,9 @@ function StepsFlow({
       setError("Couldn't reach the server. Try again.");
     } finally {
       setBusy(false);
+      // Released only here, so a failed submission can be retried — the guard
+      // is against a double tap, not against ever trying again.
+      inFlight.current = false;
     }
   }
 

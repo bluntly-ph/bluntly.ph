@@ -162,6 +162,20 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
   const [preview, setPreview] = useState<string | null>(user.avatarUrl);
   const [state, formAction, pending] = useActionState(completeOnboarding, EMPTY);
   const fileRef = useRef<HTMLInputElement>(null);
+  /**
+   * The input the avatar is actually SUBMITTED from (BUG-028).
+   *
+   * `fileRef` belongs to step 1's picker, and step 1 is unmounted from step 2
+   * onwards — so at submit time, on step 4, there was no `avatar` field in the
+   * form at all. The photo was chosen, previewed, and then silently dropped:
+   * every one of the 18 accounts in production had `avatar_url` null. Nothing
+   * errored, because nothing was sent.
+   *
+   * This one is a sibling of the other hidden fields and stays mounted for the
+   * whole wizard. Only ever one input named `avatar` is in the form at a time,
+   * because step 1's is gone by the time this one matters.
+   */
+  const submitFileRef = useRef<HTMLInputElement>(null);
   const availability = useUsernameAvailability(username, user.username);
 
   function toggleInterest(slug: string) {
@@ -175,14 +189,22 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
   }
 
   function finishIntro() {
-    // The avatar File cannot live in a hidden input, so it is copied onto the
-    // real file input on the way into the last step — by Continue or by Skip.
-    if (avatar && fileRef.current) {
-      const dt = new DataTransfer();
-      dt.items.add(avatar);
-      fileRef.current.files = dt.files;
-    }
+    // The avatar File cannot live in a hidden text input, so it is copied onto
+    // the form-level file input on the way into the last step — by Continue or
+    // by Skip. Onto `submitFileRef`, NOT `fileRef`: step 1's input is unmounted
+    // by now, so writing to it wrote to nothing and the photo never left the
+    // browser (BUG-028).
+    copyAvatarIntoTheForm();
     setStep(4);
+  }
+
+  /** Put the chosen File where the form will find it. Safe to call twice. */
+  function copyAvatarIntoTheForm() {
+    const input = submitFileRef.current;
+    if (!input) return;
+    const dt = new DataTransfer();
+    if (avatar) dt.items.add(avatar);
+    input.files = dt.files;
   }
 
   function goBack() {
@@ -208,6 +230,18 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
       <input type="hidden" name="username" value={username} />
       <input type="hidden" name="display_name" value={displayName} />
       <input type="hidden" name="interests" value={interests.join(",")} />
+      {/* The avatar's submit input — see `submitFileRef`. Kept out of the tab
+          order and hidden from assistive tech: step 1's picker is the control a
+          person uses, and this is only where the file waits for the submit. */}
+      <input
+        ref={submitFileRef}
+        type="file"
+        name="avatar"
+        accept="image/png,image/jpeg,image/webp"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
 
       <StepBar
         step={step}
@@ -375,10 +409,12 @@ function StepIdentity({
             <UserCircleOutline />
           )}
         </button>
+        {/* No `name`: this is the PICKER. Its File is held in React state and
+            copied onto the form-level input before submit (BUG-028), so naming
+            it would put two `avatar` fields in the form while step 1 is up. */}
         <input
           ref={fileRef}
           type="file"
-          name="avatar"
           accept="image/png,image/jpeg,image/webp"
           className="sr-only"
           onChange={(e) => onPick(e.target.files?.[0] ?? null)}
