@@ -26,6 +26,7 @@ Revises: 0048_half_star_ratings
 from __future__ import annotations
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -51,7 +52,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "moderation_logs",
-        sa.Column("resolved_by", sa.dialects.postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("resolved_by", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.create_foreign_key(
         "fk_moderation_logs_resolved_by",
