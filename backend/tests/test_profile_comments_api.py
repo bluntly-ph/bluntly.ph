@@ -18,8 +18,8 @@ def _auth(token: str) -> dict:
 
 @requires_db
 def test_a_member_with_no_comments_gets_an_empty_list(client):
-    user, _, _ = register_and_token(client)
-    resp = client.get(f"/api/v1/users/{user['id']}/comments")
+    user_id, _, _ = register_and_token(client)
+    resp = client.get(f"/api/v1/users/{user_id}/comments")
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
 
@@ -29,7 +29,7 @@ def test_the_list_carries_the_review_the_comment_hangs_off(client):
     """The row draws "<product> - <title>" above the comment body."""
     _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
-    commenter, commenter_token, _ = register_and_token(client)
+    commenter_id, commenter_token, _ = register_and_token(client)
     ah, mh, ch = _auth(author_token), _auth(mod_token), _auth(commenter_token)
     rid, _ = make_published_review(client, ah, mh, name="ProfileCommentWidget")
 
@@ -37,7 +37,7 @@ def test_the_list_carries_the_review_the_comment_hangs_off(client):
                          json={"body": "I'd get the bigger nozzle."})
     assert posted.status_code == 201, posted.text
 
-    rows = client.get(f"/api/v1/users/{commenter['id']}/comments").json()
+    rows = client.get(f"/api/v1/users/{commenter_id}/comments").json()
     assert len(rows) == 1
     row = rows[0]
     assert row["body"] == "I'd get the bigger nozzle."
@@ -52,7 +52,7 @@ def test_the_list_carries_the_review_the_comment_hangs_off(client):
 def test_newest_first(client):
     _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
-    commenter, commenter_token, _ = register_and_token(client)
+    commenter_id, commenter_token, _ = register_and_token(client)
     ah, mh, ch = _auth(author_token), _auth(mod_token), _auth(commenter_token)
     rid, _ = make_published_review(client, ah, mh, name="ProfileOrderWidget")
 
@@ -60,7 +60,7 @@ def test_newest_first(client):
         assert client.post(f"/api/v1/reviews/{rid}/comments", headers=ch,
                            json={"body": body}).status_code == 201
 
-    rows = client.get(f"/api/v1/users/{commenter['id']}/comments").json()
+    rows = client.get(f"/api/v1/users/{commenter_id}/comments").json()
     assert [r["body"] for r in rows] == ["Newest.", "Middle.", "Oldest."]
 
 
@@ -68,7 +68,7 @@ def test_newest_first(client):
 def test_only_this_member_s_comments_appear(client):
     _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
-    mine, my_token, _ = register_and_token(client)
+    mine_id, my_token, _ = register_and_token(client)
     _, their_token, _ = register_and_token(client)
     ah, mh = _auth(author_token), _auth(mod_token)
     rid, _ = make_published_review(client, ah, mh, name="ProfileMineWidget")
@@ -78,7 +78,7 @@ def test_only_this_member_s_comments_appear(client):
     client.post(f"/api/v1/reviews/{rid}/comments", headers=_auth(their_token),
                 json={"body": "Theirs."})
 
-    rows = client.get(f"/api/v1/users/{mine['id']}/comments").json()
+    rows = client.get(f"/api/v1/users/{mine_id}/comments").json()
     assert [r["body"] for r in rows] == ["Mine."]
 
 
@@ -87,7 +87,7 @@ def test_a_removed_comment_leaves_the_profile(client):
     """The thread keeps a "[removed]" slot; a profile shows nothing at all."""
     _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
-    commenter, commenter_token, _ = register_and_token(client)
+    commenter_id, commenter_token, _ = register_and_token(client)
     ah, mh, ch = _auth(author_token), _auth(mod_token), _auth(commenter_token)
     rid, _ = make_published_review(client, ah, mh, name="ProfileRemovedWidget")
 
@@ -99,13 +99,13 @@ def test_a_removed_comment_leaves_the_profile(client):
     thread = client.get(f"/api/v1/reviews/{rid}/comments").json()
     assert thread[0]["is_removed"] is True
 
-    assert client.get(f"/api/v1/users/{commenter['id']}/comments").json() == []
+    assert client.get(f"/api/v1/users/{commenter_id}/comments").json() == []
 
 
 @requires_db
 def test_a_comment_on_an_unpublished_review_is_not_public(client):
     """The author can comment on their own draft; a stranger must not see it."""
-    author, author_token, _ = register_and_token(client)
+    author_id, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     ah, mh = _auth(author_token), _auth(mod_token)
 
@@ -124,7 +124,7 @@ def test_a_comment_on_an_unpublished_review_is_not_public(client):
     })
     assert draft.status_code == 201, draft.text
 
-    rows = client.get(f"/api/v1/users/{author['id']}/comments").json()
+    rows = client.get(f"/api/v1/users/{author_id}/comments").json()
     assert [r["review"]["id"] for r in rows] == [published_id]
 
 
@@ -132,20 +132,20 @@ def test_a_comment_on_an_unpublished_review_is_not_public(client):
 def test_the_page_size_is_bounded(client):
     _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
-    commenter, commenter_token, _ = register_and_token(client)
+    commenter_id, commenter_token, _ = register_and_token(client)
     ah, mh, ch = _auth(author_token), _auth(mod_token), _auth(commenter_token)
     rid, _ = make_published_review(client, ah, mh, name="ProfilePagingWidget")
     for n in range(3):
         client.post(f"/api/v1/reviews/{rid}/comments", headers=ch,
                     json={"body": f"Comment {n}."})
 
-    first = client.get(f"/api/v1/users/{commenter['id']}/comments",
+    first = client.get(f"/api/v1/users/{commenter_id}/comments",
                        params={"limit": 2}).json()
     assert len(first) == 2
-    second = client.get(f"/api/v1/users/{commenter['id']}/comments",
+    second = client.get(f"/api/v1/users/{commenter_id}/comments",
                         params={"limit": 2, "offset": 2}).json()
     assert len(second) == 1
     assert {r["id"] for r in first}.isdisjoint({r["id"] for r in second})
 
-    assert client.get(f"/api/v1/users/{commenter['id']}/comments",
+    assert client.get(f"/api/v1/users/{commenter_id}/comments",
                       params={"limit": 0}).status_code == 422

@@ -59,6 +59,27 @@ def _verification_for(photo_url: str | None,
 
 
 def _snapshot(review: Review) -> dict:
+    """The versioned fields, in a shape `json.dumps` can actually write.
+
+    The snapshot goes into a JSONB column, and psycopg serialises it with the
+    standard `json` encoder — which has no idea what a `Decimal` is. Every
+    numeric column here therefore has to be converted on the way in, and
+    forgetting one does not fail until a review is actually submitted.
+
+    It has happened: migration 0048 turned `star_rating` into `numeric(2,1)` for
+    half steps, and the next submission raised `TypeError: Object of type
+    Decimal is not JSON serializable` — a 500 on the composer's last step. Only
+    the database-backed suite caught it. `test_review_snapshot_is_json.py` now
+    checks the whole shape without a database, so the next one fails in seconds.
+
+    The two Decimals are converted differently on purpose:
+
+      star_rating   float — it is a rating on a 0..5 half-step scale, every one
+                    of which is exact in binary, and the API serves it as a
+                    number. A version and the live review must compare equal.
+      price_paid    str — money. Two decimal places that must not acquire a
+                    binary-rounding tail on the way through JSON.
+    """
     snap: dict = {}
     for field in VERSIONED_FIELDS:
         value = getattr(review, field)
@@ -66,6 +87,8 @@ def _snapshot(review: Review) -> dict:
             value = value.value
         elif field == "price_paid" and value is not None:
             value = str(value)
+        elif field == "star_rating" and value is not None:
+            value = float(value)
         snap[field] = value
     snap["receipt_present"] = bool(review.receipt_key)
     return snap

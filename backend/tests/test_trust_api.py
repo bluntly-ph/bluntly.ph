@@ -106,11 +106,11 @@ def test_trust_endpoint_shape_and_no_manual_stage_set(client):
 def test_trust_profile_says_what_the_next_stage_needs(client):
     """The profile's Stats card (Figma 5446:6532) reads this, not the ladder."""
     ensure_stage_badges()
-    user, author_token, _ = register_and_token(client)
+    user_id, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
 
     # A brand-new account: stage 0, one review away from Contributor.
-    fresh = client.get(f"/api/v1/users/{user['id']}/trust")
+    fresh = client.get(f"/api/v1/users/{user_id}/trust")
     assert fresh.status_code == 200, fresh.text
     assert fresh.json()["progress"] == {
         "next_stage": 1,
@@ -123,7 +123,7 @@ def test_trust_profile_says_what_the_next_stage_needs(client):
     # rung is five verified reviews for Established Reviewer.
     make_published_review(client, _auth(author_token), _auth(mod_token),
                           name="ProgressWidget")
-    after = client.get(f"/api/v1/users/{user['id']}/trust").json()
+    after = client.get(f"/api/v1/users/{user_id}/trust").json()
     assert after["trust_stage"] == 2
     assert after["progress"]["next_stage"] == 3
     assert after["progress"]["next_level_name"] == "Established Reviewer"

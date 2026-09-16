@@ -88,22 +88,45 @@ test("the Google button is disabled and says so to assistive tech", () => {
   assert.match(GOOGLE, /aria-disabled="true"/);
 });
 
-test("the disabled Google button navigates nowhere", () => {
-  // Only the DISABLED branch is under test: the component still holds the real
-  // OAuth hand-off for the day the credentials exist, and that branch is
-  // reached only when NEXT_PUBLIC_GOOGLE_AUTH is "1". What must not happen is
-  // the greyed-out control going somewhere — a sign-in button that navigates
-  // while claiming to be off is worse than one that is plainly inert.
-  const enabledBranchAt = GOOGLE.indexOf("  return (\n    <Button");
-  assert.ok(enabledBranchAt > 0, "the component's two branches are no longer recognisable");
-  const disabled = GOOGLE.slice(0, enabledBranchAt);
-
-  assert.ok(!/href=/.test(disabled), "the Google button has an href while disabled");
+test("the Google button navigates nowhere, under any configuration", () => {
+  // Not "the disabled branch navigates nowhere" — there is no other branch.
+  // The live hand-off was removed once the contract audit showed the backend
+  // publishes no OAuth route: a flag-gated branch that can only 404 is not
+  // readiness, it is a switch that ships a broken sign-in the moment an
+  // environment variable is set.
+  assert.ok(!/href=/.test(GOOGLE), "the Google button has an href");
   assert.ok(
-    !/router\.push|window\.location|onClick=/.test(disabled),
-    "the disabled Google button navigates",
+    !/router\.push|window\.location|onClick=/.test(GOOGLE),
+    "the Google button navigates",
   );
-  assert.match(GOOGLE, /NEXT_PUBLIC_GOOGLE_AUTH/, "the live branch is no longer flag-gated");
+  // Comments stripped: the docblock explains at length why the flag was
+  // removed, and a test that cannot tell prose from code would forbid it
+  // saying so.
+  const code = GOOGLE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.ok(
+    !/NEXT_PUBLIC_GOOGLE_AUTH/.test(code),
+    "an env flag is back, and it can only turn on a 404",
+  );
+});
+
+test("no auth screen reaches for an OAuth endpoint that does not exist", () => {
+  // The whole point, checked where a reader would actually meet it.
+  const screens = [
+    "../../app/(auth)/login/page.tsx",
+    "../../app/(auth)/signup/SignupForm.tsx",
+  ];
+  let checked = 0;
+  for (const path of screens) {
+    let source;
+    try {
+      source = read(path);
+    } catch {
+      continue;
+    }
+    checked += 1;
+    assert.ok(!/oauth\/google/.test(source), `${path} calls an endpoint that has no route`);
+  }
+  assert.equal(checked, screens.length, "an auth screen was renamed and went unchecked");
 });
 
 test("the label is the one the owner asked for", () => {

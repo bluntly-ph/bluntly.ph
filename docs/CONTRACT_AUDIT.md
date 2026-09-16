@@ -42,7 +42,7 @@ path is called. Everything stronger is the e2e suite's job and independent QA's.
 | Called by the frontend | **123** |
 | No frontend caller | **0** |
 | Not for the browser (declared, with reasons) | **2** |
-| Frontend calls with no operation | **1** |
+| Frontend calls with no operation | **0** |
 | Calls assembled at runtime (unresolvable statically) | **1** |
 
 ### The two operations no page calls, and why that is correct
@@ -56,20 +56,29 @@ Both are declared in the script with their reasons, so a third one cannot appear
 silently: an operation that stops being called shows up as **NO FRONTEND CALLER**
 on the next run.
 
-### The one call with no operation
+### The call with no operation — found here, and removed
+
+The first run of this audit reported one:
 
 ```
 /api/v1/auth/oauth/google      components/auth/GoogleButton.tsx
 ```
 
-**Accepted, not a defect on this candidate.** The backend has no OAuth
-endpoints, and that branch of `GoogleButton` is unreachable: it is behind
-`NEXT_PUBLIC_GOOGLE_AUTH`, which is not set, and the component says so in its
-docblock. What the reader sees is the disabled control the owner asked for
-(P0.2) — greyed, `aria-disabled`, navigating nowhere. The line above is the
-forward path for the day the backend gains the endpoint and the owner supplies
-the Google Cloud credentials, and the audit is right to keep pointing at it
-until then.
+`GoogleButton` kept the real OAuth hand-off behind `NEXT_PUBLIC_GOOGLE_AUTH`,
+"ready" for the day it was wanted. The audit is what made the problem visible:
+the backend publishes **no OAuth route at all**, so that branch could only ever
+reach a 404 — whatever the flag said. That is not readiness. It is a switch
+that ships a broken sign-in the moment someone sets an environment variable, on
+the screen where a failure is least recoverable.
+
+The branch is gone. `GoogleButton` is now unconditionally the disabled control
+the owner asked for in P0.2, and `tests/frontend/account-menu-guards.test.mjs`
+fails if a flag or a navigation comes back. Re-enabling it later is a few lines,
+and they should be written against an endpoint that exists — the order is in the
+component's docblock.
+
+**This is the audit earning its keep.** Nothing else in the build would have
+reported it: the branch type-checks, lints, renders and is unreachable.
 
 ### The one call assembled at runtime
 

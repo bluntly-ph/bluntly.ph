@@ -75,7 +75,14 @@ def test_dismissing_leaves_the_review_published(client):
 @requires_db
 def test_removing_takes_the_review_down_and_restoring_puts_it_back(client):
     ah, mh, rh, rid = _cast(client)
+    _, second_reporter_token, _ = register_and_token(client)
+
+    # BOTH reports are filed while the review is still public. A reader cannot
+    # report a review they can no longer see — `/reviews/{id}/report` resolves
+    # the review through the same publication gate as everything else and
+    # answers 404 — so the second one has to exist before the first is acted on.
     first = _file_report(client, rid, rh)
+    second = _file_report(client, rid, _auth(second_reporter_token))
 
     removed = client.post(f"/api/v1/admin/reports/{first}/decision", headers=mh,
                           json={"resolution": "content_removed",
@@ -86,11 +93,10 @@ def test_removing_takes_the_review_down_and_restoring_puts_it_back(client):
     # Gone from the public read path, and back in the moderation queue rather
     # than stranded — that is what `unpublish` guarantees and this must inherit.
     assert client.get(f"/api/v1/reviews/{rid}").status_code == 404
-    queue = client.get("/api/v1/admin/review-queue", headers=mh).json()
+    queue = client.get("/api/v1/admin/review-queue", headers=mh,
+                       params={"q": rid, "limit": 100}).json()
     assert rid in [i["review"]["id"] for i in queue["items"]]
 
-    # A second report, resolved the other way, puts it back.
-    second = _file_report(client, rid, rh)
     restored = client.post(f"/api/v1/admin/reports/{second}/decision", headers=mh,
                            json={"resolution": "content_restored"})
     assert restored.status_code == 200, restored.text
@@ -177,13 +183,13 @@ def test_a_target_with_no_publish_state_can_only_be_dismissed_or_escalated(clien
     The guard is on the resolution path, and that is what is under test.
     """
     _, mod_token, _ = register_and_token(client, role="moderator")
-    reporter, _, _ = register_and_token(client)
+    reporter_id, _, _ = register_and_token(client)
     mh = _auth(mod_token)
 
     filed = ModerationLog(
         target_type=ModerationTargetType.question,
         target_ref=uuid.uuid4(),
-        reporter_id=uuid.UUID(reporter["id"]),
+        reporter_id=uuid.UUID(reporter_id),
         action=ModerationAction.report,
     )
     db.add(filed)

@@ -780,7 +780,7 @@ def test_queue_card_carries_the_reviewer_snapshot_and_comment_count(client):
     telemetry-isolation gate alone — `test_telemetry_isolation` pins that
     separately, and the queue must never gain views the same way.
     """
-    author, author_token, _ = register_and_token(client)
+    _, author_token, _ = register_and_token(client)
     _, mod_token, _ = register_and_token(client, role="moderator")
     _, reader_token, _ = register_and_token(client)
     ah, mh, rh = _auth(author_token), _auth(mod_token), _auth(reader_token)
@@ -809,9 +809,15 @@ def test_queue_card_carries_the_reviewer_snapshot_and_comment_count(client):
         "photo_url": owned_photo_url(ah),
     }).json()["id"]
 
-    page = client.get("/api/v1/admin/review-queue?limit=100", headers=mh)
+    # Narrowed by the product name. The queue is one shared backlog across the
+    # whole suite, so an unfiltered page of 100 is not guaranteed to contain a
+    # review created a moment ago — it is ordered by priority, not by age.
+    page = client.get("/api/v1/admin/review-queue", headers=mh,
+                      params={"q": f"SnapshotQueued {author_token[-8:]}", "limit": 100})
     assert page.status_code == 200, page.text
-    card = next(i for i in page.json()["items"] if i["review"]["id"] == queued)
+    items = page.json()["items"]
+    card = next((i for i in items if i["review"]["id"] == queued), None)
+    assert card is not None, f"the queued review is not in the filtered queue: {items}"
 
     assert card["author"]["verified_review_count"] == 1
     assert card["author"]["verified_review_count"] != card["signals"]["author_review_count"]
@@ -819,7 +825,6 @@ def test_queue_card_carries_the_reviewer_snapshot_and_comment_count(client):
     # the author's, so it must not pick up the other review's thread.
     assert card["comment_count"] == 0
 
-    published_card = next(
-        i for i in page.json()["items"] if i["review"]["id"] == first
-    ) if any(i["review"]["id"] == first for i in page.json()["items"]) else None
-    assert published_card is None, "a published review must not be in the queue"
+    assert first not in [i["review"]["id"] for i in items], (
+        "a published review must not be in the queue"
+    )

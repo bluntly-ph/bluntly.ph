@@ -105,8 +105,11 @@ def test_review_round_trips_a_half_step(client, value):
     assert created.status_code == 201, created.text
     assert float(created.json()["star_rating"]) == value
 
-    read_back = client.get(f"/api/v1/reviews/{created.json()['id']}")
-    assert read_back.status_code == 200
+    # With the author's headers: a review sits unpublished until a moderator
+    # decides on it, and an unpublished review is 404 to everyone else. That is
+    # the publication gate working, not a rating problem.
+    read_back = client.get(f"/api/v1/reviews/{created.json()['id']}", headers=headers)
+    assert read_back.status_code == 200, read_back.text
     assert float(read_back.json()["star_rating"]) == value, "zero must survive as a rating"
 
 
