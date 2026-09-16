@@ -66,17 +66,42 @@ def test_the_same_review_submitted_twice_creates_one(client):
 
 
 @requires_db
-def test_a_different_title_is_still_a_duplicate_submission(client):
-    """The guard is per product, not per payload — a retype is still a retry."""
+def test_a_genuinely_different_review_of_the_same_product_is_allowed(client):
+    """The guard is a duplicate check, not a one-per-product rule.
+
+    The first version of it refused any second pending review of a product.
+    That was an invented product rule, and it broke something real: the
+    duplicate-content fraud fixtures post several different reviews of one
+    product on purpose, because a reviewer flooding one listing is exactly what
+    that detector exists to catch.
+    """
     _, token, _ = register_and_token(client)
     headers = _auth(token)
     product = _product(client, headers, "RetypeWidget")
 
+    first = client.post("/api/v1/reviews", headers=headers,
+                        json=_submission(product, headers, "First go"))
+    assert first.status_code == 201, first.text
+
+    second = _submission(product, headers, "Second go")
+    second["discussion"] = "A different experience, written out separately."
+    again = client.post("/api/v1/reviews", headers=headers, json=second)
+    assert again.status_code == 201, again.text
+
+
+@requires_db
+def test_the_same_body_under_a_different_title_is_not_a_duplicate(client):
+    """Title and body together identify the submission; either differing is a
+    different review, and the fraud detector — not this guard — is what looks
+    at repeated bodies."""
+    _, token, _ = register_and_token(client)
+    headers = _auth(token)
+    product = _product(client, headers, "SameBodyWidget")
+
     assert client.post("/api/v1/reviews", headers=headers,
-                       json=_submission(product, headers, "First go")).status_code == 201
-    again = client.post("/api/v1/reviews", headers=headers,
-                        json=_submission(product, headers, "Second go"))
-    assert again.status_code == 409, again.text
+                       json=_submission(product, headers, "One")).status_code == 201
+    assert client.post("/api/v1/reviews", headers=headers,
+                       json=_submission(product, headers, "Two")).status_code == 201
 
 
 @requires_db

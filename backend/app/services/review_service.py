@@ -94,37 +94,44 @@ def _snapshot(review: Review) -> dict:
     return snap
 
 
-def _refuse_a_second_pending_review(db: Session, author_id: uuid.UUID,
-                                    product_id: uuid.UUID) -> None:
-    """One review of a product per author may await a decision (BUG-031).
+def _refuse_a_duplicate_submission(db: Session, author_id: uuid.UUID,
+                                   payload: ReviewCreate) -> None:
+    """The same review, submitted twice, is one review (BUG-031).
 
-    QA could not test double-submit and filed that as the bug. It was the right
-    suspicion: the composer disables its own button while a request is in
-    flight, and a disabled button is not a guarantee. A double tap that beats a
+    QA could not test double-submit and filed that as the bug. The suspicion was
+    right: the composer disables its own button while a request is in flight,
+    and a disabled button is not a guarantee. A double tap that beats a
     re-render, a retry on a slow connection, a second tab, or anything posting
-    to the API directly all produced two identical reviews sitting in the
-    moderation queue — and the person who made them had no way to remove
-    either.
+    to the API directly produced two identical reviews sitting in the moderation
+    queue — and the person who made them had no way to remove either.
 
-    The rule is deliberately narrow: not "one review per product, ever", which
-    would be a product decision nobody has taken and would block someone who
-    buys the thing again a year later. Only one may be WAITING. Once a
-    moderator has published or rejected it, the author may submit again — which
-    is exactly what `reject` already promises them ("stays hidden; author may
-    resubmit").
+    WHAT COUNTS AS THE SAME REVIEW is the author, the product, the title and the
+    body. Not just the author and the product: the first version of this guard
+    refused any second pending review of a product, and that was an invented
+    product rule rather than a fix for this bug. It also broke something real —
+    the duplicate-content fraud fixtures post several different reviews of one
+    product on purpose, because a reviewer flooding one listing is exactly what
+    that detector exists to catch. A rule that makes the abuse unreachable is
+    not a safety improvement.
+
+    Only reviews still AWAITING a decision are considered. Once a moderator has
+    published or rejected one, an identical resubmission is a deliberate act,
+    and `reject` already promises the author they may resubmit.
     """
-    waiting = db.scalar(
+    duplicate = db.scalar(
         select(Review.id).where(
             Review.author_id == author_id,
-            Review.product_id == product_id,
+            Review.product_id == payload.product_id,
+            Review.title == payload.title,
+            Review.discussion == payload.discussion,
             Review.published_at.is_(None),
             Review.is_removed.is_(False),
             Review.earn_eligible_status == EarnEligibleStatus.pending,
         ).limit(1)
     )
-    if waiting is not None:
+    if duplicate is not None:
         raise AppError(
-            "You already have a review of this product waiting for moderation.",
+            "You have already submitted this review; it is waiting for moderation.",
             code="review_already_pending",
             status_code=409,
             title="Conflicting state",
@@ -161,7 +168,7 @@ def create_review(db: Session, author_id: uuid.UUID, payload: ReviewCreate) -> R
     if product is None:
         raise NotFoundError("Product not found.", code="product_not_found")
 
-    _refuse_a_second_pending_review(db, author_id, payload.product_id)
+    _refuse_a_duplicate_submission(db, author_id, payload)
 
     review = Review(
         product_id=payload.product_id,

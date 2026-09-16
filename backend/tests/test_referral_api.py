@@ -22,15 +22,30 @@ def _auth(token: str) -> dict:
 
 def _make_review(client, headers, *, stars: int = 4, photo: bool = True,
                  name: str = "Widget") -> tuple[str, str]:
+    """A pending review. The product name carries a unique token, and the
+    review's body repeats it, so a test can scope a queue read to its own
+    fixtures with `?q=` — see `_unique_name`.
+
+    That matters because the CI database is shared and long-lived: a queue read
+    with a bare `limit=100` is a page of a backlog that grows with every run,
+    and "my review is in the first hundred" stops being true without anything
+    having broken."""
+    unique = f"{name} {uuid.uuid4().hex[:8]}"
     pid = client.post("/api/v1/products", headers=headers,
-                      json={"name": f"{name} {uuid.uuid4().hex[:8]}",
-                            "category": "electronics"}).json()["id"]
-    body = {"product_id": pid, "title": "Great", "discussion": "Used it for weeks; solid.",
+                      json={"name": unique, "category": "electronics"}).json()["id"]
+    body = {"product_id": pid, "title": "Great",
+            "discussion": f"Used it for weeks; solid. Fixture {unique}.",
             "verdict": "yes_absolutely", "star_rating": stars}
     if photo:
         body["photo_url"] = owned_photo_url(headers)
-    rid = client.post("/api/v1/reviews", headers=headers, json=body).json()["id"]
-    return rid, pid
+    created = client.post("/api/v1/reviews", headers=headers, json=body)
+    assert created.status_code == 201, created.text
+    _LAST_FIXTURE_NAME[created.json()["id"]] = unique
+    return created.json()["id"], pid
+
+
+#: review id -> the unique product name in its fixture, for scoping queue reads.
+_LAST_FIXTURE_NAME: dict[str, str] = {}
 
 
 @requires_db
@@ -206,7 +221,8 @@ def test_edited_since_monetized_flag(client):
     # "Edited since monetized" is a filter on the one canonical queue now —
     # the policy's own factor code — rather than a second response array.
     queue = client.get(
-        "/api/v1/admin/review-queue?limit=100&factor=edited_after_monetization",
+        "/api/v1/admin/review-queue?limit=100&factor=edited_after_monetization"
+        f"&q={_LAST_FIXTURE_NAME[rid]}",
         headers=mh,
     ).json()
     assert rid in [item["review"]["id"] for item in queue["items"]]
@@ -456,15 +472,27 @@ def test_review_queue_serves_one_page_from_one_assessment(monkeypatch):
 
 def _make_pending(client, headers, token, *, verdict="it_depends", stars=3):
     """A pending (unpublished) review whose title carries a unique ``token`` so
-    the queue's ``q`` filter can scope a test to exactly its own fixtures."""
+    the queue's ``q`` filter can scope a test to exactly its own fixtures.
+
+    Each call is a DIFFERENT review. It used to produce the same title and body
+    every time, and callers ask for three or four in a row — so with product
+    deduplication folding the identical product names into one row, the fixture
+    was submitting the same review to the same product repeatedly. That is the
+    literal definition of the double submit BUG-031 added a guard against, and
+    the guard refused them. The shared ``token`` still scopes the ``q`` filter;
+    the per-call suffix is what makes them distinct reviews rather than retries.
+    """
+    nonce = uuid.uuid4().hex[:6]
     pid = client.post("/api/v1/products", headers=headers,
                       json={"name": f"PrioWidget {token}",
                             "category": "electronics"}).json()["id"]
-    body = {"product_id": pid, "title": f"Queued {token}",
-            "discussion": f"Priority-contract fixture {token}; weeks of use.",
+    body = {"product_id": pid, "title": f"Queued {token} {nonce}",
+            "discussion": f"Priority-contract fixture {token}; weeks of use ({nonce}).",
             "verdict": verdict, "star_rating": stars,
             "photo_url": owned_photo_url(headers)}
-    return client.post("/api/v1/reviews", headers=headers, json=body).json()["id"]
+    created = client.post("/api/v1/reviews", headers=headers, json=body)
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
 
 
 def _backdate(review_ids, *, hours):

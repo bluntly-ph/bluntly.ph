@@ -28,15 +28,27 @@ def accounts(db):
     normal = make_user(
         db, display_name=target_name, username=f"target_{uuid.uuid4().hex[:8]}")
     moderator = make_user(db, role=MemberRole.moderator, display_name="Moderator")
-    # The root owner is the configured email AND the super-admin column
-    # (owner rule, 2026-09-16). A second elevated account is created alongside
-    # it, because "another super admin cannot do this" is the new guarantee.
+    # The root owner is the configured email AND the super-admin column (owner
+    # rule, 2026-09-16). A second elevated account is created alongside it,
+    # because "another super admin cannot do this" is the new guarantee.
+    #
+    # The CONFIGURED email is pointed at a fresh address for the duration of the
+    # fixture rather than the account being created at the real one. `users.email`
+    # is unique and the CI database is shared and long-lived, so a literal
+    # bluntly.ph@gmail.com row survives any run that dies before its teardown —
+    # and then every test in this file fails on a UniqueViolation in its fixture,
+    # which is what happened. The rule under test is "the configured address",
+    # not one particular string, so this tests exactly what it did before and
+    # cannot collide with a previous run.
+    owner_email = f"root_owner_{uuid.uuid4().hex[:12]}@example.com"
+    previous_root_owner = settings.root_owner_email
+    settings.root_owner_email = owner_email
     super_admin = make_user(
         db,
         role=MemberRole.moderator,
         is_super_admin=True,
         display_name="Owner",
-        email=settings.root_owner_email,
+        email=owner_email,
     )
     other_super = make_user(
         db,
@@ -49,6 +61,7 @@ def accounts(db):
     try:
         yield normal, moderator, super_admin, other_super
     finally:
+        settings.root_owner_email = previous_root_owner
         db.rollback()
         db.query(ModerationLog).filter(
             (ModerationLog.target_ref.in_(ids))

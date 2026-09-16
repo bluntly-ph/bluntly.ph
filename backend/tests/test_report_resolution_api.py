@@ -93,8 +93,12 @@ def test_removing_takes_the_review_down_and_restoring_puts_it_back(client):
     # Gone from the public read path, and back in the moderation queue rather
     # than stranded — that is what `unpublish` guarantees and this must inherit.
     assert client.get(f"/api/v1/reviews/{rid}").status_code == 404
+    # Scoped by the fixture's product name, not by the id: `q` is a free-text
+    # match on the title, the body and the product, and a UUID matches none of
+    # them. An unscoped page of 100 is a slice of a backlog that grows with
+    # every CI run.
     queue = client.get("/api/v1/admin/review-queue", headers=mh,
-                       params={"q": rid, "limit": 100}).json()
+                       params={"q": "ResolveWidget", "limit": 100}).json()
     assert rid in [i["review"]["id"] for i in queue["items"]]
 
     restored = client.post(f"/api/v1/admin/reports/{second}/decision", headers=mh,
