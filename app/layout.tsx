@@ -3,6 +3,8 @@ import { Bebas_Neue, Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 
+import { NavigationDepthTracker } from "@/components/site/NavigationDepthTracker";
+
 // Self-hosted by Next rather than the design system's Google Fonts @import, so
 // there is no render-blocking third-party request. The weights are the ones the
 // source file actually uses.
@@ -58,6 +60,10 @@ export default async function RootLayout({
             (components/site/ProfileNavPanel). The 68px spacer it rendered
             went with it — leaving that behind would have reserved empty space
             at the foot of every mobile page. */}
+        {/* Counts the app's own route changes so the site's Back control knows
+            whether the page behind this one is ours (BUG-033). Here because the
+            root layout is the only component that survives every navigation. */}
+        <NavigationDepthTracker />
         {children}
       </body>
     </html>
