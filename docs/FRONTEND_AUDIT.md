@@ -4,6 +4,8 @@
 
 Run 2026-09-16. The page list is lib/site-map.ts — the same list /sitemap.xml and docs/SITEMAP.md come from — so a page cannot be missed: the site-map test fails if one exists without an entry.
 
+> **This run predates the owner's final verdict of the same day.** It was produced before the profile's Comments and Stats sections, the moderator decision controls, the report decisions, the half-step rating control and the rebuilt queue table existed. Every result below still stands for the route it names — none of those routes was removed or renamed — but **none of the new surfaces has been through this harness**, and a route's PASS here is not evidence for a control added after it ran. `docs/QA_HANDOFF.md` lists what has no evidence; re-run the sweep against the deployed candidate to close the gap.
+
 **Read this as four separate claims.** A page can render correctly in its default state while a state inside it has no evidence at all, so a page result never stands in for state coverage.
 
 | Claim | What it means |
