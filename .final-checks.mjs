@@ -25,12 +25,13 @@ const reviews = await snapshot();
 ok("Reviews tab shows the table", reviews.rows > 0, `${reviews.rows} rows`);
 
 // Answers used to be a placeholder reading "not wired into this console". It
-// is a real tab now (QaAnswersTab, frame 6532:278), so the honest-state check
-// is that it renders the Q&A surface rather than that it admits to being
-// unbuilt. Report and Support are still honest placeholders.
+// is a real tab now (QaAnswersTab, frame 6532:278), and Report became one on
+// 2026-09-16 when reports gained decisions (owner §30) — so for both the
+// honest-state check is that the surface renders, not that it admits to being
+// unbuilt. Support is still an honest placeholder.
 for (const [label, expect] of [
   ["Answers", /request by:|no questions/i],
-  ["Report", /reported|nothing has been reported/i],
+  ["Report", /report|dismiss|escalate/i],
   ["Support", /no support-ticket system/i],
 ]) {
   // The queue tabs are links, not buttons: they carry a `tab=` href and

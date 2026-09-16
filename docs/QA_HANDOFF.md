@@ -118,6 +118,12 @@ node scripts/journey-check.mjs                              # journeys at 390 an
 npx playwright test e2e/journeys.spec.ts                    # the signed-out subset
 node --experimental-strip-types scripts/audit-report.mjs --evidence <dir>
 npm run sitemap -- --paths                                  # the route list itself
+npm run audit:contract                                      # API↔frontend wiring
 ```
+
+`audit:contract` needs no browser, no database and no session — it reads
+`docs/openapi.json` and the source, so it runs on a clean checkout and answers
+the same thing every time. `docs/CONTRACT_AUDIT.md` explains what its numbers
+do and do not mean.
 
 A route with no usable id reports SKIPPED, never PASS. A route that answers 200 from somewhere else reports FAIL, never PASS.

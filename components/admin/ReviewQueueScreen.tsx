@@ -418,7 +418,7 @@ export function ReviewQueueScreen({
                     is never squeezed off the end by a long review title.
                     Below 32rem it scrolls horizontally in its own pane, which
                     is the right behaviour on a phone. */}
-                <table className="w-full min-w-[44rem] table-fixed border-collapse text-left">
+                <table className="w-full min-w-[33rem] table-fixed border-collapse text-left">
                   {/* Frame 6922:837's eight columns, in its order: Product,
                       Author, Level, Wilson, Receipt, RIS, Priority, Age.
 
@@ -427,42 +427,49 @@ export function ReviewQueueScreen({
                       column for it — so it rides in the row's tooltip and in
                       the detail pane rather than as a ninth column the design
                       does not have. */}
+                  {/* The frame's own proportions, measured off 6922:837 at
+                      1280: Product 101px, Author 65, Level 44, Wilson 93,
+                      Receipt 66, RIS 43, Priority 73, Age 40 — about 525px in
+                      total, which is why `min-w` stays at 33rem (528px) and
+                      does not grow with the column count. The detail pane
+                      leaves the table 533px at 1280, and a wider table is
+                      QA's clipped Date column all over again (row 9.12). */}
                   <colgroup>
                     <col style={{ width: "22%" }} />
-                    <col style={{ width: "19%" }} />
+                    <col style={{ width: "15%" }} />
                     <col style={{ width: "7%" }} />
+                    <col style={{ width: "11%" }} />
                     <col style={{ width: "10%" }} />
-                    <col style={{ width: "9%" }} />
                     <col style={{ width: "7%" }} />
-                    <col style={{ width: "17%" }} />
-                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "10%" }} />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-[var(--surface-app)]">
                     {/* Header and cell padding match column for column — they
                         did not before, so every heading sat 4px off its data. */}
                     <tr className="text-[11px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      <th className="px-4 py-3 font-medium">Product</th>
-                      <th className="px-4 py-3 font-medium">Author</th>
-                      <th className="px-4 py-3 font-medium" title="The author's trust stage, 0 to 5.">
+                      <th className="px-2 py-3 font-medium">Product</th>
+                      <th className="px-2 py-3 font-medium">Author</th>
+                      <th className="px-2 py-3 font-medium" title="The author's trust stage, 0 to 5.">
                         Level
                       </th>
-                      <th className="px-4 py-3 font-medium" title="The review's own Wilson score. Context, not an input to priority.">
+                      <th className="px-2 py-3 font-medium" title="The review's own Wilson score. Context, not an input to priority.">
                         Wilson
                       </th>
-                      <th className="px-4 py-3 font-medium" title="Proof of purchase was submitted with this review.">
+                      <th className="px-2 py-3 font-medium" title="Proof of purchase was submitted with this review.">
                         Receipt
                       </th>
-                      <th className="px-4 py-3 font-medium" title={REVERSE_IMAGE_SEARCH_UNAVAILABLE}>
+                      <th className="px-2 py-3 font-medium" title={REVERSE_IMAGE_SEARCH_UNAVAILABLE}>
                         RIS
                       </th>
-                      <th className="px-4 py-3 font-medium">Priority</th>
-                      <th className="px-4 py-3 font-medium">Age</th>
+                      <th className="px-2 py-3 font-medium">Priority</th>
+                      <th className="px-2 py-3 font-medium">Age</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!queue.available ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-[13px]">
+                        <td colSpan={8} className="px-2 py-12 text-center text-[13px]">
                           <span role="alert" className="text-[var(--accent-danger)]">
                             {queue.reason === "unauthenticated"
                               ? "This session is not signed in as a moderator, so the queue was not requested."
@@ -472,7 +479,7 @@ export function ReviewQueueScreen({
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[var(--text-secondary)]">
+                        <td colSpan={8} className="px-2 py-12 text-center text-[13px] text-[var(--text-secondary)]">
                           {hasFilters(filters)
                             ? "No queued review matches this filter."
                             : showingEdited
@@ -494,12 +501,12 @@ export function ReviewQueueScreen({
                             }`}
                           >
                             <td
-                              className="truncate px-4 py-3 text-[var(--text-primary)]"
+                              className="truncate px-2 py-3 text-[var(--text-primary)]"
                               title={`${item.product.canonical_name ?? "Unnamed product"} — ${item.review.title} (${reviewIdLabel(item.review)})`}
                             >
                               {item.product.canonical_name ?? "Unnamed product"}
                             </td>
-                            <td className="px-4 py-3 text-[var(--text-primary)]">
+                            <td className="px-2 py-3 text-[var(--text-primary)]">
                               {/* The frame draws a 24px avatar beside the name.
                                   QueueAuthor carries no avatar_url, so the
                                   initial stands in rather than a stock face. */}
@@ -513,13 +520,13 @@ export function ReviewQueueScreen({
                                 <span className="truncate">{author}</span>
                               </span>
                             </td>
-                            <td className="px-4 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
+                            <td className="px-2 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
                               {item.author ? item.author.trust_stage : "—"}
                             </td>
-                            <td className="px-4 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
+                            <td className="px-2 py-3 [font-variant-numeric:tabular-nums] text-[var(--text-primary)]">
                               {Number(item.review.wilson_score).toFixed(2)}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2 py-3">
                               {item.review.has_receipt ? (
                                 <>
                                   <Receipt size={16} aria-hidden="true" className="text-[var(--accent-success)]" />
@@ -535,7 +542,7 @@ export function ReviewQueueScreen({
                               )}
                             </td>
                             <td
-                              className="px-4 py-3"
+                              className="px-2 py-3"
                               title={externalCheckLabel(item.integrity?.reverse_image_status).label}
                             >
                               {/* The frame draws a pass/fail mark here. This
@@ -560,18 +567,18 @@ export function ReviewQueueScreen({
                                 {externalCheckLabel(item.integrity?.reverse_image_status).label}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2 py-3">
                               <span
-                                className={`inline-block rounded-[var(--radius-pill)] px-3 py-1 text-[12px] ${bandTone(band)}`}
+                                className={`inline-block rounded-[var(--radius-pill)] px-2 py-1 text-[11px] ${bandTone(band)}`}
                                 title={`Integrity score ${item.priority.score} of 100 — ${laneLabel(item)} lane`}
                               >
                                 {band}
                               </span>
-                              <span className="ml-1.5 text-[11px] text-[var(--text-muted)] [font-variant-numeric:tabular-nums]">
+                              <span className="ml-1 text-[11px] text-[var(--text-muted)] [font-variant-numeric:tabular-nums]">
                                 {item.priority.score}
                               </span>
                             </td>
-                            <td className="whitespace-nowrap px-4 py-3 text-[var(--text-muted)]">
+                            <td className="whitespace-nowrap px-2 py-3 text-[var(--text-muted)]">
                               {relativeAge(item.review.created_at, now)}
                             </td>
                           </tr>
