@@ -3713,6 +3713,11 @@ export interface components {
             trust_stage: number;
             /** Reputation Score */
             reputation_score: string;
+            /**
+             * Verified Review Count
+             * @default 0
+             */
+            verified_review_count: number;
         };
         /**
          * QueueCounts
@@ -3771,6 +3776,11 @@ export interface components {
              * @default false
              */
             edited_since_monetized: boolean;
+            /**
+             * Comment Count
+             * @default 0
+             */
+            comment_count: number;
             signals?: components["schemas"]["QueueSignals"];
             integrity?: components["schemas"]["QueueIntegrityChecks"];
             priority: components["schemas"]["QueuePriorityAssessment"];

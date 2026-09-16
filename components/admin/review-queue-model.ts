@@ -93,7 +93,14 @@ export type QueueCard = {
     unhelpful_votes: number;
   };
   product: { canonical_name: string | null };
-  author: { display_name: string | null; reputation_score: string } | null;
+  author: {
+    display_name: string | null;
+    reputation_score: string;
+    /** Optional: a card from an API older than 2026-09-16 does not carry it. */
+    verified_review_count?: number;
+  } | null;
+  /** The review's comment total, removed ones excluded. Optional for the same reason. */
+  comment_count?: number;
   signals: {
     velocity: boolean;
     collusion: boolean;
@@ -424,22 +431,23 @@ export function reportCountFor(item: QueueCard, reports: ReportRow[]): number | 
 /* ------------------------------------------------------------- engagement */
 
 const NO_VIEW_SOURCE =
-  "Views are counted per hour in review_view_buckets, but no admin or " +
-  "review-facing endpoint reads that table — only the reviewer's own " +
-  "dashboard does. Never sourced from reading telemetry.";
+  "Views are counted per hour in review_view_buckets, and the moderator queue " +
+  "may not read them: the telemetry-isolation gate requires every module that " +
+  "feeds a moderation decision to stay independent of reading telemetry " +
+  "(backend test_telemetry_isolation). The reviewer's own dashboard shows " +
+  "them. This is a deliberate boundary, not a missing join.";
 
 const NO_SHARE_SOURCE =
   "Nothing in this build counts shares: there is no share column, share " +
   "event table or share endpoint anywhere in the backend.";
 
-const NO_COMMENT_SOURCE =
-  "comment_count is served by GET /reviews/{id}/full, which the queue does " +
-  "not call. The queue card carries no comment total.";
-
 const NO_REPORT_EVIDENCE =
   "This console reads only the 50 most recent reports, and that partial feed " +
   "names no report against this review. A failed reports request looks " +
   "identical to an empty one, so absence here is not evidence of zero.";
+
+const NO_COMMENT_COUNT_ON_CARD =
+  "This queue card predates the comment count being served; reload the queue.";
 
 const NO_TOP_COMMENT =
   "Comments are returned oldest-first with no ranking parameter, so there is " +
@@ -462,7 +470,13 @@ export function engagementFor(item: QueueCard, reports: ReportRow[]) {
     reports: reportCount === null
       ? unavailable("Reports", NO_REPORT_EVIDENCE)
       : available("Reports", String(reportCount)),
-    comments: unavailable("Comments", NO_COMMENT_SOURCE),
+    // Served on the card since 2026-09-16. A card from an older API has no
+    // field at all, which is why this is `?? null` and not `?? 0`: absent and
+    // "no comments" are different things and only one of them is a number.
+    comments:
+      item.comment_count === undefined || item.comment_count === null
+        ? unavailable("Comments", NO_COMMENT_COUNT_ON_CARD)
+        : available("Comments", String(item.comment_count)),
     topComment: unavailable("Top comment", NO_TOP_COMMENT),
   };
 }
@@ -470,15 +484,17 @@ export function engagementFor(item: QueueCard, reports: ReportRow[]) {
 /* ---------------------------------------------------------- author card */
 
 const NO_VERIFIED_COUNT =
-  "The queue card carries no verified-review count. signals.author_review_" +
-  "count includes unverified work, so it cannot stand in for this.";
+  "This queue card predates the verified-review count being served; reload " +
+  "the queue. signals.author_review_count includes unverified work and " +
+  "cannot stand in for it.";
 
 /**
  * The four stats the frame draws beside the author's name.
  *
- * Age, Trust Score and Total Reviews come off the queue card. Verified
- * Reviews does not exist on it — `users.verified_review_count` is real, but
- * `QueueAuthor` does not serialize it.
+ * All four come off the queue card now. Verified Reviews was the odd one out
+ * until 2026-09-16 — the column on `users` was always real and `QueueAuthor`
+ * simply did not carry it — so the console drew it as unavailable rather than
+ * borrowing the total, which counts unverified work too.
  */
 export function authorTrustStats(item: QueueCard): Stat[] {
   // reputation_score is a Decimal serialized as a string. An empty or
@@ -496,7 +512,9 @@ export function authorTrustStats(item: QueueCard): Stat[] {
             : "This review's author account no longer exists.",
         ),
     available("Total Reviews", String(item.signals.author_review_count)),
-    unavailable("Verified Reviews", NO_VERIFIED_COUNT),
+    item.author?.verified_review_count === undefined
+      ? unavailable("Verified Reviews", NO_VERIFIED_COUNT)
+      : available("Verified Reviews", String(item.author.verified_review_count)),
   ];
 }
 

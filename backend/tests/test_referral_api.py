@@ -769,3 +769,57 @@ def test_assess_open_queue_aggregates_the_whole_backlog(monkeypatch):
     # The escalated card carries reports even though its lane says "escalated".
     assert summary.reported_review_ids == {high, normal}
     assert [r.id for r in summary.reviews] == [high, normal, low]
+
+
+@requires_db
+def test_queue_card_carries_the_reviewer_snapshot_and_comment_count(client):
+    """The two figures the console had to draw as unavailable (contract §17, §19).
+
+    `users.verified_review_count` and the review's comment total are both
+    content, not reading telemetry, so serving them leaves the
+    telemetry-isolation gate alone — `test_telemetry_isolation` pins that
+    separately, and the queue must never gain views the same way.
+    """
+    author, author_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    _, reader_token, _ = register_and_token(client)
+    ah, mh, rh = _auth(author_token), _auth(mod_token), _auth(reader_token)
+
+    # A published, verified review first: it lifts the author's verified count.
+    published = client.post("/api/v1/products", headers=ah, json={
+        "name": f"SnapshotPublished {author_token[-8:]}", "category": "electronics",
+    }).json()["id"]
+    first = client.post("/api/v1/reviews", headers=ah, json={
+        "product_id": published, "title": "Solid", "discussion": "Weeks of use.",
+        "verdict": "yes_absolutely", "star_rating": 4,
+        "photo_url": owned_photo_url(ah),
+    }).json()["id"]
+    assert client.post(f"/api/v1/admin/reviews/{first}/publish",
+                       headers=mh).status_code == 200
+    assert client.post(f"/api/v1/reviews/{first}/comments", headers=rh,
+                       json={"body": "Does it survive a drop?"}).status_code == 201
+
+    # A second review, left in the queue, is the card under test.
+    queued_product = client.post("/api/v1/products", headers=ah, json={
+        "name": f"SnapshotQueued {author_token[-8:]}", "category": "electronics",
+    }).json()["id"]
+    queued = client.post("/api/v1/reviews", headers=ah, json={
+        "product_id": queued_product, "title": "Second", "discussion": "Also good.",
+        "verdict": "it_depends", "star_rating": 3,
+        "photo_url": owned_photo_url(ah),
+    }).json()["id"]
+
+    page = client.get("/api/v1/admin/review-queue?limit=100", headers=mh)
+    assert page.status_code == 200, page.text
+    card = next(i for i in page.json()["items"] if i["review"]["id"] == queued)
+
+    assert card["author"]["verified_review_count"] == 1
+    assert card["author"]["verified_review_count"] != card["signals"]["author_review_count"]
+    # This card's own review has no comments; the count is the review's, not
+    # the author's, so it must not pick up the other review's thread.
+    assert card["comment_count"] == 0
+
+    published_card = next(
+        i for i in page.json()["items"] if i["review"]["id"] == first
+    ) if any(i["review"]["id"] == first for i in page.json()["items"]) else None
+    assert published_card is None, "a published review must not be in the queue"

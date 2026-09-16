@@ -70,6 +70,12 @@ class QueueAuthor(BaseModel):
     display_name: str | None = None
     trust_stage: int
     reputation_score: Decimal
+    #: The reviewer snapshot's fourth figure (contract §17). It was the one the
+    #: console had to draw as unavailable: the column has always existed on
+    #: `users`, and this schema simply never carried it. Not telemetry — it
+    #: counts published reviews that carry proof, which is content, so the
+    #: telemetry-isolation gate is untouched.
+    verified_review_count: int = 0
 
 
 class QueueSignals(BaseModel):
@@ -135,6 +141,11 @@ class QueueItem(BaseModel):
     author: QueueAuthor | None = None
     suggested_platform: Platform | None = None
     edited_since_monetized: bool = False
+    #: How many comments the review has, removed ones excluded. The frame
+    #: draws it beside the vote counts; `FeedItemOut` has carried the same
+    #: number for the public cards since BUG-006, and the console was the one
+    #: surface left printing "no source". Content, not telemetry.
+    comment_count: int = 0
     signals: QueueSignals = Field(default_factory=QueueSignals)
     # FR-8 layers 2 and 3: whether plagiarism and reverse image checks ran. A
     # sibling of `signals` for the same reason `priority` is.

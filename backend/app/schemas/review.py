@@ -19,8 +19,6 @@ from app.models.enums import (
 from app.schemas.urls import web_url_or_none
 from app.services.trust_badge import has_trust_badge
 
-
-
 #: Ratings are 0 to 5 in half steps (owner requirement, 2026-09-16). Zero is a
 #: real answer — "this was bad" — not an unanswered question, so the floor is 0
 #: rather than 1. The step is checked here as well as by the column's CHECK,

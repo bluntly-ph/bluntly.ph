@@ -17,11 +17,12 @@ from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.errors import AppError
+from app.models.comment import ReviewComment
 from app.models.enums import (
     EarnEligibleStatus,
     ModerationAction,
@@ -508,6 +509,17 @@ def _build_assessed_cards(
     report_facts = report_service.report_facts_by_target(
         db, ModerationTargetType.review, [review.id for review, _ in reviews]
     )
+    # One grouped count for the whole page rather than one per card.
+    comment_counts = dict(
+        db.execute(
+            select(ReviewComment.review_id, func.count(ReviewComment.id))
+            .where(
+                ReviewComment.review_id.in_([review.id for review, _ in reviews]),
+                ReviewComment.is_removed.is_(False),
+            )
+            .group_by(ReviewComment.review_id)
+        ).all()
+    )
     signals_by_review = fraud_service.compute_signals_by_review(
         db,
         [review for review, _ in reviews],
@@ -560,12 +572,14 @@ def _build_assessed_cards(
                     display_name=author.display_name,
                     trust_stage=author.trust_stage,
                     reputation_score=author.reputation_score,
+                    verified_review_count=author.verified_review_count,
                 )
                 if author is not None
                 else None
             ),
             suggested_platform=suggested_platform_from(product, platforms),
             edited_since_monetized=edited,
+            comment_count=comment_counts.get(review.id, 0),
             signals=QueueSignals(**signals),
             priority=assessment_to_queue_schema(assessment),
             queue_time_basis=_BASIS_FOR_KIND[kind],

@@ -18,7 +18,6 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Numeric,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -27,6 +26,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     text,

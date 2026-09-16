@@ -24,9 +24,9 @@ from app.models.user import User
 from app.schemas.comment import (
     AuthoredCommentOut,
     CommentAuthor,
-    CommentReview,
     CommentCreate,
     CommentOut,
+    CommentReview,
     CommentVoteIn,
 )
 from app.services import comment_service, review_service

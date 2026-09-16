@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection, Iterator
-from datetime import UTC, datetime
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session

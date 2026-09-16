@@ -38,7 +38,11 @@ export type QueueItem = {
     display_name: string | null;
     trust_stage: number;
     reputation_score: string;
+    /** The reviewer snapshot's fourth figure (contract §17), served since 2026-09-16. */
+    verified_review_count: number;
   } | null;
+  /** The review's comment total, removed ones excluded. */
+  comment_count: number;
   suggested_platform: string | null;
   suggested_sub_id: string | null;
   /** This monetized review was edited after its affiliate link was attached. */

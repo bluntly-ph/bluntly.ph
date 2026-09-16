@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from app.models.user import TRUST_LEVEL_NAMES, _TRUST_NAME_EXPR
+from app.models.user import _TRUST_NAME_EXPR, TRUST_LEVEL_NAMES
 
 EXPECTED = ["Newcomer", "Contributor", "Verified Buyer", "Established Reviewer",
             "Trusted Reviewer", "Community Expert"]

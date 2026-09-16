@@ -29,8 +29,8 @@ from app.schemas.auth import ProfileUpdateIn, UserOut
 from app.schemas.common import Problem
 from app.schemas.user import BadgeOut, RoleUpdate, TrustProgressOut, UserTrustOut
 from app.services import contribution_streak, dashboard_service
-from app.services.trust import next_stage_progress
 from app.services.storage import delete_avatar_object, upload_avatar
+from app.services.trust import next_stage_progress
 from app.services.username import MAX_LENGTH, MIN_LENGTH, is_valid_username
 
 router = APIRouter(prefix="/users", tags=["users"])

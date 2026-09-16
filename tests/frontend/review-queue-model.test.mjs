@@ -49,8 +49,10 @@ const item = (overrides = {}) => ({
     display_name: "Viole-nim",
     trust_stage: 4,
     reputation_score: "99.00",
+    verified_review_count: 8,
     ...(overrides.author === null ? {} : (overrides.author ?? {})),
   },
+  comment_count: overrides.comment_count ?? 34,
   suggested_platform: "shopee",
   suggested_sub_id: "blt_111111112222",
   signals: {
@@ -257,21 +259,44 @@ test("tabHref makes the URL the shareable source of truth", () => {
   assert.equal(tabHref("reviews", noFilters), "/moderate/review-queue?tab=reviews");
 });
 
-test("engagementFor marks views, shares and comments unavailable rather than zero", () => {
-  // Nothing in this build serves a per-review view, share or comment count to
-  // the moderator console: `review_view_buckets` has no admin read path, no
-  // share counter exists anywhere, and `comment_count` is only on
-  // `GET /reviews/{id}/full`. Rendering "0" would state, on screen, that the
-  // review has none — which is a different claim from "not measured here".
+test("engagementFor marks views, shares and the top comment unavailable rather than zero", () => {
+  // Views are a deliberate boundary, not a missing join: the moderator queue
+  // may not read reading telemetry (backend test_telemetry_isolation), so the
+  // per-hour buckets stay on the reviewer's own dashboard. Nothing counts
+  // shares anywhere. Comments come back oldest-first with no ranking, so there
+  // is no server-side notion of a top one. Rendering "0" would state, on
+  // screen, that the review has none — a different claim from "not measured".
   const stats = engagementFor(item(), []);
 
-  for (const key of ["views", "shares", "comments", "topComment"]) {
+  for (const key of ["views", "shares", "topComment"]) {
     assert.equal(stats[key].available, false, `${key} must not claim a number`);
     assert.ok(
       stats[key].reason.length > 0,
       `${key} must say why it is unavailable`,
     );
   }
+});
+
+test("engagementFor reports the comment count the card now carries", () => {
+  const stats = engagementFor(item(), []);
+  assert.equal(stats.comments.available, true);
+  assert.equal(stats.comments.value, "34");
+});
+
+test("a card with no comment count is unavailable, never zero", () => {
+  // An older API, or a shape change. "No field" and "no comments" are
+  // different answers and only one of them is a number.
+  const card = item();
+  delete card.comment_count;
+  const stats = engagementFor(card, []);
+  assert.equal(stats.comments.available, false);
+  assert.ok(stats.comments.reason.length > 0);
+});
+
+test("a review with no comments reports zero, which is a measurement", () => {
+  const stats = engagementFor(item({ comment_count: 0 }), []);
+  assert.equal(stats.comments.available, true);
+  assert.equal(stats.comments.value, "0");
 });
 
 test("engagementFor keeps views unavailable even for a fully populated card", () => {
@@ -299,11 +324,21 @@ test("authorTrustStats reads age, trust score and review count from the queue ca
   assert.equal(byLabel["Total Reviews"].value, "15");
 });
 
-test("authorTrustStats marks Verified Reviews unavailable", () => {
-  // `users.verified_review_count` exists but `QueueAuthor` does not carry it,
-  // and `signals.author_review_count` counts ALL non-removed reviews — reusing
-  // it here would overstate how much of this author's work was verified.
+test("authorTrustStats reads Verified Reviews from the card, not from the total", () => {
+  // `signals.author_review_count` counts ALL non-removed reviews. Reusing it
+  // here would overstate how much of this author's work carries proof, which
+  // is the one thing this cell is for.
   const byLabel = Object.fromEntries(authorTrustStats(item()).map((s) => [s.label, s]));
+
+  assert.equal(byLabel["Verified Reviews"].available, true);
+  assert.equal(byLabel["Verified Reviews"].value, "8");
+  assert.notEqual(byLabel["Verified Reviews"].value, byLabel["Total Reviews"].value);
+});
+
+test("a card without a verified count says so rather than borrowing the total", () => {
+  const card = item();
+  delete card.author.verified_review_count;
+  const byLabel = Object.fromEntries(authorTrustStats(card).map((s) => [s.label, s]));
 
   assert.equal(byLabel["Verified Reviews"].available, false);
   assert.ok(byLabel["Verified Reviews"].reason.length > 0);

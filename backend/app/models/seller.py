@@ -34,13 +34,13 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Numeric,
     Boolean,
     CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
     Index,
+    Numeric,
     SmallInteger,
     String,
     Text,

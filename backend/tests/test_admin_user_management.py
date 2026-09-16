@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from app.core.security import create_access_token
 from app.core.config import settings
+from app.core.security import create_access_token
 from app.models.enums import MemberRole, ModerationAction
 from app.models.moderation import ModerationLog
 from app.models.user import User

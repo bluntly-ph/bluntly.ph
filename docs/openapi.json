@@ -10823,6 +10823,11 @@
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Reputation Score"
+          },
+          "verified_review_count": {
+            "type": "integer",
+            "title": "Verified Review Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -10925,6 +10930,11 @@
             "type": "boolean",
             "title": "Edited Since Monetized",
             "default": false
+          },
+          "comment_count": {
+            "type": "integer",
+            "title": "Comment Count",
+            "default": 0
           },
           "signals": {
             "$ref": "#/components/schemas/QueueSignals"
