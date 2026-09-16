@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 
 import { AuthSheet } from "@/components/auth/AuthSheet";
 import { GoogleButton } from "@/components/auth/GoogleButton";
@@ -62,6 +62,7 @@ export function SignupForm({
 }) {
   const [sendState, sendAction, sending] = useActionState(requestOtp, EMPTY);
   const [email, setEmail] = useState("");
+  const emailLabelId = useId();
 
   return sendState.emailSent ? (
     <CodeStep email={sendState.emailSent} purpose={purpose} next={next} />
@@ -87,12 +88,24 @@ export function SignupForm({
             </span>
             <span className="h-px flex-1 bg-[rgba(242,242,242,0.35)] lg:bg-[var(--line-hairline-30)]" />
           </div>
-          <p className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]">
+          {/* The field's VISIBLE label (Coverage row 70). It used to be a
+              detached paragraph, and the email field's only on-screen cue was
+              its placeholder — which disappears the moment someone starts
+              typing, so a person checking what they entered had nothing telling
+              them what the box was for. `aria-labelledby` ties this text to the
+              input without moving the owner-approved layout; it also makes the
+              visible words part of the accessible name, which is what WCAG
+              2.5.3 asks of a speech-input user saying what they see. */}
+          <p
+            id={emailLabelId}
+            className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]"
+          >
             {purpose === "signup" ? "Sign up with email" : "Continue with email"}
           </p>
           <TextField
             label="Email address"
             labelHidden
+            aria-labelledby={emailLabelId}
             name="email"
             type="email"
             inputMode="email"
