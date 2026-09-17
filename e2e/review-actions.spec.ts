@@ -68,6 +68,14 @@ test.describe("BUG-003 — styled 404", () => {
 });
 
 test.describe("BUG-011 — categories round trip", () => {
+  // The All filters pill exists below 1024px only: since 4013c0f (2026-09-16)
+  // desktop refines search from the page's "Refine" rail and the pill bar is
+  // lg:hidden. At the default 1280px viewport these tests waited 30s for a
+  // control the design no longer draws there.
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+  });
+
   test("a filtered view can get back to /categories", async ({ page }) => {
     await page.goto("/categories");
     await page.getByRole("link", { name: /beauty/i }).first().click();
@@ -136,7 +144,9 @@ test.describe("search filters and sort — Figma Chip/Action and sheets", () => 
    * orders — so each choice is proven to reach the URL the results are read
    * from, at a phone and a desktop width.
    */
-  for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  // Phone and tablet: the pills are lg:hidden, desktop uses the Refine rail
+  // (4013c0f). 1440 was the other width here before that change.
+  for (const size of [{ width: 390, height: 844 }, { width: 768, height: 1024 }]) {
     test(`a category applies from the All filters sheet at ${size.width}px`, async ({ page }) => {
       await page.setViewportSize(size);
       await page.goto("/search?q=fan");
@@ -154,6 +164,7 @@ test.describe("search filters and sort — Figma Chip/Action and sheets", () => 
   }
 
   test("Latest applies from the Sort sheet, and Reset restores most helpful", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/search?q=fan");
     await page.getByRole("button", { name: "Sort", exact: true }).click();
     const sheet = page.getByRole("dialog", { name: "Sort" });
@@ -167,6 +178,7 @@ test.describe("search filters and sort — Figma Chip/Action and sheets", () => 
   });
 
   test("Escape closes a sheet without applying it and returns focus to its pill", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/search?q=fan");
     const pill = page.getByRole("button", { name: "Sort", exact: true });
     await pill.click();

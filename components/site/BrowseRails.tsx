@@ -29,7 +29,8 @@ const LINKS: { key: BrowseSection; href: string; icon: Icon; label: string }[] =
 ];
 
 /** The heading over a rail group: 12px, uppercase, wide-tracked. */
-export const RAIL_LABEL = "text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]";
+// Secondary ink, not muted: rail labels were --text-muted (40% ink, 2.39:1 on the app surface) and failed WCAG AA contrast in Lighthouse on every desktop page (2026-09-17). These rails are desktop-only layout with no Figma frame, so the AA-passing secondary ink (70%, 5.3:1) is used, not a design value.
+export const RAIL_LABEL = "text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-secondary)]";
 
 /** A link in a rail group. */
 export const RAIL_ACTION = "text-[var(--text-secondary)] hover:text-[var(--accent-primary)]";
@@ -110,8 +111,13 @@ export function RailGroup({
   className?: string;
   children: ReactNode;
 }) {
+  // Every link in a rail list is at least 24px tall (WCAG 2.5.8, and
+  // e2e/accessibility.spec.ts): 13px text on its natural line made 19px
+  // targets, which failed that check on /search and /questions.
   return (
-    <section className={className}>
+    <section
+      className={`[&_li>a]:inline-flex [&_li>a]:min-h-6 [&_li>a]:items-center ${className ?? ""}`}
+    >
       <h2 className={RAIL_LABEL}>{title}</h2>
       {children}
     </section>

@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 
 import { TrustBadge } from "@/components/ui/TrustBadge";
+import { LAZY, type ImageHints } from "@/lib/list-image-hints";
 import type { FeedCardData } from "@/lib/reviews";
 
 /**
@@ -51,11 +52,11 @@ const VERDICT: Record<string, { label: string; className: string }> = {
  */
 export function FeedCard({
   review,
-  priority = false,
+  imageHints = LAZY,
 }: {
   review: FeedCardData;
-  /** First card only: its thumbnail is the above-the-fold LCP candidate. */
-  priority?: boolean;
+  /** How the thumbnail loads: eager on screen, high priority on the first real photo (lib/list-image-hints.ts). */
+  imageHints?: ImageHints;
 }) {
   const verdict = VERDICT[review.verdict] ?? VERDICT.it_depends;
 
@@ -78,7 +79,8 @@ export function FeedCard({
               alt=""
               fill
               sizes="(min-width: 640px) 192px, 160px"
-              priority={priority}
+              loading={imageHints.loading}
+              fetchPriority={imageHints.fetchPriority}
               className="object-cover"
             />
           ) : (
@@ -97,7 +99,7 @@ export function FeedCard({
         <span className="min-w-0 flex-1">
           {/* What is being reviewed, before what was concluded about it. */}
           {review.product ? (
-            <span className="block truncate text-[12px] text-[var(--text-muted)]">
+            <span className="block truncate text-[12px] text-[var(--text-secondary)]">
               {review.product}
               {review.category ? (
                 <span className="capitalize"> · {review.category}</span>
@@ -105,9 +107,12 @@ export function FeedCard({
             </span>
           ) : null}
 
-          <h3 className="mt-0.5 text-[15px] font-semibold leading-snug text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] sm:text-[16px]">
+          {/* h2: it follows the page's h1 directly (the desktop rails are
+              hidden on a phone), and an h3 there skipped a level — Lighthouse
+              heading-order, /feed, 2026-09-17. */}
+          <h2 className="mt-0.5 text-[15px] font-semibold leading-snug text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] sm:text-[16px]">
             {review.title}
-          </h3>
+          </h2>
 
           <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span
@@ -146,7 +151,7 @@ export function FeedCard({
             </span>
           ) : null}
 
-          <span className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--text-muted)]">
+          <span className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--text-secondary)]">
             <span className="font-medium text-[var(--text-secondary)]">
               {review.username ? `@${review.username}` : review.author}
             </span>

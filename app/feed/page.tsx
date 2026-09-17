@@ -8,6 +8,7 @@ import { INTERESTS } from "@/lib/interests";
 import { getUser } from "@/lib/dal";
 import { getFeed } from "@/lib/reviews";
 import { getSessionToken } from "@/lib/session";
+import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
 
 export const metadata: Metadata = {
   title: "Feed — bluntly",
@@ -138,8 +139,12 @@ export default async function FeedPage({
           ) : (
             <>
               <div className="mt-1">
-                {cards.map((card, i) => (
-                  <FeedCard key={card.id} review={card} priority={i === 0} />
+                {cards.map((card, i, all) => (
+                  <FeedCard
+                    key={card.id}
+                    review={card}
+                    imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 4)}
+                  />
                 ))}
               </div>
 
@@ -187,7 +192,7 @@ function Tab({ href, label, active }: { href: string; label: string; active: boo
         "-mb-px border-b-2 px-4 py-2.5 text-[14px] font-semibold transition-colors",
         active
           ? "border-[var(--accent-primary)] text-[var(--text-primary)]"
-          : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]",
+          : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
       ].join(" ")}
     >
       {label}

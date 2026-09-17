@@ -6,7 +6,8 @@
    point at the CSS variables next/font exposes.
 
    Poppins is the display/UI workhorse. Arial is the file's own secondary face
-   for dense UGC text. Bebas Neue appears only as oversized step numerals. */
+   for dense UGC text. The DS's Bebas Neue accent face is not loaded: nothing
+   in the product uses it (see app/layout.tsx). */
 
 :root {
   --font-display: var(--font-poppins), -apple-system, BlinkMacSystemFont,
@@ -15,8 +16,6 @@
     'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-system: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', sans-serif;
-  --font-accent: var(--font-bebas), -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   /* weights actually used (Poppins) */
   --weight-extralight: 200;

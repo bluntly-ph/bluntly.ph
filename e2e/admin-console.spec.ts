@@ -95,6 +95,26 @@ test.describe("admin console shell", () => {
     });
   }
 
+  // The rail follows Admin/Sidebar 5017:2225 (16px items, 28px glyphs, a 44px
+  // pitch) but carries thirteen items to the frame's eight. At the frame's own
+  // 832px height that rhythm hid the whole SYSTEM group below the rail's fold,
+  // so short screens use a tighter pitch. Laptop heights, not only the frame's.
+  for (const height of [720, 768, 832]) {
+    test(`every rail item is visible without scrolling the rail at 1280x${height}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height });
+      await settle(page, "/moderate");
+      const belowFold = await page.evaluate(() => {
+        const nav = document.querySelector("aside nav");
+        if (!nav) return ["(no rail)"];
+        const bottom = nav.getBoundingClientRect().bottom;
+        return [...nav.querySelectorAll("li")]
+          .filter((li) => li.getBoundingClientRect().bottom > bottom + 0.5)
+          .map((li) => li.textContent?.trim() ?? "");
+      });
+      expect(belowFold, "rail items hidden below the fold").toEqual([]);
+    });
+  }
+
   test("a visually-hidden heading cannot extend the page", async ({ page }) => {
     // The regression, pinned directly: every sr-only element must be clipped by
     // an ancestor rather than resolving its containing block to the document.

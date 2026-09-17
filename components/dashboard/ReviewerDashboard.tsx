@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Books,
   CaretRight,
   ChartLineUp,
@@ -11,9 +10,11 @@ import {
   ImageSquare,
   PaperPlaneTilt,
   PenNib,
+  Seal,
   UserSound,
 } from "@phosphor-icons/react/dist/ssr";
 
+import { DASHBOARD_GRADIENT, DashboardNav, HeroAmount } from "@/components/dashboard/DashboardScreen";
 import { AreaChart, Sparkline, type Point } from "@/components/dashboard/MiniChart";
 import {
   compactCount,
@@ -62,7 +63,10 @@ export function ReviewerDashboard({
     DASHBOARD_RANGES.find((r) => r.key === range)?.label ?? "This week";
 
   return (
-    <div className="mx-auto w-full max-w-[430px] md:max-w-[40rem] md:pt-6 lg:grid lg:max-w-[64rem] lg:grid-cols-[26rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-10 lg:pt-10">
+    // White under 768px: in 5572:7130 the sheet below the curve is one white
+    // surface down to the last row. Without it the rows sat on the page's grey
+    // (compared 2026-09-17), while the wallet section after them stays on grey.
+    <div className="mx-auto w-full max-w-[430px] max-md:bg-[var(--surface-card)] md:max-w-[40rem] md:pt-6 lg:grid lg:max-w-[64rem] lg:grid-cols-[26rem_minmax(0,1fr)] lg:items-start lg:gap-10 lg:px-10 lg:pt-10">
       <div>
         <EarningsHero
           amount={summary ? peso(summary.estimated_commission) : peso(0)}
@@ -76,51 +80,20 @@ export function ReviewerDashboard({
   );
 }
 
-/** Orange gradient, back arrow, the trust-level pill, and the headline figure. */
+/**
+ * Gradient, the Profile nav bar and the headline figure (5572:7130). The
+ * gradient runs on behind the action bar, and the white sheet's curved top
+ * edge starts at y301 (Rectangle 277: radius 32 across, 46 down). The hero was
+ * a box with a 28px rounded foot ending 65px higher, which moved every block
+ * below it out of place.
+ */
 function EarningsHero({ amount, trustLevel }: { amount: string; trustLevel: string }) {
   return (
-    // The gradient is the hero's OWN background, not an absolutely positioned
-    // overlay. As an overlay it painted above the later, non-positioned card
-    // and hid its header row — positioned elements win against non-positioned
-    // siblings regardless of document order.
-    <div
-      className="rounded-b-[28px] md:rounded-[28px]"
-      style={{
-        background:
-          "linear-gradient(160deg, var(--accent-primary) 0%, var(--accent-strong, #c2410c) 100%)",
-      }}
-    >
-      <div>
-        <div className="flex h-[72px] items-center justify-between px-6">
-          <Link
-            href="/"
-            aria-label="Back"
-            className="-ml-1 rounded-full p-1 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-          >
-            <ArrowLeft size={28} weight="regular" />
-          </Link>
-
-          {/* The design's white pill with the mark and the role. */}
-          <span className="inline-flex h-8 items-center gap-2 rounded-[var(--radius-pill)] bg-white pl-3 pr-4">
-            <Image
-              src="/icon.svg"
-              alt=""
-              width={16}
-              height={16}
-              className="h-4 w-4"
-            />
-            <span className="text-[13px] font-semibold text-[var(--text-primary)]">
-              {trustLevel}
-            </span>
-          </span>
-        </div>
-
-        <div className="pb-[96px] pt-[48px] text-center">
-          <p className="text-[13px] font-medium text-white/80">Est. Comm</p>
-          <p className="mt-1 text-[40px] font-bold leading-tight text-white [font-variant-numeric:tabular-nums]">
-            {amount}
-          </p>
-        </div>
+    <div className="md:overflow-hidden md:rounded-[28px]" style={{ background: DASHBOARD_GRADIENT }}>
+      <DashboardNav backHref="/" trustLevel={trustLevel} />
+      {/* 72 + 229 = 301: the sheet's edge. */}
+      <div className="min-h-[229px] md:min-h-0 md:pb-[72px]">
+        <HeroAmount label="Est. Comm" amount={amount} />
       </div>
     </div>
   );
@@ -141,25 +114,36 @@ const ACTIONS = [
   { href: "/dashboard/insights", label: "Insights", Icon: ChartLineUp },
 ];
 
-/** The floating white bar that straddles the curve. */
+/**
+ * The white sheet's curved edge and the floating bar that straddles it
+ * (5961:774): 300x72 at x45, y273 — 28px above the edge — white, radius 12, a
+ * 0 4 2 25% drop shadow, 15px over and 12px under 28px sides; four 46px items
+ * 20px apart, a glyph over a 10px Regular label at 70% ink (Transfer's glyph
+ * 24px with a 6px gap, the rest 28px with 2px). It was 26px glyphs over 11px
+ * Medium on a bar that ended the hero instead of crossing the sheet.
+ */
 function ActionBar() {
   return (
-    <div className="relative z-10 -mt-[72px] px-[45px]">
-      <nav
-        aria-label="Earnings actions"
-        className="flex h-[72px] items-center justify-between rounded-[var(--radius-md)] bg-[var(--surface-card)] px-7 shadow-[var(--shadow-card)]"
-      >
-        {ACTIONS.map(({ href, label, Icon }) => (
-          <Link
-            key={label}
-            href={href}
-            className="flex w-[46px] flex-col items-center gap-1.5 rounded-[var(--radius-sm)] py-1 text-[var(--text-primary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
-          >
-            <Icon size={26} weight="regular" />
-            <span className="text-[11px] font-medium leading-none">{label}</span>
-          </Link>
-        ))}
-      </nav>
+    <div className="relative z-10 rounded-t-[32px_46px] bg-[var(--surface-card)] md:rounded-none md:bg-transparent">
+      <div className="-mt-[28px] px-[45px] md:-mt-[72px]">
+        <nav
+          aria-label="Earnings actions"
+          className="flex h-[72px] items-start justify-center gap-5 rounded-[12px] bg-[var(--surface-card)] px-7 pb-3 pt-[15px] [filter:drop-shadow(0_4px_2px_rgba(0,0,0,0.25))]"
+        >
+          {ACTIONS.map(({ href, label, Icon }, i) => (
+            <Link
+              key={label}
+              href={href}
+              className={`flex w-[46px] flex-col items-center rounded-[var(--radius-sm)] text-[var(--text-primary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
+                i === 0 ? "gap-1.5" : "gap-0.5"
+              }`}
+            >
+              <Icon size={i === 0 ? 24 : 28} weight="regular" />
+              <span className="text-[10px] leading-none text-[rgba(32,32,32,0.7)]">{label}</span>
+            </Link>
+          ))}
+        </nav>
+      </div>
     </div>
   );
 }
@@ -183,16 +167,18 @@ function EstCommCard({
     <section
       id="insights"
       aria-labelledby="est-comm-heading"
-      className="mx-4 mt-5 rounded-[var(--radius-md)] bg-[var(--surface-card)] px-6 py-4 shadow-[var(--shadow-card)] md:mx-0"
+      // 5961:773: x16, 20px under the bar, 358 wide, white, radius 12, 16px
+      // over and 24px under 24px sides, a 0 4 2 25% drop shadow.
+      className="relative mx-4 mt-5 rounded-[12px] bg-[var(--surface-card)] px-6 pb-6 pt-4 [filter:drop-shadow(0_4px_2px_rgba(0,0,0,0.25))] md:mx-0"
     >
       <div className="flex items-center justify-between">
         <h2
           id="est-comm-heading"
-          className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]"
+          className="flex items-center gap-1 text-[12px] font-medium leading-none text-[var(--text-primary)]"
         >
           <CoinVertical size={16} weight="regular" />
           Est. Comm
-          <CaretRight size={8} weight="bold" className="text-[var(--text-muted)]" />
+          <CaretRight size={8} weight="bold" />
         </h2>
 
         {/* A real control, not the decorative caret the frame shows: it cycles
@@ -200,7 +186,7 @@ function EstCommCard({
         <Link
           href={`/dashboard?range=${next.key}`}
           scroll={false}
-          className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+          className="flex items-center gap-1 text-[10px] font-light leading-none text-[var(--text-primary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
         >
           {rangeLabel}
           <CaretRight size={8} weight="bold" />
@@ -228,7 +214,7 @@ function EstCommCard({
         />
       </dl>
 
-      <div className="mt-6 h-[111px]">
+      <div className="mt-5 h-[111px]">
         {/* A dense series of zeros is not data. Drawing it produced a bare
             line pinned to the axis under an empty card, which reads as a
             broken chart rather than as an empty month. */}
@@ -267,7 +253,9 @@ function Stat({
   return (
     <div className="min-w-0">
       <dd
-        className={`text-[17px] font-semibold leading-tight [font-variant-numeric:tabular-nums] ${
+        // 5702:2804: the value in 14px Regular on a tight line, the label
+        // 4px under it in 10px Light at 70% ink (was 17px SemiBold over 11px).
+        className={`text-[14px] leading-none [font-variant-numeric:tabular-nums] ${
           tone === "success"
             ? "text-[var(--accent-success)]"
             : "text-[var(--text-muted)]"
@@ -275,7 +263,7 @@ function Stat({
       >
         {value}
       </dd>
-      <dt className="mt-1 whitespace-nowrap text-[11px] text-[var(--text-secondary)]">
+      <dt className="mt-1 whitespace-nowrap text-[10px] font-light leading-none text-[rgba(32,32,32,0.7)]">
         {label}
       </dt>
       {note ? (
@@ -286,11 +274,8 @@ function Stat({
 }
 
 /** Medal colours for the top three, as the design draws them. */
-const MEDAL = [
-  "bg-[#F5B301] text-white",
-  "bg-[#B6BCC4] text-white",
-  "bg-[#C67A3E] text-white",
-];
+/** The seal colours 5991:604 and its siblings draw for the top three (read from the frame). */
+const MEDAL = ["text-[#FFC30B]", "text-[#C4C4C4]", "text-[#CE894C]"];
 
 function Leaderboard({
   summary,
@@ -310,18 +295,24 @@ function Leaderboard({
         {displayName}&rsquo;s reviews, ranked
       </h2>
 
-      <div className="border-t border-[var(--border-subtle)] pt-4 lg:border-t-0">
+      {/* A full-bleed rule 21px under the card, the toggle 20px below it (5991:576, 5991:443). */}
+      <div className="border-t border-[var(--line-hairline-10)] pt-5 lg:border-t-0">
         {/* Reviews / Answers. Answers is not a dashboard surface yet, so it is
             a link to the Q&A the reviewer has answered rather than a tab that
             switches to an empty panel. */}
-        <div className="mx-4 flex w-fit items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-app)] p-1">
-          <span className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] bg-[var(--surface-card)] px-4 py-1.5 text-[13px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)]">
+        {/* 5991:443: 214x40, #f2f2f2 with a 0 2 4 25% inset shadow, radius
+            24, 8px in on the left; the current segment a white 32px pill
+            (radius 16, 16px sides, a 0 2 2 25% drop shadow); 16px glyphs 4px
+            before 12px Medium; 12px between segments. It was a flat grey chip
+            with 13px labels. */}
+        <div className="mx-4 flex h-10 w-[214px] items-center gap-3 rounded-[24px] bg-[#f2f2f2] py-1 pl-2 pr-[22px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.25)]">
+          <span className="inline-flex h-8 items-center gap-1 rounded-[16px] bg-[var(--surface-card)] px-4 pb-1.5 pt-2 text-[12px] font-medium leading-none text-[var(--text-primary)] [filter:drop-shadow(0_2px_2px_rgba(0,0,0,0.25))]">
             <PenNib size={16} weight="regular" />
             Reviews
           </span>
           <Link
             href="/questions"
-            className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-4 py-1.5 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+            className="inline-flex items-center gap-1 text-[12px] font-medium leading-none text-[var(--text-primary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
           >
             <UserSound size={16} weight="regular" />
             Answers
@@ -335,7 +326,7 @@ function Leaderboard({
         ) : (
           <ol className="mt-4">
             {reviews.map((review, i) => (
-              <LeaderboardRow key={review.review_id} review={review} rank={i + 1} />
+              <RankedReviewRow key={review.review_id} review={review} rank={i + 1} />
             ))}
           </ol>
         )}
@@ -343,7 +334,7 @@ function Leaderboard({
         {reviews.length > 0 ? (
           <Link
             href="/profile"
-            className="mx-4 mt-4 inline-block text-[12px] text-[var(--text-secondary)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+            className="mx-4 mt-3 inline-block text-[10px] leading-none text-[rgba(32,32,32,0.7)] transition-colors hover:text-[var(--accent-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
           >
             See more...
           </Link>
@@ -353,7 +344,11 @@ function Leaderboard({
   );
 }
 
-function LeaderboardRow({
+/**
+ * One ranked review: the dashboard's leaderboard row, and the Reviews screen's
+ * rows, so the two lists a reviewer moves between read as the same list.
+ */
+export function RankedReviewRow({
   review,
   rank,
 }: {
@@ -361,13 +356,18 @@ function LeaderboardRow({
   rank: number;
 }) {
   return (
-    <li className="border-b border-[var(--border-subtle)] last:border-0">
+    <li className="border-b border-[var(--line-hairline-10)] last:border-0">
       <Link
         href={`/reviews/${review.review_id}`}
-        className="flex items-center gap-3 px-4 py-5 transition-colors hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+        // 120px rows (5991:608): an 80px photo at radius 16 with its 32px rank
+        // seal over the top-right, the text column 12px beyond it — the title in
+        // 10px Light, "views • helped" 10px Light at 70% 21px down, the amount
+        // 14px SemiBold green 22px lower — and the 100x70 sparkline at x260.
+        // It was 13px Medium, 12px and 15px Bold.
+        className="flex items-start gap-3 px-4 py-5 transition-colors hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
       >
         <span className="relative block h-20 w-20 shrink-0">
-          <span className="relative block h-20 w-20 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-app)]">
+          <span className="relative block h-20 w-20 overflow-hidden rounded-[16px] bg-[var(--surface-app)]">
             {review.photo_url ? (
               <Image
                 src={review.photo_url}
@@ -385,28 +385,33 @@ function LeaderboardRow({
               </span>
             )}
           </span>
-          {/* The medal sits over the thumbnail's top-right, as in the frame.
-              The rank is text inside it, so it is not colour-only. */}
+          {/* 5991:604: a 32px Phosphor Seal (fill) 53px in from the photo's
+              left and 5px above it, so it overhangs the top-right corner by
+              5px, with the rank in 12px white. The frame sets the digit in
+              ExtraBold; Poppins 800 is not loaded (one more font file for one
+              glyph), so it is Bold. It was a 32px circle with a card shadow.
+              The rank is also the list order, so the seal is decoration. */}
           <span
             aria-hidden="true"
-            className={`absolute -right-2 -top-1 grid h-8 w-8 place-items-center rounded-full text-[13px] font-bold shadow-[var(--shadow-card)] ${
-              MEDAL[rank - 1] ?? "bg-[var(--surface-inverse)] text-white"
+            className={`absolute -right-[5px] -top-[5px] grid h-8 w-8 place-items-center ${
+              MEDAL[rank - 1] ?? "text-[var(--surface-inverse)]"
             }`}
           >
-            {rank}
+            <Seal size={32} weight="fill" className="absolute inset-0" />
+            <span className="relative text-[12px] font-bold leading-none text-white">{rank}</span>
           </span>
         </span>
 
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">
+        <span className="min-w-0 flex-1 pt-0">
+          <span className="block truncate text-[10px] font-light leading-none text-[var(--text-primary)]">
             {review.title}
           </span>
-          <span className="mt-1 flex items-center text-[12px] text-[var(--text-secondary)]">
+          <span className="mt-[11px] flex items-center text-[10px] font-light leading-none text-[rgba(32,32,32,0.7)]">
             {compactCount(review.views)} views
             <DotOutline size={12} weight="fill" className="mx-0.5" />
             {compactCount(review.helped)} helped
           </span>
-          <span className="mt-1 block text-[15px] font-bold text-[var(--accent-success)] [font-variant-numeric:tabular-nums]">
+          <span className="mt-3 block text-[14px] font-semibold leading-none text-[var(--accent-success)] [font-variant-numeric:tabular-nums]">
             {pesoWhole(review.earnings)}
           </span>
         </span>

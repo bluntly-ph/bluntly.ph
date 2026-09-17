@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowFatUp, ChatCircle, DotOutline, ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import type { ReviewCardData } from "@/lib/landing-data";
+import { LAZY, type ImageHints } from "@/lib/list-image-hints";
 
 /**
  * The review card on the landing rail and the profile grids: Figma
@@ -21,8 +22,11 @@ export function ReviewCard({
   review,
   className = "",
   headingLevel = 3,
+  imageHints = LAZY,
 }: {
   review: ReviewCardData;
+  /** How the photo loads: see lib/list-image-hints.ts. Lazy unless the rail says it is on screen. */
+  imageHints?: ImageHints;
   className?: string;
   /**
    * Where this card's title sits in the page outline.
@@ -57,6 +61,8 @@ export function ReviewCard({
             alt=""
             fill
             sizes="24rem"
+            loading={imageHints.loading}
+            fetchPriority={imageHints.fetchPriority}
             className="object-cover transition-transform duration-[var(--duration-base)] group-hover:scale-[1.03]"
           />
         ) : (
@@ -69,10 +75,16 @@ export function ReviewCard({
           className="absolute inset-x-0 top-0 h-12 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.08),rgba(0,0,0,0))] backdrop-blur-[1px]"
         />
         {/* --text-on-brand reads over a photo under the scrim; over the plain
-            #e1e1e1 placeholder it would vanish, so that case keeps ink. */}
+            #e1e1e1 placeholder it would vanish, so that case keeps ink. The
+            frame's photo is a dark lifestyle shot; real product photos are
+            often on white, where the 8% scrim leaves white text unreadable
+            (seen 2026-09-17 on the landing rail), so the byline carries a soft
+            shadow that is invisible on a dark photo and legible on a light one. */}
         <div
           className={`absolute left-3 top-3 flex items-center gap-2 text-[12px] leading-none ${
-            review.imageUrl ? "text-[var(--text-on-brand)]" : "text-[var(--text-primary)]"
+            review.imageUrl
+              ? "text-[var(--text-on-brand)] [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]"
+              : "text-[var(--text-primary)]"
           }`}
         >
           {review.avatarUrl ? (

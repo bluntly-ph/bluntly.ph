@@ -313,7 +313,12 @@ export function OnboardingWizard({ user }: { user: OnboardingUser }) {
 
       {/* A single action stretched across the full card width reads as a
           banner rather than a button, so it keeps the column width on desktop. */}
-      <div className="mt-auto shrink-0 pt-8 lg:mx-auto lg:w-full lg:max-w-[24rem]">
+      {/* On phones the action stays in view, 32px off the foot of the screen,
+          as 5369:3516 draws it over the interests grid's last row; step 2's
+          eight tiles are taller than an 844px screen, and the button used to
+          sit below the fold. At the end of the scroll it rests after the grid,
+          so no tile stays covered. */}
+      <div className="mt-auto shrink-0 pt-8 max-lg:sticky max-lg:bottom-8 max-lg:z-10 lg:mx-auto lg:w-full lg:max-w-[24rem]">
         {/* Keyed so React replaces the element rather than flipping its type:
             the click that opens step 4 would otherwise land on a button that has
             already become type="submit" and send the wizard before the reader
@@ -564,7 +569,8 @@ function StepIntro({ slide }: { slide: number }) {
  */
 function StepDone({ user, username }: { user: OnboardingUser; username: string }) {
   const target = 1;
-  const progress = Math.min(user.verifiedReviewCount / target, 1) * 100;
+  const unlocked = user.trustStage >= 2;
+  const progress = unlocked ? 100 : Math.min(user.verifiedReviewCount / target, 1) * 100;
 
   return (
     <div className="flex flex-col lg:mx-auto lg:w-full lg:max-w-[24rem]">
@@ -587,14 +593,19 @@ function StepDone({ user, username }: { user: OnboardingUser; username: string }
         </div>
         <p className="mt-4 text-[12px] font-light leading-[18px] text-[var(--text-primary)]">
           {/* A first verified review makes a Verified Buyer (stage 2) — which is
-              what unlocks earning. Contributor (stage 1) is any first review. */}
-          {`Post your first verified review to become a ${trustLevelName(2)} and unlock earnings.`}
+              what unlocks earning. Contributor (stage 1) is any first review.
+              /onboarding is not gated on being new, so an account that is
+              already there must not be told to go and become it (seen with a
+              stage-2 account on 2026-09-17). */}
+          {unlocked
+            ? `You have already unlocked earnings as a ${user.trustLevelName}. Keep posting verified reviews readers find helpful.`
+            : `Post your first verified review to become a ${trustLevelName(2)} and unlock earnings.`}
         </p>
         <div
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={target}
-          aria-valuenow={user.verifiedReviewCount}
+          aria-valuenow={Math.min(user.verifiedReviewCount, target)}
           className="mt-3 h-2 w-full overflow-hidden rounded-[12px] bg-[rgba(240,238,233,0.91)]"
         >
           <span
@@ -603,7 +614,9 @@ function StepDone({ user, username }: { user: OnboardingUser; username: string }
           />
         </div>
         <p className="mt-3 text-[10px] leading-none text-[rgba(32,32,32,0.4)]">
-          {`${user.verifiedReviewCount} of ${target} verified review to become a ${trustLevelName(2)}`}
+          {unlocked
+            ? `${user.verifiedReviewCount} verified ${user.verifiedReviewCount === 1 ? "review" : "reviews"} posted`
+            : `${user.verifiedReviewCount} of ${target} verified review to become a ${trustLevelName(2)}`}
         </p>
       </div>
     </div>

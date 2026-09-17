@@ -1,5 +1,6 @@
 import { ArrowRight, DotOutline, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
+import { graphPaper } from "@/components/ui/graph-paper";
 import { FEATURED_REVIEW } from "@/lib/landing-data";
 import type { FeaturedData } from "@/lib/reviews";
 
@@ -39,7 +40,8 @@ export function Hero({ featured }: { featured: FeaturedData }) {
     <section className="relative overflow-x-clip">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-4 top-[-6px] h-[568px] w-[350px] bg-[url('/figma/landing/hero-grid.png')] bg-[length:100%_100%] opacity-10 md:hidden"
+        className="pointer-events-none absolute left-4 top-[-6px] h-[568px] w-[350px] opacity-10 md:hidden"
+        style={graphPaper(350)}
       />
       <div
         aria-hidden="true"
@@ -87,7 +89,10 @@ export function Hero({ featured }: { featured: FeaturedData }) {
           </form>
         </div>
 
-        <div className="animate-fade-up delay-2 relative mx-auto h-[225px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-6">
+        {/* 209px: the frame's card group (5446:5126) is 375x209 and the Earned
+            pill ends exactly on its foot. At 225px everything below the hero sat
+            16px lower than 1902:1504 (measured 2026-09-17: Discover at 625, not 609). */}
+        <div className="animate-fade-up delay-2 relative mx-auto h-[209px] w-full max-w-[358px] md:h-auto md:max-w-[26rem] md:pb-6 md:pt-6">
           <FeaturedReviewCard
             featured={featured}
             badgeTopRight={

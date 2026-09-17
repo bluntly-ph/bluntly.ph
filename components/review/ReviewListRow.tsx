@@ -4,6 +4,7 @@ import { ArrowFatUp, DotOutline, ImageSquare } from "@phosphor-icons/react/dist/
 
 import { HonestyScore } from "@/components/ui/HonestyScore";
 import type { ReviewCardData } from "@/lib/landing-data";
+import { LAZY, type ImageHints } from "@/lib/list-image-hints";
 import { splitHeadline } from "@/lib/reviews";
 
 /**
@@ -29,20 +30,17 @@ const Dot = () => (
 
 export function ReviewListRow({
   review,
-  priority = false,
+  imageHints = LAZY,
 }: {
   review: ReviewCardData;
   /**
-   * Set on the first row only. Its thumbnail is above the fold and is the
-   * element LCP is measured on, so lazy-loading it deprioritises the one image
-   * the score depends on — Lighthouse measured /search LCP between 3.0s and
-   * 9.4s across three runs while FCP held steady at 1.0s, which is the shape of
-   * a late-arriving hero image rather than a slow page.
-   *
-   * Every other row stays lazy: they are below the fold and eager-loading them
-   * would trade one metric for page weight.
+   * How this row's thumbnail loads — see lib/list-image-hints.ts. The rows on
+   * screen at arrival load eagerly and the first one that actually HAS a photo
+   * gets high fetch priority; the rest stay lazy. (This used to be `priority`
+   * on row 0, which on production is usually a placeholder, so the real LCP
+   * image further down loaded lazily.)
    */
-  priority?: boolean;
+  imageHints?: ImageHints;
 }) {
   const headline = splitHeadline(review.title, review.product);
 
@@ -129,7 +127,8 @@ export function ReviewListRow({
               alt=""
               fill
               sizes="(min-width: 1024px) 240px, 200px"
-              priority={priority}
+              loading={imageHints.loading}
+              fetchPriority={imageHints.fetchPriority}
               className="object-cover"
             />
           ) : (

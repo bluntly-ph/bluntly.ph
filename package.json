@@ -33,8 +33,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "chrome-launcher": "^1.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "lighthouse": "^13.4.1",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"

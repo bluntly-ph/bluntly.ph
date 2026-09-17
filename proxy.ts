@@ -56,10 +56,43 @@ export const proxy: NextProxy = (request, event) => {
 
 export const config = {
   matcher: [
-    /*
-     * Everything except Next internals and static assets. Running the proxy on
-     * every image and font request is pure latency.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    {
+      /*
+       * Everything except Next internals and static assets. Running the proxy on
+       * every image and font request is pure latency.
+       */
+      source: "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+      /*
+       * ...and never on a PREFETCH — the router guessing where the reader might
+       * go next, not a reader arriving. Measured on production (2026-09-17),
+       * running the proxy on them did two kinds of damage:
+       *
+       * 1. The traffic beacon counted them. Next strips the Flight headers and
+       *    `_rsc` from the request a proxy sees (node_modules/next/dist/server/
+       *    web/adapter.js), so `isCountable` cannot tell a prefetch from a
+       *    visit. Every review link that scrolled into view added a VIEW to that
+       *    review: in one hour of lab runs that opened a single review, 24
+       *    reviews gained 121 views, and the traffic panel counted 826 "page
+       *    requests" for about 200 real page loads.
+       *
+       * 2. A signed-out reader's prefetch of a gated link (Write a review,
+       *    Profile, Ask a question) was answered with a 307 to /login. The
+       *    router replays a redirected prefetch with its cache-busting param and
+       *    never cancels the first response ("TODO: We should abort the previous
+       *    request", fetch-server-response.js), so those requests stayed open
+       *    for the life of the page: Lighthouse's desktop runs of /feed and
+       *    /search hit their 45 s load timeout waiting on them.
+       *
+       * Skipping prefetches here is the pattern the proxy docs give for exactly
+       * this. It gives up nothing: every gated page guards itself on the server
+       * (lib/dal.ts requireUser / requireOnboardedUser / requireRole), and the
+       * real navigation — which has no prefetch header — still meets the proxy,
+       * its redirect and its `?next=`.
+       */
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };

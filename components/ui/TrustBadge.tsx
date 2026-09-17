@@ -40,7 +40,11 @@ export function TrustBadge({
   return (
     <span
       // The whole badge is one label: read as a unit, the parts are a sentence;
-      // read separately, "62" is an orphan number next to a name.
+      // read separately, "62" is an orphan number next to a name. role="img"
+      // is what makes the label valid: aria-label on a role-less span is
+      // prohibited and ignored by some readers (Lighthouse aria-prohibited-attr
+      // on /reviews and /questions, 2026-09-17). HonestyScore does the same.
+      role="img"
       aria-label={description}
       title={description}
       className={[

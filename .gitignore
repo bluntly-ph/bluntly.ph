@@ -78,3 +78,6 @@ backend/.ruff_cache/
 # above, and a later ignore rule overrides an earlier negation.
 !.env.example
 !backend/.env.test.example
+
+# performance lab output (scripts/perf) — raw Lighthouse reports, kept locally
+/.perf/

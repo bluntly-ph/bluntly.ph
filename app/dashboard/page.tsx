@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { Button } from "@/components/ui/Button";
 import { ReviewerDashboard } from "@/components/dashboard/ReviewerDashboard";
+import { ScrollToHash } from "@/components/dashboard/ScrollToHash";
 import { requireOnboardedUser } from "@/lib/dal";
 import {
   getDashboard,
@@ -224,6 +225,7 @@ export default async function DashboardPage({
             View your contracts →
           </Link>
         </div>
+        <ScrollToHash />
       </main>
       <SiteFooter />
     </div>

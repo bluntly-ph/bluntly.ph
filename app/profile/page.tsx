@@ -20,6 +20,7 @@ import { joinedLabel } from "@/lib/relative-time";
 import { searchReviews } from "@/lib/reviews";
 import { trustLevelName } from "@/lib/trust";
 import { getTrustProfile } from "@/lib/trust-data";
+import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
 
 export const metadata: Metadata = {
   title: "Your profile — bluntly",
@@ -163,8 +164,13 @@ export default async function ProfilePage({
             </div>
           ) : reviews.length > 0 ? (
             <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
-              {reviews.map((r, i) => (
-                <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
+              {/* A profile card's photo is 358px square: only the first is on screen. */}
+              {reviews.map((r, i, all) => (
+                <ProfileReviewCard
+                  key={r.id}
+                  review={r}
+                  imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 1)}
+                />
               ))}
             </ul>
           ) : (

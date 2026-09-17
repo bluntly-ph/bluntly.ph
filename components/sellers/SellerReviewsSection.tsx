@@ -212,7 +212,9 @@ export function SellerReviewsSection({
         ) : reviews.length === 0 ? (
           <p className={QUIET}>
             Nobody has rated this seller yet.{" "}
-            <Link href={`/sellers/rate?seller=${sellerId}`} className="text-[var(--accent-primary)]">
+            {/* Underlined: inside a sentence, colour alone did not mark it as a link
+                (1.85:1 against the text around it; Lighthouse link-in-text-block). */}
+            <Link href={`/sellers/rate?seller=${sellerId}`} className="text-[var(--accent-primary)] underline underline-offset-2">
               Be the first
             </Link>
             .

@@ -9,6 +9,7 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader, type HeaderUser } from "@/components/site/SiteHeader";
 import { getUser } from "@/lib/dal";
 import { joinedLabel } from "@/lib/relative-time";
+import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
 import { getAuthorProfile } from "@/lib/reviews";
 
 type Params = { params: Promise<{ id: string }> };
@@ -111,8 +112,13 @@ export default async function ReviewerProfilePage({ params }: Params) {
 
         {cards.length > 0 ? (
           <ul className="md:mt-6 md:grid md:grid-cols-2 md:gap-4 lg:gap-5">
-            {cards.map((r, i) => (
-              <ProfileReviewCard key={r.id} review={r} priority={i === 0} />
+            {/* A profile card's photo is 358px square: only the first is on screen. */}
+            {cards.map((r, i, all) => (
+              <ProfileReviewCard
+                key={r.id}
+                review={r}
+                imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 1)}
+              />
             ))}
           </ul>
         ) : (

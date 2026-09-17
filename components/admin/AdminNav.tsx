@@ -1,15 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import {
+  Basket,
   CaretLeft,
-  Cube,
   ChartLineUp,
-  Fingerprint,
+  CodesandboxLogo,
+  FingerprintSimple,
   Gear,
-  Handbag,
   IdentificationCard,
   Link as LinkIcon,
   List,
@@ -18,9 +19,11 @@ import {
   Question,
   Storefront,
   Tag,
-  UsersThree,
+  Users,
   X,
 } from "@phosphor-icons/react/dist/ssr";
+
+import { Logo } from "@/components/ui/Logo";
 
 /**
  * The console's navigation, built to the sidebar component (5017:2225).
@@ -57,7 +60,7 @@ import {
 
 export type NavItem = {
   label: string;
-  Icon: typeof Cube;
+  Icon: typeof CodesandboxLogo;
   href?: string;
   /** Matches when the path starts with this, for nested routes. */
   match?: string;
@@ -71,7 +74,7 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: "Main",
     items: [
-      { label: "Overview", Icon: Cube, href: "/moderate", match: "/moderate$" },
+      { label: "Overview", Icon: CodesandboxLogo, href: "/moderate", match: "/moderate$" },
       {
         label: "Review Queue",
         Icon: ListChecks,
@@ -89,7 +92,7 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: "Manage",
     items: [
-      { label: "Products", Icon: Handbag, href: "/moderate/products", match: "/moderate/products" },
+      { label: "Products", Icon: Basket, href: "/moderate/products", match: "/moderate/products" },
       // Not in the sidebar component (5017:2225). Community prices are pending
       // until a moderator decides them (FR-2, completion contract), and the
       // decision needs a screen.
@@ -108,7 +111,7 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
       },
       {
         label: "Reviewers",
-        Icon: UsersThree,
+        Icon: Users,
         href: "/moderate/reviewers",
         match: "/moderate/reviewers",
       },
@@ -147,7 +150,7 @@ export const NAV: { heading: string; items: NavItem[] }[] = [
       },
       {
         label: "Activity Log",
-        Icon: Fingerprint,
+        Icon: FingerprintSimple,
         href: "/moderate/activity",
         match: "/moderate/activity",
       },
@@ -206,40 +209,61 @@ export function AdminNav({
 
   const rail = (
     <>
-      <div className={`flex items-center gap-2 px-4 pb-5 pt-5 ${collapsed ? "justify-center px-0" : ""}`}>
+      {/* Admin/Sidebar 5017:2225, expanded state, read 2026-09-17: "Admin" in
+          12px Regular trust blue 2px in, the 78x24 wordmark 18px under its top,
+          both 32px from the rail's edges; the groups start 32px below (y106).
+          It was an 11px SemiBold letter-spaced "ADMIN" over the word "bluntly"
+          typeset in 22px Bold, which is not the wordmark. */}
+      <div
+        className={
+          collapsed
+            ? "flex justify-center pb-6 pt-8"
+            : "px-8 pb-8 pt-8 [@media(max-height:900px)]:pb-4 [@media(max-height:900px)]:pt-6"
+        }
+      >
         {collapsed ? (
-          <span className="font-[family-name:var(--font-display)] text-[20px] font-bold leading-none text-[var(--accent-primary)]">
-            b
-          </span>
+          // The collapsed state draws the 24px brand mark, not a letter.
+          <Image src="/icon.svg" alt="bluntly" width={24} height={24} className="h-6 w-6" />
         ) : (
-          <span className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--accent-trust)]">
-              Admin
-            </span>
-            <span className="block font-[family-name:var(--font-display)] text-[22px] font-bold leading-none text-[var(--accent-primary)]">
-              bluntly
-            </span>
+          <span className="block">
+            <span className="ml-0.5 block text-[12px] leading-none text-[var(--accent-trust)]">Admin</span>
+            <Logo height={24} label="bluntly" className="mt-1.5 block text-[var(--accent-primary)]" />
           </span>
         )}
       </div>
 
       {/* The rail scrolls on its own only if the viewport is too short for the
           items. It never moves because the workspace scrolled. */}
-      <nav aria-label="Admin sections" className="min-h-0 flex-1 overflow-y-auto px-2">
+      {/* The groups (5017:2234): 32px apart, each a 12px Light label at 70% ink
+          12px over its items; items 16px apart, a 28px glyph 8px before a 16px
+          Medium label; the current item orange, glyph and word, with no pill
+          behind it. They were 10px SemiBold letter-spaced labels over 14px
+          items with 20px glyphs, and the current item sat on a grey pill. The
+          rows keep a 4px vertical pad (inside the 16px rhythm) as a hit and
+          focus area.
+
+          SHORT SCREENS. The frame's rail holds eight items; this one holds
+          thirteen (see NAV). At the frame's own 832px height the source rhythm
+          pushed the whole SYSTEM group below the rail's fold, so from 801 to
+          900px tall the same type and glyphs sit on a 36px pitch instead of 44,
+          and at 800px and under on 28px — the glyph's own height, still above
+          the 24px minimum target. The two ranges do not overlap, so neither
+          depends on the order Tailwind emits them in. */}
+      <nav aria-label="Admin sections" className={`min-h-0 flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-6"}`}>
         {NAV.map((group) => (
-          <div key={group.heading} className="mb-4">
+          <div key={group.heading} className="mb-8 last:mb-4 [@media(min-height:801px)_and_(max-height:900px)]:mb-4 [@media(max-height:800px)]:mb-3 [@media(max-height:800px)]:last:mb-2">
             {!collapsed ? (
-              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+              <p className="px-2 pb-2 text-[12px] font-light uppercase leading-none text-[var(--text-secondary)] [@media(min-height:801px)_and_(max-height:900px)]:pb-1.5 [@media(max-height:800px)]:pb-1">
                 {group.heading}
               </p>
             ) : (
               <hr className="mx-3 mb-2 border-[var(--border-subtle)]" />
             )}
-            <ul className="flex flex-col gap-0.5">
+            <ul className="flex flex-col gap-2 [@media(min-height:801px)_and_(max-height:900px)]:gap-1 [@media(max-height:800px)]:gap-0">
               {group.items.map((item) => {
                 const { label, Icon, href, blocked, why } = item;
                 const active = isActive(item, pathname, tab);
-                const base = `flex items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-[14px] font-medium ${
+                const base = `flex items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1 text-[16px] font-medium leading-none [@media(min-height:801px)_and_(max-height:900px)]:py-0.5 [@media(max-height:800px)]:py-0 ${
                   collapsed ? "justify-center px-0" : ""
                 }`;
                 return (
@@ -252,11 +276,11 @@ export function AdminNav({
                         title={collapsed ? label : undefined}
                         className={`${base} transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] ${
                           active
-                            ? "bg-[var(--line-hairline-10)] text-[var(--accent-primary)]"
-                            : "text-[var(--text-primary)] hover:bg-[var(--line-hairline-10)]"
+                            ? "text-[var(--accent-primary)]"
+                            : "text-[var(--text-primary)] hover:text-[var(--accent-primary)]"
                         }`}
                       >
-                        <Icon size={20} weight={active ? "fill" : "regular"} className="shrink-0" />
+                        <Icon size={28} weight="regular" className="shrink-0" />
                         {!collapsed ? <span className="truncate">{label}</span> : null}
                       </Link>
                     ) : (
@@ -269,7 +293,7 @@ export function AdminNav({
                         aria-disabled="true"
                         className={`${base} cursor-not-allowed text-[var(--text-muted)]`}
                       >
-                        <Icon size={20} weight="regular" className="shrink-0" />
+                        <Icon size={28} weight="regular" className="shrink-0" />
                         {!collapsed ? (
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate">{label}</span>
@@ -289,20 +313,25 @@ export function AdminNav({
         ))}
       </nav>
 
+      {/* The user card (5017:2334): 196x64 at radius 12, 12px in; a 40px
+          avatar 16px in and 12px down; the name in 14px Medium over the role
+          in 12px Light at 70%, 16px apart top to top. The frame's card is white
+          on a #f2f2f2 rail; this rail is white, as 6922:837 draws the rail on
+          the page, so the card keeps a hairline to read as a card. */}
       <div
-        className={`m-2 flex items-center gap-3 rounded-[var(--radius-sm)] p-2.5 shadow-[var(--shadow-hairline-inset)] ${
-          collapsed ? "justify-center" : ""
+        className={`m-3 flex h-16 items-center gap-3 rounded-[12px] px-4 shadow-[var(--shadow-hairline-inset)] ${
+          collapsed ? "justify-center px-0" : ""
         }`}
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--accent-primary)] text-[13px] font-bold text-[var(--text-on-brand)]">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--accent-primary)] text-[14px] font-bold text-[var(--text-on-brand)]">
           {moderator.name.slice(0, 1).toUpperCase()}
         </span>
         {!collapsed ? (
           <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">
+            <span className="block truncate text-[14px] font-medium leading-none text-[var(--text-primary)]">
               {moderator.name}
             </span>
-            <span className="block text-[12px] capitalize text-[var(--text-secondary)]">
+            <span className="mt-0.5 block text-[12px] font-light capitalize leading-none text-[var(--text-secondary)]">
               {moderator.role}
             </span>
           </span>

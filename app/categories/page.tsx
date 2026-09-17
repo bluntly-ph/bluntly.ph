@@ -76,7 +76,7 @@ export default async function CategoriesPage() {
           {categories.map((c) => {
             const Icon = c.icon;
             return (
-              <li key={c.slug} className="mx-6 border-b border-[var(--line-hairline-30)]">
+              <li key={c.slug} className="mx-6 border-b border-[var(--line-hairline-30)] last:border-b-0">
                 <Link href={`/search?category=${c.slug}&from=categories`} className={row}>
                   <Icon size={24} aria-hidden="true" className="shrink-0 text-[var(--text-primary)]" />
                   <span className="text-[16px] font-bold leading-none text-[var(--text-primary)]">{c.label}</span>

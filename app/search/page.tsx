@@ -26,6 +26,7 @@ import { getUser } from "@/lib/dal";
 import { getQuestions } from "@/lib/qa";
 import { searchReviews } from "@/lib/reviews";
 import { searchSellers } from "@/lib/sellers";
+import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
 
 export const metadata: Metadata = {
   title: "Search — bluntly",
@@ -261,8 +262,14 @@ export default async function SearchPage({
             // A list, not a grid — see ReviewListRow. Each row's title is an h2,
             // following the page h1 directly with no section heading between.
             <ul className="-mx-4 md:mx-0 md:mt-3 md:border-t md:border-[var(--line-hairline-10)]">
-              {results.map((r, i) => (
-                <ReviewListRow key={r.id} review={r} priority={i === 0} />
+              {/* Four rows are on a phone screen at arrival (results start
+                  ~290px down, 144px pitch); see lib/list-image-hints.ts. */}
+              {results.map((r, i, all) => (
+                <ReviewListRow
+                  key={r.id}
+                  review={r}
+                  imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 4)}
+                />
               ))}
             </ul>
           ) : (

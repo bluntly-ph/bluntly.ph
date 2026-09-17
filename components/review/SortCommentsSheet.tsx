@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { ArrowsDownUp } from "@phosphor-icons/react";
 
-import { Radio, Section, Sheet } from "@/components/search/SearchFilterBar";
+// From FilterSheet, not SearchFilterBar: that module pulls the category icons
+// into any route that imports it (see FilterSheet.tsx).
+import { Radio, Section, Sheet } from "@/components/search/FilterSheet";
 
 import { type CommentSort, type DateOrder, type RatingOrder } from "./comment-sort-model";
 

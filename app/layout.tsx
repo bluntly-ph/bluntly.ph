@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bebas_Neue, Poppins } from "next/font/google";
+import { Poppins } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 
@@ -15,12 +15,10 @@ const poppins = Poppins({
   display: "swap",
 });
 
-const bebasNeue = Bebas_Neue({
-  variable: "--font-bebas",
-  subsets: ["latin"],
-  weight: "400",
-  display: "swap",
-});
+// Bebas Neue was declared here too and is gone: no element used it (no
+// `font-accent` anywhere in app/ or components/), yet next/font preloaded its
+// file on every page — one of the seven fonts Lighthouse saw requested at high
+// priority before any content (production, 2026-09-17).
 
 export const metadata: Metadata = {
   title: "bluntly — Finally. Honest reviews.",
@@ -51,7 +49,7 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme={dataTheme}
-      className={`${poppins.variable} ${bebasNeue.variable} h-full`}
+      className={`${poppins.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         {/* The mobile bottom navigation was removed on 2026-09-12. Its five

@@ -87,7 +87,12 @@ export function ProfileStats({ trust }: { trust: TrustProfile | null }) {
         />
       </div>
 
-      <div className="mx-auto mt-[-30px] w-full max-w-[358px] px-4 md:px-0">
+      {/* `relative`: in the frame the card covers the mascot's last 30px
+          (5483:6965 is drawn over 5483:7045). Unpositioned, the card's
+          background painted before the image — CSS paints block backgrounds
+          ahead of inline content — so the mascot's feet sat on top of it
+          (compared against 5446:6532, 2026-09-17). */}
+      <div className="relative mx-auto mt-[-30px] w-full max-w-[358px] px-4 md:px-0">
         <section className="rounded-[12px] bg-[var(--surface-card)] p-6 shadow-[0_4px_2px_rgba(0,0,0,0.1)]">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-[16px] font-medium leading-none text-[var(--text-primary)]">

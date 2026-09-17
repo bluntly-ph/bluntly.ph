@@ -80,13 +80,15 @@ export function SignupForm({
         <p className={SUBTITLE}>We&rsquo;ll email you a code to verify it&rsquo;s really you</p>
 
         <div className="mt-[29px] flex flex-col gap-3">
-          <GoogleButton purpose={purpose} />
+          {/* Everything in this block sits on the light AuthSheet at every
+              width (the phone sheet is #f2f2f2, the desktop card white), so it
+              uses dark ink. It was styled for the gradient: on a phone the
+              "or" rule, this label and Google's note were white on #f2f2f2. */}
+          <GoogleButton purpose={purpose} surface="sheet" />
           <div aria-hidden="true" className="flex items-center gap-3">
-            <span className="h-px flex-1 bg-[rgba(242,242,242,0.35)] lg:bg-[var(--line-hairline-30)]" />
-            <span className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]">
-              or
-            </span>
-            <span className="h-px flex-1 bg-[rgba(242,242,242,0.35)] lg:bg-[var(--line-hairline-30)]" />
+            <span className="h-px flex-1 bg-[var(--line-hairline-30)]" />
+            <span className="text-[12px] font-light text-[var(--text-secondary)]">or</span>
+            <span className="h-px flex-1 bg-[var(--line-hairline-30)]" />
           </div>
           {/* The field's VISIBLE label (Coverage row 70). It used to be a
               detached paragraph, and the email field's only on-screen cue was
@@ -96,10 +98,7 @@ export function SignupForm({
               input without moving the owner-approved layout; it also makes the
               visible words part of the accessible name, which is what WCAG
               2.5.3 asks of a speech-input user saying what they see. */}
-          <p
-            id={emailLabelId}
-            className="text-[12px] font-light text-[rgba(242,242,242,0.85)] lg:text-[var(--text-secondary)]"
-          >
+          <p id={emailLabelId} className="text-[12px] font-light text-[var(--text-secondary)]">
             {purpose === "signup" ? "Sign up with email" : "Continue with email"}
           </p>
           <TextField

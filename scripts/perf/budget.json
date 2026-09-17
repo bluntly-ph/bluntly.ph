@@ -1,0 +1,31 @@
+{
+  "$comment": [
+    "Initial performance/quality budget for bluntly.ph — a regression guardrail, not product truth.",
+    "The repository had no approved frontend budget before 2026-09-17 (docs/PRODUCTION.md budgets",
+    "database connections only), so these start from the web-quality-skills guardrails the owner",
+    "named, and are checked against the MEDIAN of N Lighthouse runs, never a single run.",
+    "Lab values only. Core Web Vitals pass/fail is a FIELD (p75) judgement; a lab LCP under 2.5 s does",
+    "not prove users are fast, and TBT is a responsiveness proxy, not INP.",
+    "Severity: error = fails `--assert`; warn = reported, never fails."
+  ],
+  "categories": {
+    "performance": { "min": 0.9, "severity": "warn" },
+    "accessibility": { "min": 0.95, "severity": "error" },
+    "best-practices": { "min": 0.95, "severity": "error" },
+    "seo": { "min": 0.95, "severity": "warn" }
+  },
+  "metrics": {
+    "largest-contentful-paint": { "max": 2500, "severity": "warn" },
+    "cumulative-layout-shift": { "max": 0.1, "severity": "error" },
+    "total-blocking-time": { "max": 200, "severity": "warn" },
+    "first-contentful-paint": { "max": 1800, "severity": "warn" },
+    "server-response-time": { "max": 800, "severity": "warn" }
+  },
+  "resources": {
+    "script-transfer-kb": { "max": 300, "severity": "warn" },
+    "total-transfer-kb": { "max": 1500, "severity": "warn" },
+    "stylesheet-transfer-kb": { "max": 100, "severity": "warn" },
+    "font-transfer-kb": { "max": 100, "severity": "warn" },
+    "third-party-transfer-kb": { "max": 200, "severity": "warn" }
+  }
+}

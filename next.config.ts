@@ -36,6 +36,9 @@ const csp = [
   "object-src 'none'",
 ].join("; ");
 
+/** For files in public/, which are not content-hashed: see headers() below. */
+const PUBLIC_ASSET_CACHE = "public, max-age=86400, stale-while-revalidate=604800";
+
 const nextConfig: NextConfig = {
   // Do not advertise the framework and its version.
   poweredByHeader: false,
@@ -89,6 +92,30 @@ const nextConfig: NextConfig = {
             value: "max-age=63072000; includeSubDomains; preload",
           },
         ],
+      },
+      {
+        /*
+         * Images and vectors served from public/ — the logo mask, mascots,
+         * category art, the Figma exports. Next sends them `max-age=0,
+         * must-revalidate` (measured on production, 2026-09-17), so every page
+         * view revalidates each one before it may be drawn, and a repeat visitor
+         * pays a round trip per image for bytes they already have.
+         *
+         * A day, not a year: these names are not content-hashed (only
+         * /_next/static is), so a replaced file must still reach readers
+         * promptly. stale-while-revalidate lets the old copy paint immediately
+         * while the check happens behind it.
+         *
+         * Listed folder by folder rather than "any path ending .png": a broad
+         * extension pattern also matches /api/... paths, and a public cache
+         * header must never be able to land on an API or page response.
+         */
+        source: "/:dir(figma|mascots|patterns)/:file*",
+        headers: [{ key: "Cache-Control", value: PUBLIC_ASSET_CACHE }],
+      },
+      {
+        source: "/bluntly-logo.:ext(svg|png)",
+        headers: [{ key: "Cache-Control", value: PUBLIC_ASSET_CACHE }],
       },
     ];
   },

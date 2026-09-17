@@ -37,9 +37,12 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         </p>
       </aside>
 
-      <div className="flex min-h-dvh flex-col lg:min-h-0 lg:items-center lg:justify-center lg:p-12">
+      {/* <main>: the auth pages had no main landmark, so a screen-reader user
+          could not jump to the form (Lighthouse landmark-one-main on /login and
+          /signup, 2026-09-17). */}
+      <main className="flex min-h-dvh flex-col lg:min-h-0 lg:items-center lg:justify-center lg:p-12">
         {children}
-      </div>
+      </main>
     </div>
   );
 }

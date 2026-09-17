@@ -56,7 +56,9 @@ const BLOCKS: Block[] = [
   },
   ...FAQS.flatMap(
     (f): Block[] => [
-      { type: "h3", text: f.q },
+      // h2: each question follows the page h1 directly; h3 skipped a level
+      // (Lighthouse heading-order, 2026-09-17).
+      { type: "h2", text: f.q },
       { type: "p", text: f.a },
     ],
   ),

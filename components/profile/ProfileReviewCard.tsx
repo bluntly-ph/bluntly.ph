@@ -4,6 +4,7 @@ import { ArrowFatUp, ChatsCircle, DotOutline } from "@phosphor-icons/react/dist/
 
 import { HonestyScore } from "@/components/ui/HonestyScore";
 import type { ReviewCardData } from "@/lib/landing-data";
+import { LAZY, type ImageHints } from "@/lib/list-image-hints";
 import { splitHeadline } from "@/lib/reviews";
 
 /**
@@ -24,7 +25,7 @@ import { splitHeadline } from "@/lib/reviews";
  * From `md` the feed is a two-column grid (beside the profile card from `lg`), so each
  * review becomes its own white card instead of a hairline-separated row.
  */
-export function ProfileReviewCard({ review, priority = false }: { review: ReviewCardData; priority?: boolean }) {
+export function ProfileReviewCard({ review, imageHints = LAZY }: { review: ReviewCardData; imageHints?: ImageHints }) {
   const headline = splitHeadline(review.title, review.product);
   const pill =
     "inline-flex h-8 items-center gap-1 rounded-[20px] border border-[rgba(32,32,32,0.3)] px-[11px] text-[12px] leading-none text-[var(--text-primary)]";
@@ -66,7 +67,8 @@ export function ProfileReviewCard({ review, priority = false }: { review: Review
                 alt=""
                 fill
                 sizes="(min-width: 768px) 380px, 358px"
-                priority={priority}
+                loading={imageHints.loading}
+                fetchPriority={imageHints.fetchPriority}
                 className="object-cover"
               />
             </div>

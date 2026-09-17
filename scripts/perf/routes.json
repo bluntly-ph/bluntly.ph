@@ -1,0 +1,32 @@
+{
+  "$comment": [
+    "Representative routes for the Lighthouse matrix (scripts/perf/lighthouse-matrix.mjs).",
+    "One entry per route FAMILY, derived from lib/site-map.ts (50 pages). Dynamic routes use fixed,",
+    "public, published ids so production and a local candidate render the same content: the local",
+    "candidate reads the production API, so the ids resolve identically in both.",
+    "The public profile uses the reviewer's UUID, not the handle: production before BUG-030 only",
+    "resolves ids, and a baseline that 404s measures an error page.",
+    "Signed-in pages are absent on purpose: engineering holds no production session and does not",
+    "create one. See docs/PERFORMANCE_AUDIT.md for how those were measured instead."
+  ],
+  "routes": [
+    { "path": "/", "family": "landing" },
+    { "path": "/feed", "family": "listing" },
+    { "path": "/search", "family": "listing" },
+    { "path": "/categories", "family": "listing" },
+    { "path": "/questions", "family": "listing" },
+    { "path": "/requests", "family": "listing" },
+    { "path": "/reviews/00000000-0000-0000-0000-0000000e0007", "family": "review detail" },
+    { "path": "/questions/00000000-0000-0000-0000-0000000f1001", "family": "question detail" },
+    { "path": "/sellers/5e11e700-0000-4000-8000-000000000999", "family": "seller" },
+    { "path": "/u/00000000-0000-0000-0000-0000000c0004", "family": "public profile" },
+    { "path": "/login", "family": "auth" },
+    { "path": "/signup", "family": "auth" },
+    { "path": "/welcome", "family": "auth" },
+    { "path": "/about", "family": "content" },
+    { "path": "/how-it-works", "family": "content" },
+    { "path": "/faqs", "family": "content" },
+    { "path": "/articles", "family": "content" },
+    { "path": "/membership", "family": "content" }
+  ]
+}

@@ -269,7 +269,8 @@ export function ReviewAside({
  * titles: this column is context, and matching the body's heading weight would
  * make the two compete for the same rung of the hierarchy.
  */
+// Secondary ink, not muted: labels here were --text-muted (40% ink, 2.39:1 on the app surface) and failed WCAG AA contrast in Lighthouse on every desktop page (2026-09-17). These rails are desktop-only layout with no Figma frame, so the AA-passing secondary ink (70%, 5.3:1) is used, not a design value.
 const LABEL =
-  "text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]";
+  "text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-secondary)]";
 
 export default ReviewAside;

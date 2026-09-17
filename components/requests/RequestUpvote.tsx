@@ -69,7 +69,9 @@ export function RequestUpvote({
         onClick={toggle}
         disabled={busy}
         aria-pressed={voted}
-        aria-label={voted ? "Remove your up-vote" : "Up-vote this request"}
+        // The visible count leads the name (WCAG 2.5.3, label in name): Lighthouse
+        // flagged a name that omitted the number a speech-input user would say.
+        aria-label={`${n} up-votes. ${voted ? "Remove your up-vote" : "Up-vote this request"}`}
         className={`inline-flex flex-col items-center rounded-[var(--radius-sm)] px-3 py-2 text-[13px] transition-colors disabled:opacity-60 ${
           voted
             ? "bg-[color-mix(in_srgb,var(--accent-primary)_12%,transparent)] text-[var(--accent-primary)]"

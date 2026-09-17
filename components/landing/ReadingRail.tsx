@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 
 import { ReviewCard } from "@/components/review/ReviewCard";
+import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
 import { CATEGORIES, type ReviewCardData } from "@/lib/landing-data";
 
 /**
@@ -67,10 +68,15 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
         {/* scroll-px keeps snapping on the 16px gutter; without it the first
             card snapped flush to the screen edge. */}
         <div className="-mx-4 mt-6 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:scroll-px-6 sm:px-6 md:mx-0 md:mt-8 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-5">
-          {reviews.map((r) => (
+          {/* The first two 188px cards are on a phone screen at arrival, and
+              with a photo one of them is the landing page's LCP element once
+              the hero's graph paper stopped being an image (Lighthouse on the
+              candidate, 2026-09-17: a lazy rail photo was the LCP). */}
+          {reviews.map((r, i, all) => (
             <ReviewCard
               key={r.id}
               review={r}
+              imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 2)}
               className="w-[188px] shrink-0 snap-start md:w-auto"
             />
           ))}

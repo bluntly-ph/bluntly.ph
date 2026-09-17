@@ -27,7 +27,8 @@ export const metadata: Metadata = {
  */
 export default function WelcomePage() {
   return (
-    <main className="flex flex-1 flex-col px-8 pb-[43px] text-[var(--base-gray-100)] lg:w-full lg:max-w-[26rem] lg:flex-none lg:rounded-[20px] lg:bg-[var(--surface-card)] lg:p-10 lg:text-[var(--text-primary)] lg:shadow-[var(--shadow-card)]">
+    // A div: AuthShell (the auth layout) is the page's <main> now.
+    <div className="flex flex-1 flex-col px-8 pb-[43px] text-[var(--base-gray-100)] lg:w-full lg:max-w-[26rem] lg:flex-none lg:rounded-[20px] lg:bg-[var(--surface-card)] lg:p-10 lg:text-[var(--text-primary)] lg:shadow-[var(--shadow-card)]">
       <div className="flex justify-center pt-[min(152px,18dvh)] lg:hidden">
         <Logo height={24} label="bluntly" />
       </div>
@@ -71,6 +72,6 @@ export default function WelcomePage() {
           Log in
         </Link>
       </p>
-    </main>
+    </div>
   );
 }

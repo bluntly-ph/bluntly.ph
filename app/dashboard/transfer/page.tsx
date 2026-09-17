@@ -34,7 +34,8 @@ export default async function TransferPage() {
     <DashboardScreen
       user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }}
       title="Transfer"
-      heroHeight={401}
+      // The sheet's top at 354 (6161:1690 at y402, status bar 48 removed) + its 32px overlap.
+      heroHeight={386}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
       hero={
         <HeroAmount label="Est. Comm" amount={peso(wallet)}>
@@ -45,7 +46,9 @@ export default async function TransferPage() {
             type="button"
             disabled={!eligible}
             aria-describedby={eligible ? undefined : "withdrawal-threshold"}
-            className="mt-6 inline-flex items-center justify-center rounded-[var(--radius-pill)] bg-white px-6 py-2.5 text-[13px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
+            // 6164:1762: white, radius 24, 24px x 12px padding, 10px Regular ink,
+            // a 0 4 2 25% drop shadow, 34px under the amount.
+            className="mt-[34px] inline-flex items-center justify-center rounded-[24px] bg-white px-6 py-3 text-[10px] leading-none text-[var(--text-primary)] [filter:drop-shadow(0_4px_2px_rgba(0,0,0,0.25))] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             Request Withdrawal
           </button>

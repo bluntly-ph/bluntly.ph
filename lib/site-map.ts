@@ -352,8 +352,10 @@ export const SITE_ROUTES: SiteRoute[] = [
     title: "Insights",
     group: "Earnings",
     access: "signed-in",
-    purpose: "Your review streak and activity charts.",
-    figma: "Insights (5762:752)",
+    purpose: "Views on your reviews over a chosen period, and your contribution streak.",
+    // Insights (5762:752) is no longer in the file (checked 2026-09-17). On the
+    // owner's direction the screen is composed from the other dashboard frames.
+    figma: null,
     inSitemap: false,
   },
 
@@ -469,7 +471,8 @@ export const SITE_ROUTES: SiteRoute[] = [
     group: "Moderation",
     access: "moderator",
     purpose: "The moderator landing: what is urgent, summary figures and recent activity.",
-    figma: "Overview (5017:1738) in the Admin/Sidebar shell (5017:2225)",
+    // The Overview frame (5017:1738) is no longer in the file; the shell is.
+    figma: "Admin/Sidebar shell (5017:2225)",
     inSitemap: false,
   },
   {

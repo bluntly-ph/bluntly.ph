@@ -3,6 +3,7 @@
 import { ArrowLeft } from "@phosphor-icons/react";
 
 import { ProfileNavPanel, type PanelUser } from "@/components/site/ProfileNavPanel";
+import { graphPaper } from "@/components/ui/graph-paper";
 
 /**
  * The composer's own header: Figma "NavBar" type Flow (7020:1269) with the
@@ -90,7 +91,8 @@ export function ComposerGrid() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-x-0 bottom-0 top-[72px] -z-10 bg-[url('/figma/landing/hero-grid.png')] bg-[length:390px_633px] opacity-10"
+      className="pointer-events-none fixed inset-x-0 bottom-0 top-[72px] -z-10 opacity-10"
+      style={graphPaper(390)}
     />
   );
 }

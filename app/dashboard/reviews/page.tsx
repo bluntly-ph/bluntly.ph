@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { ImageSquare } from "@phosphor-icons/react/dist/ssr";
 
 import { DashboardScreen } from "@/components/dashboard/DashboardScreen";
+import { RankedReviewRow } from "@/components/dashboard/ReviewerDashboard";
 import { requireOnboardedUser } from "@/lib/dal";
 import { trustLevel } from "@/lib/trust";
-import { compactCount, getDashboardSummary, pesoWhole } from "@/lib/dashboard";
+import { getDashboardSummary } from "@/lib/dashboard";
 
 export const metadata: Metadata = { title: "Your reviews — bluntly" };
 
@@ -31,25 +30,32 @@ export default async function DashboardReviewsPage() {
     <DashboardScreen
       user={{ username: me.username, avatarUrl: me.avatar_url, role: me.role }}
       title="Your reviews"
-      heroHeight={118}
+      heroHeight={104}
       trustLevel={trustLevel(me.trust_level_name, me.trust_stage)}
-      /* The frame's hero IS the nav row: its sheet begins 86px below it, with
-         nothing in between. The count used to sit here in a 150px orange band
+      /* The frame's hero IS the nav row: the sheet's top edge is the nav's foot
+         (y120 in the frame, 72 under its status bar — measured on the export
+         2026-09-17; it had been set 14px lower), with nothing in between. The count used to sit here in a 150px orange band
          the design does not have, which pushed the sheet to 235. It now opens
          the sheet instead, so the chrome matches the frame and the reviewer
          still sees their real figures. */
       hero={null}
     >
       <div className="pb-12">
+        {/* No frame draws this content (see above), so it is set in the
+            dashboard's own type — the label in 12px Medium, the caption in 10px
+            Light at 70% — and the rows are the leaderboard's rows (5991:608).
+
+            WHAT THE LIST IS. `/users/me/dashboard` returns the top five reviews
+            (TOP_REVIEWS in dashboard_service.py), ranked by lifetime earnings,
+            with views counted inside the requested window. The screen used to
+            title that "Your reviews" over a count, which reads as every review
+            the account has; for anyone with more than five it was wrong. */}
         <section aria-labelledby="reviews-heading" className="px-4 pb-2">
-          <h2 id="reviews-heading" className="text-[13px] text-[var(--text-secondary)]">
-            Your reviews
+          <h2 id="reviews-heading" className="text-[12px] font-medium leading-none text-[var(--text-primary)]">
+            Your top reviews
           </h2>
-          <p className="mt-0.5 text-[28px] font-bold leading-none text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">
-            {reviews.length}
-          </p>
-          <p className="mt-1 text-[12px] text-[var(--text-muted)]">
-            ranked by what they have earned
+          <p className="mt-1.5 text-[10px] font-light leading-none text-[rgba(32,32,32,0.7)]">
+            Ranked by lifetime earnings · views from the last 90 days
           </p>
         </section>
         {reviews.length === 0 ? (
@@ -65,46 +71,19 @@ export default async function DashboardReviewsPage() {
             </Link>
           </div>
         ) : (
-          <ol>
-            {reviews.map((review) => (
-              <li key={review.review_id} className="border-b border-[var(--border-subtle)] last:border-0">
-                <Link
-                  href={`/reviews/${review.review_id}`}
-                  className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-[var(--line-hairline-10)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
-                >
-                  <span className="relative block h-16 w-16 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--line-hairline-10)]">
-                    {review.photo_url ? (
-                      <Image src={review.photo_url} alt="" fill sizes="128px" className="object-cover" />
-                    ) : (
-                      <span aria-hidden="true" className="absolute inset-0 grid place-items-center">
-                        <ImageSquare size={20} weight="light" className="text-[var(--text-muted)]" />
-                      </span>
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">
-                      {review.title}
-                    </span>
-                    <span className="mt-1 block text-[12px] text-[var(--text-secondary)]">
-                      {compactCount(review.views)} views
-                      <span className="mx-1.5 opacity-50">·</span>
-                      {compactCount(review.helped)} helped
-                    </span>
-                    <span className="mt-1 block text-[14px] font-bold text-[var(--accent-success)] [font-variant-numeric:tabular-nums]">
-                      {pesoWhole(review.earnings)}
-                    </span>
-                  </span>
-                </Link>
-              </li>
+          <ol className="mt-2">
+            {reviews.map((review, i) => (
+              <RankedReviewRow key={review.review_id} review={review} rank={i + 1} />
             ))}
           </ol>
         )}
 
-        <p className="mt-6 px-4 text-[12px] text-[var(--text-muted)]">
-          Showing {me.username ? `@${me.username}` : "your"} published reviews.{" "}
-          <Link href="/profile" className="underline hover:text-[var(--accent-primary)]">
-            Your public profile
+        <p className="mt-6 px-4 text-[12px] text-[var(--text-secondary)]">
+          Every review you have published is on{" "}
+          <Link href="/profile" className="underline underline-offset-2 hover:text-[var(--accent-primary)]">
+            your profile
           </Link>
+          .
         </p>
       </div>
     </DashboardScreen>

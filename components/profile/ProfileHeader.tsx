@@ -159,7 +159,19 @@ export function ProfileTabs({
     <nav aria-label="Profile sections" className="border-b border-[var(--line-hairline-10)]">
       <ul className="flex justify-center gap-[60px] pb-[23px] pt-4 text-[14px] leading-none lg:justify-start lg:gap-10 lg:pt-1">
         {tabs.map((tab) => (
-          <li key={tab}>
+          <li
+            key={tab}
+            // The current tab's 1px trust-blue rule, sitting on the section
+            // hairline and running ~14px past the label each side: Figma Group
+            // 917 draws it 83px wide at x36 over the full-bleed line (5446:4328).
+            // It was missing, which left the current tab marked by ink colour
+            // alone (compared against the frame 2026-09-17).
+            className={
+              tab === active
+                ? "relative after:absolute after:-bottom-[24px] after:-left-[14px] after:-right-[14px] after:h-px after:bg-[var(--accent-trust)]"
+                : undefined
+            }
+          >
             {tab === active ? (
               <span aria-current="page" className="text-[var(--text-primary)]">
                 {PROFILE_TAB_LABEL[tab]}

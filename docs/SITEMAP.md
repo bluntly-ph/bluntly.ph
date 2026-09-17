@@ -2,7 +2,7 @@
 
 <!-- Generated from lib/site-map.ts by `npm run sitemap:docs`. Edit that file, not this one. -->
 
-50 pages: 22 built to Figma frames, 28 with no frame in the file
+50 pages: 21 built to Figma frames, 29 with no frame in the file
 (product and business pages kept from the PRD, styled in the Figma system's language).
 16 public pages are listed in https://www.bluntly.ph/sitemap.xml.
 
@@ -67,7 +67,7 @@ role; **Store owner** signed in, and only the store's approved owner sees its fi
 | Earnings history | `/dashboard/history` | Signed in | All-time income and every commission behind it. | Reviewer Dashboard - History (5762:472, 6158:1240) | No |
 | Your reviews | `/dashboard/reviews` | Signed in | Your reviews and how each is doing. | Reviewer Dashboard - Reviews (6159:1510) | No |
 | Transfer | `/dashboard/transfer` | Signed in | Your balance, how far it is from the withdrawal threshold, the payout account and the withdrawal request. | Reviewer Dashboard - Transfer (5762:332) | No |
-| Insights | `/dashboard/insights` | Signed in | Your review streak and activity charts. | Insights (5762:752) | No |
+| Insights | `/dashboard/insights` | Signed in | Views on your reviews over a chosen period, and your contribution streak. | No frame | No |
 
 ## Company
 
@@ -93,7 +93,7 @@ role; **Store owner** signed in, and only the store's approved owner sees its fi
 
 | Page | Path | Access | What it is for | Figma | sitemap.xml |
 | --- | --- | --- | --- | --- | --- |
-| Overview | `/moderate` | Moderator | The moderator landing: what is urgent, summary figures and recent activity. | Overview (5017:1738) in the Admin/Sidebar shell (5017:2225) | No |
+| Overview | `/moderate` | Moderator | The moderator landing: what is urgent, summary figures and recent activity. | Admin/Sidebar shell (5017:2225) | No |
 | Review queue | `/moderate/review-queue` | Moderator | Reviews waiting for a moderator, with the Q&A and Support tabs; filtered and paged on the server. | Admin Page - Review Queue (6922:837), the file's one desktop frame | No |
 | Products | `/moderate/products` | Moderator | The product catalogue, read-only, with how much has been written about each. | No frame | No |
 | Prices | `/moderate/prices` | Moderator | Community price reports waiting for approval before they reach a product page. | No frame | No |

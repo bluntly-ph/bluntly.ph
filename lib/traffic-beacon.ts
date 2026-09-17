@@ -71,11 +71,19 @@ function isCountable(request: NextRequest): boolean {
   if (request.method !== "GET") return false;
   const { pathname } = request.nextUrl;
   if (pathname.startsWith("/api")) return false;
-  // A prefetch is the browser guessing, not a person arriving.
+  // A prefetch is the browser guessing, not a person arriving. These header
+  // checks CANNOT see a Next router prefetch: Next strips the Flight headers
+  // (and `_rsc`) from the request a proxy is handed. Router prefetches are kept
+  // out one level up, by the `missing` clause in proxy.ts's matcher, which is
+  // evaluated before that stripping — before this was moved there, every review
+  // link scrolled into view counted as a view of that review. `purpose:
+  // prefetch` is the browser's own (link rel=prefetch) and does survive.
   if (request.headers.get("next-router-prefetch")) return false;
   if (request.headers.get("purpose") === "prefetch") return false;
-  // RSC payload fetches accompany a navigation already counted on its way in.
-  if (request.nextUrl.searchParams.has("_rsc")) return false;
+  // What remains is a document request or a client-side navigation's payload
+  // fetch. Both are a person opening the page: in an app-router site a click on
+  // a link never produces a document request, so the payload fetch IS the
+  // visit and must count.
   return true;
 }
 
