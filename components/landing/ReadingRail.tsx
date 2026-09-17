@@ -36,7 +36,14 @@ export function ReadingRail({ reviews }: { reviews: ReviewCardData[] }) {
           What people are reading
         </h2>
 
-        <div className="-mx-4 mt-5 overflow-x-auto px-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+        {/* Scrolls sideways only. `overflow-x: auto` makes overflow-y compute to
+            auto too, and each tab's 44px target (-my-3 py-3) spilled 12px below
+            the 20px row, so the rail itself scrolled vertically and clipped its
+            icons (production, 2026-09-17, every width). The 12px padding holds
+            the targets inside the box — mt-2 + py-3 keeps the row where mt-5
+            put it, -mb-3 takes the padding back out — and overflow-y-hidden
+            stops any remainder. */}
+        <div className="-mx-4 -mb-3 mt-2 overflow-x-auto overflow-y-hidden px-4 py-3 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
           <ul className="flex w-max gap-6">
             {CATEGORIES.map((c, i) => {
               const Icon = c.icon;
