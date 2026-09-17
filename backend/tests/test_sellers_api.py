@@ -9,6 +9,7 @@ the ranking test and the export timing once each.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from tests.conftest import register_and_token, requires_db
 
@@ -121,22 +122,43 @@ def test_a_claim_waits_for_a_moderator(client):
     assert duplicate.json()["code"] == "claim_pending"
 
     decision_url = f"/api/v1/admin/seller-claims/{claim['id']}/decision"
-    self_decided = client.post(decision_url, headers=_auth(claimant),
-                               json={"decision": "approve"})
-    assert self_decided.status_code == 403
+    try:
+        self_decided = client.post(decision_url, headers=_auth(claimant),
+                                   json={"decision": "approve"})
+        assert self_decided.status_code == 403
 
-    queue = client.get("/api/v1/admin/seller-claims", headers=_auth(moderator)).json()
-    assert any(item["id"] == claim["id"] for item in queue)
+        # The queue is oldest first with a bounded page and no offset, and the
+        # isolated CI database persists between runs. Asserting that a new
+        # claim is on the default first page failed once 52 older pending
+        # claims had accumulated (run 35191847050). So: ask for the largest
+        # page the API serves, and if the claim is still not on it, the page
+        # must be full of claims no newer than this one — the queue's own
+        # ordering, not a missing claim.
+        limit = 200
+        queue = client.get("/api/v1/admin/seller-claims", params={"limit": limit},
+                           headers=_auth(moderator)).json()
+        if not any(item["id"] == claim["id"] for item in queue):
+            created = datetime.fromisoformat(claim["created_at"])
+            assert len(queue) == limit
+            assert all(datetime.fromisoformat(item["created_at"]) <= created
+                       for item in queue)
 
-    approved = client.post(decision_url, headers=_auth(moderator),
-                           json={"decision": "approve", "note": "Cross-checked listing."})
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["status"] == "claimed"
-    assert client.get(f"/api/v1/sellers/{seller['id']}").json()["claim_status"] == "claimed"
+        approved = client.post(decision_url, headers=_auth(moderator),
+                               json={"decision": "approve", "note": "Cross-checked listing."})
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["status"] == "claimed"
+        assert client.get(f"/api/v1/sellers/{seller['id']}").json()["claim_status"] == "claimed"
 
-    late = client.post(claims_url, headers=_auth(other), json={"evidence": "It is mine."})
-    assert late.status_code == 409
-    assert late.json()["code"] == "seller_already_claimed"
+        late = client.post(claims_url, headers=_auth(other), json={"evidence": "It is mine."})
+        assert late.status_code == 409
+        assert late.json()["code"] == "seller_already_claimed"
+    finally:
+        # Never leave this claim pending in the shared queue, even when an
+        # assertion above failed first: a failed run used to add one more
+        # pending claim and push the next run's claim further back. Deciding
+        # an already-decided claim is a 409 and changes nothing.
+        client.post(decision_url, headers=_auth(moderator),
+                    json={"decision": "reject", "note": "Test cleanup."})
 
 
 @requires_db
