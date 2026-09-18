@@ -399,6 +399,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reviews/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your own reviews in every state, newest first
+         * @description The caller's reviews — pending, published and rejected — for their profile.
+         *
+         *     The author is the authenticated caller and nothing else: there is no
+         *     author parameter, so this can never read someone else's unpublished work.
+         *     Removed reviews are left out. Public surfaces keep using the
+         *     publication-gated `/feed`; this route is never cached by the web app.
+         */
+        get: operations["my_reviews_api_v1_reviews_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}": {
         parameters: {
             query?: never;
@@ -3243,6 +3268,31 @@ export interface components {
             /** Code */
             code: string;
         };
+        /**
+         * OwnReviewOut
+         * @description One of the caller's own reviews, in any state (GET /reviews/mine).
+         *
+         *     Only ever served to the review's author. `status` is what the author sees:
+         *     `pending` (held for moderation), `published`, or `rejected` with the
+         *     moderator's reason. Public surfaces keep reading the publication-gated feed.
+         */
+        OwnReviewOut: {
+            review: components["schemas"]["ReviewOut"];
+            author?: components["schemas"]["FeedAuthor"] | null;
+            product?: components["schemas"]["FeedProduct"] | null;
+            /**
+             * Comment Count
+             * @default 0
+             */
+            comment_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "published" | "rejected";
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+        };
         /** PayoutAccountUpdate */
         PayoutAccountUpdate: {
             /**
@@ -6037,6 +6087,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_reviews_api_v1_reviews_mine_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnReviewOut"][];
                 };
             };
             /** @description Validation Error */

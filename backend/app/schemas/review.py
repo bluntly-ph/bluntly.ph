@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -236,6 +237,18 @@ class FeedItemOut(BaseModel):
     # comment count; the comment half had no source on the wire at all, so the
     # frontend hardcoded it empty and the stat silently never appeared.
     comment_count: int = 0
+
+
+class OwnReviewOut(FeedItemOut):
+    """One of the caller's own reviews, in any state (GET /reviews/mine).
+
+    Only ever served to the review's author. `status` is what the author sees:
+    `pending` (held for moderation), `published`, or `rejected` with the
+    moderator's reason. Public surfaces keep reading the publication-gated feed.
+    """
+
+    status: Literal["pending", "published", "rejected"]
+    rejection_reason: str | None = None
 
 
 class ReviewVersionOut(BaseModel):

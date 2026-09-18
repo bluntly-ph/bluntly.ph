@@ -1448,7 +1448,11 @@ function StepsFlow({
  *  - The frame says "Your review is now live!" and "View my review". It is not
  *    live: every review is held for moderation first. So the layout is the
  *    frame's and the words are true — "submitted", with the check stated — and
- *    the pill opens the reviewer's own submissions, where the pending review is.
+ *    the pill opens the reviewer's own profile, where the pending review is
+ *    listed and marked "Pending moderation". It used to open
+ *    /dashboard/history, which lists earnings and never showed a pending
+ *    review; and until 2026-09-18 the profile read the public feed, so the
+ *    review was missing there too.
  *  - The stats are the reviewer's real dashboard figures over the last 90 days
  *    (GET /users/me/dashboard), not the frame's sample numbers, and the block is
  *    left out when they cannot be read.
@@ -1490,7 +1494,7 @@ function DoneStep({ user, submitted }: { user: PanelUser; submitted: Submitted |
       </div>
 
       <ComposerActions>
-        <Button href="/dashboard/history" fullWidth className={COMPOSER_ACTION_BUTTON}>
+        <Button href="/profile" fullWidth className={COMPOSER_ACTION_BUTTON}>
           See my submissions
           <ArrowRight size={20} aria-hidden="true" />
         </Button>

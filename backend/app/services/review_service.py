@@ -331,6 +331,68 @@ def prioritise_interests(
     return preferred + rest
 
 
+# --- The author's own reviews -------------------------------------------------
+#
+# A review is held for moderation when it is submitted (published_at is None).
+# The public feed is publication-gated on purpose, so the author's own profile
+# must not read it: that is how a just-submitted review "disappeared" from its
+# author's profile after a refresh (2026-09-18). These read the author's reviews
+# in every state, and say which state each is in.
+
+PUBLISHED, PENDING, REJECTED = "published", "pending", "rejected"
+
+
+def publication_status(review: Review) -> str:
+    """The state an author sees: published, awaiting moderation, or rejected.
+
+    Derived from the columns that already decide it, not a new state: a
+    moderator's reject sets earn_eligible_status to `rejected` and leaves the
+    review unpublished; unpublish returns it to `pending` (referral_service).
+    """
+    if review.published_at is not None:
+        return PUBLISHED
+    if review.earn_eligible_status == EarnEligibleStatus.rejected:
+        return REJECTED
+    return PENDING
+
+
+def list_own_reviews(db: Session, author_id: uuid.UUID, *, limit: int, offset: int = 0):
+    """The author's non-removed reviews, newest first, with their products."""
+    stmt = (
+        select(Review, Product)
+        .join(Product, Product.id == Review.product_id, isouter=True)
+        .where(Review.author_id == author_id, Review.is_removed.is_(False))
+        .order_by(Review.created_at.desc(), Review.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.execute(stmt).all())
+
+
+def rejection_reasons(db: Session, review_ids: list[uuid.UUID]) -> dict[uuid.UUID, str | None]:
+    """The most recent reject note per review, in one query.
+
+    The note is the reason the moderator gave (referral_service.reject), which
+    the author already receives in their notification.
+    """
+    if not review_ids:
+        return {}
+    from app.models.enums import ModerationAction, ModerationTargetType
+    from app.models.moderation import ModerationLog
+
+    rows = db.execute(
+        select(ModerationLog.target_ref, ModerationLog.notes)
+        .where(
+            ModerationLog.target_type == ModerationTargetType.review,
+            ModerationLog.action == ModerationAction.reject,
+            ModerationLog.target_ref.in_(review_ids),
+        )
+        .order_by(ModerationLog.target_ref, ModerationLog.created_at.desc())
+        .distinct(ModerationLog.target_ref)
+    ).all()
+    return {ref: notes for ref, notes in rows}
+
+
 def list_feed(
     db: Session, *, limit: int = 8, offset: int = 0,
     product_id: uuid.UUID | None = None,

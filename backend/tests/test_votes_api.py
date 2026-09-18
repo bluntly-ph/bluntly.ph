@@ -96,6 +96,72 @@ def test_vote_upsert_delete_and_counters(client):
     assert float(removed["wilson_score"]) == 0
 
 
+
+def _aggregates_match_rows(rid: str) -> tuple[int, int]:
+    """helpful/unhelpful columns vs the vote rows, read straight from the DB."""
+    from app.db.session import SessionLocal
+    from app.models.enums import VoteDirection
+    from app.models.review import Review
+    from app.models.vote import ReviewVote
+    db = SessionLocal()
+    try:
+        review = db.get(Review, _uuid.UUID(rid))
+        up = db.scalar(select(func.count(ReviewVote.id)).where(
+            ReviewVote.review_id == review.id, ReviewVote.vote == VoteDirection.up))
+        down = db.scalar(select(func.count(ReviewVote.id)).where(
+            ReviewVote.review_id == review.id, ReviewVote.vote == VoteDirection.down))
+        assert (review.helpful_votes, review.unhelpful_votes) == (up, down)
+        return up, down
+    finally:
+        db.close()
+
+
+@requires_db
+def test_every_read_sees_the_committed_count_after_each_vote_mutation(client):
+    """2026-09-18: "I upvoted and the count stayed at 0".
+
+    The API side of that report: after every mutation the stored counters equal
+    the vote rows, and the detail and feed reads return that committed value —
+    no stale read from the API itself. (The stale count the reader saw was the
+    web app's page cache; see lib/cache-tags.ts and the BFF.)
+    """
+    author_id, author_token, _ = register_and_token(client)
+    _, mod_token, _ = register_and_token(client, role="moderator")
+    _, voter_token, _ = register_and_token(client)
+    ah, mh, vh = _auth(author_token), _auth(mod_token), _auth(voter_token)
+    rid, _ = make_published_review(client, ah, mh, name="ReadAfterVoteWidget")
+
+    def reads() -> tuple[int, int, int]:
+        full = client.get(f"/api/v1/reviews/{rid}/full").json()["review"]
+        mine = client.get(f"/api/v1/reviews/{rid}/full", headers=vh).json()["review"]
+        feed = client.get("/api/v1/reviews/feed", params={
+            "author_id": author_id, "sort": "newest", "limit": 100}).json()
+        listed = next(i["review"] for i in feed if i["review"]["id"] == rid)
+        return full["helpful_votes"], mine["helpful_votes"], listed["helpful_votes"]
+
+    assert reads() == (0, 0, 0)
+
+    up = client.post(f"/api/v1/reviews/{rid}/vote", headers=vh, json={"vote": "up"})
+    assert up.status_code == 200 and up.json()["helpful_votes"] == 1
+    assert up.json()["my_vote"] == "up"
+    assert _aggregates_match_rows(rid) == (1, 0)
+    assert reads() == (1, 1, 1)
+
+    # The same direction again is idempotent: still one row, still one.
+    again = client.post(f"/api/v1/reviews/{rid}/vote", headers=vh, json={"vote": "up"})
+    assert again.status_code == 200 and again.json()["helpful_votes"] == 1
+    assert _aggregates_match_rows(rid) == (1, 0)
+
+    down = client.post(f"/api/v1/reviews/{rid}/vote", headers=vh, json={"vote": "down"})
+    assert (down.json()["helpful_votes"], down.json()["unhelpful_votes"]) == (0, 1)
+    assert _aggregates_match_rows(rid) == (0, 1)
+    assert reads() == (0, 0, 0)
+
+    removed = client.delete(f"/api/v1/reviews/{rid}/vote", headers=vh)
+    assert removed.status_code == 200 and removed.json()["my_vote"] is None
+    assert _aggregates_match_rows(rid) == (0, 0)
+    assert reads() == (0, 0, 0)
+
 @requires_db
 def test_wilson_sort_and_author_helpfulness(client):
     _, author_token, _ = register_and_token(client)

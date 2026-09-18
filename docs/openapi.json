@@ -1263,6 +1263,73 @@
         }
       }
     },
+    "/api/v1/reviews/mine": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Your own reviews in every state, newest first",
+        "description": "The caller's reviews \u2014 pending, published and rejected \u2014 for their profile.\n\nThe author is the authenticated caller and nothing else: there is no\nauthor parameter, so this can never read someone else's unpublished work.\nRemoved reviews are left out. Public surfaces keep using the\npublication-gated `/feed`; this route is never cached by the web app.",
+        "operationId": "my_reviews_api_v1_reviews_mine_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnReviewOut"
+                  },
+                  "title": "Response My Reviews Api V1 Reviews Mine Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reviews/{review_id}": {
       "get": {
         "tags": [
@@ -9582,6 +9649,65 @@
           "code"
         ],
         "title": "OtpVerifyIn"
+      },
+      "OwnReviewOut": {
+        "properties": {
+          "review": {
+            "$ref": "#/components/schemas/ReviewOut"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedAuthor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comment_count": {
+            "type": "integer",
+            "title": "Comment Count",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "published",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review",
+          "status"
+        ],
+        "title": "OwnReviewOut",
+        "description": "One of the caller's own reviews, in any state (GET /reviews/mine).\n\nOnly ever served to the review's author. `status` is what the author sees:\n`pending` (held for moderation), `published`, or `rejected` with the\nmoderator's reason. Public surfaces keep reading the publication-gated feed."
       },
       "PayoutAccountUpdate": {
         "properties": {

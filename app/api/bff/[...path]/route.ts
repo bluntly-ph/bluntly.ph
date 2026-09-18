@@ -1,7 +1,9 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { API_ORIGIN } from "@/lib/api/origin";
+import { isReportDecision, tagsToExpire } from "@/lib/cache-tags";
 import { getSessionToken } from "@/lib/session";
 
 /**
@@ -69,6 +71,26 @@ async function forward(request: NextRequest, path: string[]) {
       },
       { status: 503, headers: { "content-type": "application/problem+json" } },
     );
+  }
+
+  // A successful write to a review expires that review's cached public reads
+  // and the card lists, before the caller gets its answer — so the next page
+  // anyone loads shows the committed count instead of a minute-old one. See
+  // lib/cache-tags.ts. `{ expire: 0 }`, not "max": "max" serves the stale
+  // entry once more, which is exactly the stale count being fixed.
+  if (response.ok && hasBody) {
+    const joined = path.join("/");
+    let reported: string | null = null;
+    if (isReportDecision(joined)) {
+      const decided = (await response
+        .clone()
+        .json()
+        .catch(() => null)) as { target?: { id?: string } | null } | null;
+      reported = decided?.target?.id ?? null;
+    }
+    for (const tag of tagsToExpire(request.method, joined, reported)) {
+      revalidateTag(tag, { expire: 0 });
+    }
   }
 
   const outHeaders = new Headers(response.headers);

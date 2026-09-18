@@ -1,6 +1,7 @@
 import "server-only";
 
 import { apiFetch } from "./api/client";
+import { reviewTag } from "./cache-tags";
 
 /**
  * Read side for the review comment thread (BUG-014).
@@ -51,6 +52,7 @@ export async function getComments(
       // viewer's own `my_vote` — is never shared. Signed-out responses have
       // `my_vote: null` throughout and are identical for everyone.
       revalidate: 30,
+      tags: [reviewTag(reviewId)],
     });
   } catch {
     return [];

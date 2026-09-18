@@ -39,6 +39,7 @@ from app.schemas.review import (
     FeedAuthor,
     FeedItemOut,
     FeedProduct,
+    OwnReviewOut,
     ReviewCreate,
     ReviewOut,
     ReviewUpdate,
@@ -347,6 +348,40 @@ def review_feed(db: Session = Depends(get_db), limit: int = Query(8, ge=1, le=10
             comment_count=comments.get(r.id, 0),
         )
         for r, a, p in items
+    ]
+
+
+# Declared before "/{review_id}" for the same reason as "/feed".
+@router.get("/mine", response_model=list[OwnReviewOut],
+            summary="Your own reviews in every state, newest first")
+def my_reviews(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+               limit: int = Query(24, ge=1, le=100),
+               offset: int = Query(0, ge=0, le=1000)) -> list[OwnReviewOut]:
+    """The caller's reviews — pending, published and rejected — for their profile.
+
+    The author is the authenticated caller and nothing else: there is no
+    author parameter, so this can never read someone else's unpublished work.
+    Removed reviews are left out. Public surfaces keep using the
+    publication-gated `/feed`; this route is never cached by the web app.
+    """
+    rows = review_service.list_own_reviews(db, user.id, limit=limit, offset=offset)
+    review_ids = [r.id for r, _ in rows]
+    mine = _my_votes(db, user, review_ids)
+    comments = _comment_counts(db, review_ids)
+    statuses = {r.id: review_service.publication_status(r) for r, _ in rows}
+    reasons = review_service.rejection_reasons(
+        db, [rid for rid, st in statuses.items() if st == review_service.REJECTED])
+    author = FeedAuthor.model_validate(user)
+    return [
+        OwnReviewOut(
+            review=_out(r, mine.get(r.id)),
+            author=author,
+            product=FeedProduct.model_validate(p) if p is not None else None,
+            comment_count=comments.get(r.id, 0),
+            status=statuses[r.id],
+            rejection_reason=reasons.get(r.id),
+        )
+        for r, p in rows
     ]
 
 

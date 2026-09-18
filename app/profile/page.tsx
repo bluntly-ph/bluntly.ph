@@ -17,7 +17,8 @@ import { getAuthoredComments } from "@/lib/comments";
 import { requireOnboardedUser } from "@/lib/dal";
 import { INTERESTS } from "@/lib/interests";
 import { joinedLabel } from "@/lib/relative-time";
-import { searchReviews } from "@/lib/reviews";
+import { getMyReviews } from "@/lib/reviews";
+import { getSessionToken } from "@/lib/session";
 import { trustLevelName } from "@/lib/trust";
 import { getTrustProfile } from "@/lib/trust-data";
 import { firstImageIndex, listImageHints } from "@/lib/list-image-hints";
@@ -57,7 +58,10 @@ export default async function ProfilePage({
 }) {
   const me = await requireOnboardedUser();
   const tab = readProfileTab((await searchParams).tab);
-  const reviews = await searchReviews({ author_id: me.id, sort: "newest", limit: 24 });
+  // The author's own reviews in every state — pending ones included, marked as
+  // such. The public feed left a just-submitted review out (it is held for
+  // moderation), so it "disappeared" from its author's profile on refresh.
+  const reviews = await getMyReviews(await getSessionToken());
   const comments = tab === "comments" ? await getAuthoredComments(me.id) : null;
   const trust = tab === "stats" ? await getTrustProfile(me.id) : null;
   const name = me.username || me.display_name || "You";
@@ -169,6 +173,8 @@ export default async function ProfilePage({
                 <ProfileReviewCard
                   key={r.id}
                   review={r}
+                  status={r.status}
+                  rejectionReason={r.rejectionReason}
                   imageHints={listImageHints(i, firstImageIndex(all, (x) => Boolean(x.imageUrl)), 1)}
                 />
               ))}
@@ -176,7 +182,7 @@ export default async function ProfilePage({
           ) : (
             <div className="px-4 pt-10 text-center">
               <p className="text-[16px] leading-none tracking-[0.8px] text-[var(--text-primary)]">
-                No published reviews yet
+                No reviews yet
               </p>
               <p className="mt-[9px] text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
                 Share an honest review and start earning from your opinions.

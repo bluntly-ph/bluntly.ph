@@ -1,6 +1,7 @@
 import "server-only";
 
 import { apiFetch } from "./api/client";
+import { REVIEW_LISTS, reviewTag } from "./cache-tags";
 import { usablePhoto } from "./image";
 import { showsTrustBadge } from "@/components/review/trust-badge-model";
 import {
@@ -47,6 +48,9 @@ type FeedItem = {
      * everyone and the response stays safely cacheable.
      */
     my_vote: "up" | "down" | null;
+    /** null while held for moderation; only its author or a moderator can load it then. */
+    published_at?: string | null;
+    earn_eligible_status?: string;
     created_at: string;
     referral_redirect_url: string | null;
   };
@@ -92,6 +96,7 @@ export async function getReviewFull(
     return await apiFetch<FeedItem>(`/api/v1/reviews/${id}/full`, {
       token: token ?? undefined,
       revalidate: 60,
+      tags: [reviewTag(id)],
     });
   } catch {
     return null;
@@ -276,12 +281,47 @@ export async function searchReviews(opts: {
   try {
     const items = await apiFetch<FeedItem[]>(`/api/v1/reviews/feed?${params}`, {
       revalidate: 60,
+      tags: [REVIEW_LISTS],
     });
     return items.map(toCard);
   } catch {
     // null, not [] — "we could not reach the server" and "this search matched
     // nothing" are different answers, and only one of them is the reader's
     // fault to act on. Returning [] made an outage read as "No reviews found".
+    return null;
+  }
+}
+
+/** Where one of the caller's own reviews stands (GET /api/v1/reviews/mine). */
+export type OwnReviewStatus = "pending" | "published" | "rejected";
+
+export type OwnReviewCard = ReviewCardData & {
+  status: OwnReviewStatus;
+  rejectionReason: string | null;
+};
+
+/**
+ * The signed-in user's own reviews, in every state, for their profile.
+ *
+ * Not the public feed: that is publication-gated, and reading it here is how a
+ * just-submitted review vanished from its author's profile on refresh
+ * (2026-09-18) — it is held for moderation, so the public read left it out.
+ * Credentialed, so never cached (lib/api/client.ts), and the API decides whose
+ * reviews they are from the token alone.
+ */
+export async function getMyReviews(token: string | null): Promise<OwnReviewCard[] | null> {
+  if (!token) return null;
+  try {
+    const items = await apiFetch<(FeedItem & { status: OwnReviewStatus; rejection_reason: string | null })[]>(
+      "/api/v1/reviews/mine?limit=48",
+      { token },
+    );
+    return items.map((item) => ({
+      ...toCard(item),
+      status: item.status,
+      rejectionReason: item.rejection_reason,
+    }));
+  } catch {
     return null;
   }
 }
@@ -341,7 +381,7 @@ export async function getAuthorProfile(handle: string): Promise<{
   try {
     profile = await apiFetch<PublicProfile>(
       `/api/v1/users/public/${encodeURIComponent(handle)}`,
-      { revalidate: 60 },
+      { revalidate: 60, tags: [REVIEW_LISTS] },
     );
   } catch {
     // 404 for an unknown handle, and anything else the API could not answer.
@@ -353,7 +393,7 @@ export async function getAuthorProfile(handle: string): Promise<{
   try {
     const items = await apiFetch<FeedItem[]>(
       `/api/v1/reviews/feed?author_id=${encodeURIComponent(profile.id)}&sort=newest&limit=48`,
-      { revalidate: 60 },
+      { revalidate: 60, tags: [REVIEW_LISTS] },
     );
     cards = items.map(toCard);
   } catch {
@@ -384,7 +424,7 @@ export async function getLandingReviews(): Promise<{
   try {
     const items = await apiFetch<FeedItem[]>(
       "/api/v1/reviews/feed?sort=wilson&limit=6",
-      { revalidate: 60 },
+      { revalidate: 60, tags: [REVIEW_LISTS] },
     );
     if (items?.length) {
       return { featured: toFeatured(items[0]), cards: items.map(toCard) };
@@ -485,7 +525,7 @@ export async function getFeed(opts: {
     const items = await apiFetch<FeedItem[]>(`/api/v1/reviews/feed?${params}`, {
       token: opts.token ?? undefined,
       // Only cache the signed-out, unranked shape.
-      ...(opts.token ? {} : { revalidate: 60 }),
+      ...(opts.token ? {} : { revalidate: 60, tags: [REVIEW_LISTS] }),
     });
     return items.map(toFeedCard);
   } catch {

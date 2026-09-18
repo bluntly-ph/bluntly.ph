@@ -43,6 +43,8 @@ export type RequestOptions = {
    * is independent of that, so the backend round trip can still be skipped.
    */
   revalidate?: number;
+  /** Data Cache tags for a cached read, so a write can expire it (lib/cache-tags.ts). */
+  tags?: string[];
   signal?: AbortSignal;
 };
 
@@ -86,8 +88,9 @@ function buildInit(options: RequestOptions): RequestInit {
   // The `!options.token` guard is the load-bearing half: it makes caching a
   // credentialed response impossible by construction rather than by remembering.
   if (options.revalidate !== undefined && !options.token) {
-    (init as RequestInit & { next?: { revalidate: number } }).next = {
+    (init as RequestInit & { next?: { revalidate: number; tags?: string[] } }).next = {
       revalidate: options.revalidate,
+      ...(options.tags?.length ? { tags: options.tags } : {}),
     };
   } else {
     init.cache = options.cache ?? "no-store";

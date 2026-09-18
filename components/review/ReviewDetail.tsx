@@ -294,6 +294,23 @@ export function ReviewDetail({
 
         <ReviewHero review={review} />
 
+        {/* Only an author (or a moderator) can load an unpublished review. The
+            author is told it is not public yet, so a review held for
+            moderation never reads as live (2026-09-18). */}
+        {isOwnReview && review.published_at == null ? (
+          <p
+            role="status"
+            className="mt-5 rounded-[12px] bg-[var(--surface-card)] px-4 py-3 text-[12px] leading-[18px] text-[var(--text-primary)] shadow-[var(--shadow-hairline-inset)]"
+          >
+            <span className="font-medium">
+              {review.earn_eligible_status === "rejected" ? "Rejected. " : "Pending moderation. "}
+            </span>
+            {review.earn_eligible_status === "rejected"
+              ? "A moderator did not publish this review. Only you can see it."
+              : "Only you can see this review until a moderator publishes it."}
+          </p>
+        ) : null}
+
         {verified || disclosure ? (
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {/* X.2: proof + moderator decision + publication, decided by the API. */}

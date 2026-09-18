@@ -25,7 +25,40 @@ import { splitHeadline } from "@/lib/reviews";
  * From `md` the feed is a two-column grid (beside the profile card from `lg`), so each
  * review becomes its own white card instead of a hairline-separated row.
  */
-export function ProfileReviewCard({ review, imageHints = LAZY }: { review: ReviewCardData; imageHints?: ImageHints }) {
+/**
+ * Where one of the viewer's OWN reviews stands. Only /profile passes it; public
+ * profiles never do, and only ever list published reviews.
+ *
+ * Pending and rejected reviews are visible to their author alone, so the card
+ * says so plainly — otherwise a review held for moderation reads as if it were
+ * live. The pills reuse the History screen's tints (pending yellow, returned
+ * red), and the pills' words carry the state so colour is never the only cue.
+ */
+const STATUS_COPY = {
+  pending: {
+    label: "Pending moderation",
+    tint: "bg-[rgba(250,200,0,0.6)]",
+    note: "Only you can see this until a moderator publishes it.",
+  },
+  rejected: {
+    label: "Rejected",
+    tint: "bg-[rgba(216,0,39,0.3)]",
+    note: "A moderator did not publish this review. Only you can see it.",
+  },
+} as const;
+
+export function ProfileReviewCard({
+  review,
+  imageHints = LAZY,
+  status = "published",
+  rejectionReason = null,
+}: {
+  review: ReviewCardData;
+  imageHints?: ImageHints;
+  status?: "pending" | "published" | "rejected";
+  rejectionReason?: string | null;
+}) {
+  const held = status === "published" ? null : STATUS_COPY[status];
   const headline = splitHeadline(review.title, review.product);
   const pill =
     "inline-flex h-8 items-center gap-1 rounded-[20px] border border-[rgba(32,32,32,0.3)] px-[11px] text-[12px] leading-none text-[var(--text-primary)]";
@@ -86,18 +119,32 @@ export function ProfileReviewCard({ review, imageHints = LAZY }: { review: Revie
           </h2>
         </Link>
 
-        <div className="mt-1 flex h-8 items-center justify-end gap-2">
-          <span className={`${pill} font-light`}>
-            <ArrowFatUp size={20} weight="fill" aria-hidden="true" className="text-[var(--accent-success)]" />
-            {review.upvotes}
-            <span className="sr-only"> found this helpful</span>
-          </span>
-          <span className={pill}>
-            <ChatsCircle size={16} aria-hidden="true" />
-            {review.comments}
-            <span className="sr-only">{review.comments === "1" ? " comment" : " comments"}</span>
-          </span>
-        </div>
+        {held ? (
+          <div className="mt-2">
+            <span
+              className={`inline-flex h-[23px] items-center rounded-[16px] px-2 text-[10px] leading-none text-[var(--text-primary)] ${held.tint}`}
+            >
+              {held.label}
+            </span>
+            <p className="mt-1.5 text-[12px] font-light leading-[18px] text-[rgba(32,32,32,0.7)]">
+              {held.note}
+              {status === "rejected" && rejectionReason ? ` Reason: ${rejectionReason}` : null}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-1 flex h-8 items-center justify-end gap-2">
+            <span className={`${pill} font-light`}>
+              <ArrowFatUp size={20} weight="fill" aria-hidden="true" className="text-[var(--accent-success)]" />
+              {review.upvotes}
+              <span className="sr-only"> found this helpful</span>
+            </span>
+            <span className={pill}>
+              <ChatsCircle size={16} aria-hidden="true" />
+              {review.comments}
+              <span className="sr-only">{review.comments === "1" ? " comment" : " comments"}</span>
+            </span>
+          </div>
+        )}
       </article>
     </li>
   );
